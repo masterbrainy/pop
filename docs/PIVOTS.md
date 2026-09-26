@@ -69,7 +69,7 @@
 - **Recommendation:** Do it. It hides almost all generation latency and makes the story always land. Keep one Orbis session unless probe 0.3 shows a noticeable gap after the fold.
 - **Decision:** 2026-09-26, Brian decided directly in this session.
 
-### P-05 · Use OpenAI for images and remove Gemini · 2026-09-26 · Status: proposed
+### P-05 · Use OpenAI for images and remove Gemini · 2026-09-26 · Status: accepted
 - **Idea (Brian's words):** "Should I use the OpenAI key for image generation and then completely remove Gemini?"
 - **Measured today** (prompt "a green dragon dazed under an oak tree, watercolor"; times are the full API round trip):
 
@@ -88,7 +88,7 @@
 - **Cost:** about 3 h (rewire the two functions, then re-run probe 0.4 on OpenAI: character reference edits, cutouts and the 16:9 crop). Pictures get **cheaper**, about $0.011 against Gemini's $0.04–0.13. One fewer key, one fewer bill, and no more out-of-credit outages on a second vendor.
 - **Risks:** a picture takes about 2.5× as long (about 13 s against 5 s). The page behind (P-04) hides this on every page except page 1 and right after a direction. `gpt-image-2.5-flare` is two weeks old, so check that edits with reference images and transparent backgrounds (which would remove the chroma-key step for pop-up cutouts) work before relying on them. Each timing is one sample per setting (three at the page size).
 - **Recommendation:** Do it, with `gpt-image-2.5-flare`. Simpler, one vendor for everything but Orbis, and the extra 9 s is mostly hidden. To speed up page 1, use `quality: "low"` just for it (about 10 s). If you'd rather keep Gemini's speed, top up its credits instead; but then you're paying and watching two vendors.
-- **Decision:** —
+- **Decision:** 2026-09-26, Brian accepted (to the builder: "update the supabase to use the new openai key for all functionalities"). Code in `882d0fa` (art on `gpt-image-2.5-flare` at 1536×1024 medium with edits for references, motion-prompt on the story model, Gemini code removed, ROADMAP D7). PRD §5, §9, §11 and D7 updated in the next commit.
 
 ### P-06 · Close-to-turn pages and a Finish button (already built) · 2026-09-26 · Status: proposed
 - **Idea (source: Taeyeon's PR #2, `452dd1d`, merged and deployed by the builder; flagged by Review & QA as REVIEW.md R-48; not Brian's words):** "A page turns only when the Duo folds to 80° or below and opens past 100°, or from a small corner arrow. Folding less never turns; ~90° still pops. Closing never finishes the book or jumps back to page 1; Finish saves."

@@ -54,11 +54,67 @@ Deno.test("buildStoryPathSystemPrompt folds a direction into the prompt and asks
   const withoutDirection = buildStoryPathSystemPrompt(basePathInput());
   assert(withoutDirection.includes("Plan the path from the brief"));
 
+  // A later direction: page 0 is already shown, so this re-plans from page 1.
   const withDirection = buildStoryPathSystemPrompt(
-    basePathInput({ input: { kind: "typed", speaker: "parent", text: "wake the dragon up" } }),
+    basePathInput({
+      index: 1,
+      bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0"] },
+      pages: [{ index: 0, text: "Maya finds a sleeping dragon." }],
+      input: { kind: "typed", speaker: "parent", text: "wake the dragon up" },
+    }),
   );
   assert(withDirection.includes("wake the dragon up"));
-  assert(withDirection.includes("re-plan the path"));
+  assert(withDirection.includes("re-plan the path from page 1 on"));
+});
+
+// The app writes page 1 only once the parent speaks or types the first prompt:
+// index 0, nothing shown yet, and input set. That's the story's opening idea,
+// not a mid-story direction.
+Deno.test("buildStoryPathSystemPrompt plans the whole path from the parent's opening idea, with the brief as background", () => {
+  const prompt = buildStoryPathSystemPrompt(
+    basePathInput({ input: { kind: "speech", speaker: "parent", text: "a dragon who is scared of the dark" } }),
+  );
+  assert(prompt.includes(
+    'The parent\'s opening idea for the story: "a dragon who is scared of the dark". Plan the whole path from it, with the brief as background.',
+  ));
+  assert(prompt.includes("Fold this opening idea into the bible's directions so it carries into every later page."));
+  assertFalse(prompt.includes("A direction just came in"));
+  assertFalse(prompt.includes("re-plan the path"));
+  assertFalse(prompt.includes("Plan the path from the brief above."));
+});
+
+Deno.test("buildStoryPathSystemPrompt names the kid when the opening idea is the kid's", () => {
+  const prompt = buildStoryPathSystemPrompt(
+    basePathInput({ input: { kind: "speech", speaker: "kid", text: "a unicorn at the beach" } }),
+  );
+  assert(prompt.includes('Maya\'s opening idea for the story: "a unicorn at the beach".'));
+  assertFalse(prompt.includes("The parent's opening idea"));
+});
+
+Deno.test("buildStoryPathSystemPrompt never ends the story on page 1 because the opening idea mentions an ending", () => {
+  const prompt = buildStoryPathSystemPrompt(
+    basePathInput({
+      input: { kind: "typed", speaker: "parent", text: "a bunny who finds a lost star, and we end the story with a bedtime hug" },
+    }),
+  );
+  assertFalse(prompt.includes("the very last beat"));
+  assertFalse(prompt.includes("unmistakable close"));
+});
+
+Deno.test("buildStoryPathSystemPrompt treats a blank opening input like the brief-only start", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput({ input: { kind: "typed", speaker: "parent", text: "   " } }));
+  assert(prompt.includes("Plan the path from the brief above."));
+  assertFalse(prompt.includes("opening idea"));
+});
+
+Deno.test("buildStoryPathSystemPrompt asks for art prompts that name exactly the characters who appear", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput());
+  assert(prompt.includes("In artPrompt, name every character who appears by their bible name, and only those."));
+});
+
+Deno.test("buildStoryPageSystemPrompt asks for art prompts that name exactly the characters who appear", () => {
+  const prompt = buildStoryPageSystemPrompt(basePageInput());
+  assert(prompt.includes("In artPrompt, name every character who appears by their bible name, and only those."));
 });
 
 Deno.test("buildStoryPathSystemPrompt never omits the personal-details or safety rubric instructions", () => {

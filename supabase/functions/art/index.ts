@@ -35,7 +35,7 @@ async function loadReferenceImages(
   client: SupabaseClient,
   body: ArtRequest,
 ): Promise<InlineImage[]> {
-  const paths = referencePathsFor(body.kind, body.characters, body.characterId);
+  const paths = referencePathsFor(body.kind, body.characters, body.characterId, body.prompt);
   const images: InlineImage[] = [];
   for (const path of paths) {
     const { base64, mimeType } = await downloadAsBase64(client, path);

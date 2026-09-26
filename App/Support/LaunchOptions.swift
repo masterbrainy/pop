@@ -29,9 +29,11 @@ enum LaunchOptions {
         HingeScript.parse(UserDefaults.standard.string(forKey: "hingeScript") ?? "")
     }
 
-    /// `-screen create -storyTurns "a fox finds a leaf|You continue|fold"` makes a new book and
-    /// plays these turns, one after each page settles: text is typed input, "You continue"
-    /// taps continue, and "fold" turns to the next page (for end-to-end checks).
+    /// `-screen create -storyTurns "a fox finds a leaf|make it snow|fold"` makes a new book and
+    /// plays these turns, one after each page settles: the first is the opening prompt (page 1
+    /// is made from it; the log says "page 1 shown in N ms"), later text is a typed direction,
+    /// and "fold" turns to the next page once it's painted (for end-to-end checks). With no
+    /// turns, `-screen create` waits for the opening prompt like a parent would.
     static var storyTurns: [String] {
         (UserDefaults.standard.string(forKey: "storyTurns") ?? "")
             .split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }

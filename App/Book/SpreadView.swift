@@ -14,6 +14,8 @@ struct SpreadView<Controls: View>: View {
     var replaysClips = false
     var highlight: NSRange? = nil
     var pictureUnavailable = false
+    /// What the left page says while there's no page to show (before page 1 is painted).
+    var emptyText: String? = nil
     @ViewBuilder var controls: () -> Controls
 
     /// The co-pilot question shows while reading a book, not while making one.
@@ -22,8 +24,7 @@ struct SpreadView<Controls: View>: View {
     var body: some View {
         ArrangementView {
             ZStack(alignment: .bottom) {
-                TextPageView(text: page?.text ?? "", level: level, pageNumber: pageNumber, highlight: highlight,
-                             question: showsQuestion ? page?.question : nil)
+                textPage
                     .id(page?.id)
                     .transition(.opacity)
                 controls()
@@ -34,19 +35,31 @@ struct SpreadView<Controls: View>: View {
             ArtPageView(page: page, live: live, popDepth: popDepth, replaysClips: replaysClips, pictureUnavailable: pictureUnavailable)
                 .pageCurl(progress: curl)
                 .id(page?.id)
-                .transition(PageFlipTransition())
+                // Page 1 arrives with its words in one crossfade; later pages flip in.
+                .transition(page == nil ? AnyTransition.opacity : AnyTransition(PageFlipTransition()))
         }
         .arrangementViewStyle(.split)
         .background(Theme.paper)
         .animation(.easeInOut(duration: 0.45), value: page?.id)
         .ignoresSafeArea()
     }
+
+    @ViewBuilder private var textPage: some View {
+        if page == nil, let emptyText {
+            TextPageView(text: "", level: level, pageNumber: pageNumber, placeholder: emptyText)
+        } else {
+            TextPageView(text: page?.text ?? "", level: level, pageNumber: pageNumber, highlight: highlight,
+                         question: showsQuestion ? page?.question : nil)
+        }
+    }
 }
 
 extension SpreadView where Controls == EmptyView {
     init(page: PageContent?, pageNumber: Int, level: ReadingLevel, curl: Double, popDepth: Double = 0,
-         live: LivePageController? = nil, replaysClips: Bool = false, highlight: NSRange? = nil, pictureUnavailable: Bool = false) {
+         live: LivePageController? = nil, replaysClips: Bool = false, highlight: NSRange? = nil, pictureUnavailable: Bool = false,
+         emptyText: String? = nil) {
         self.init(page: page, pageNumber: pageNumber, level: level, curl: curl, popDepth: popDepth,
-                  live: live, replaysClips: replaysClips, highlight: highlight, pictureUnavailable: pictureUnavailable) { EmptyView() }
+                  live: live, replaysClips: replaysClips, highlight: highlight, pictureUnavailable: pictureUnavailable,
+                  emptyText: emptyText) { EmptyView() }
     }
 }

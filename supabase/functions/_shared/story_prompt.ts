@@ -9,6 +9,7 @@
 import { ART_STYLE } from "./art_style.ts";
 import { brandedCharactersIn } from "./brand_check.ts";
 import { detectsEndRequest } from "./end_request.ts";
+import { isOpeningIdea } from "./opening_idea.ts";
 import { describeReadingLevelForPrompt, type ReadingLevel } from "./reading_levels.ts";
 import { KID_SAFETY_RUBRIC } from "./safety_rubric.ts";
 import type { Kid, ParentSettings, StoryBible, StoryBrief } from "./schemas.ts";
@@ -64,7 +65,7 @@ export interface StoryPathPromptInput {
   bible: StoryBible;
   pages: { index: number; text: string }[];
   index: number;
-  /** null at the very start (index 0, no direction yet); a direction otherwise. */
+  /** null for a brief-only plan; the opening idea at index 0 with no shown pages (opening_idea.ts); a direction otherwise. */
   input: { kind: string; speaker: "parent" | "kid"; text: string } | null;
   /** Set only on a rewrite attempt, after the first pass failed the safety gate. */
   rewriteReason?: string | null;
@@ -98,6 +99,14 @@ function endingCloseInstruction(level: ReadingLevel): string {
   }
   return `This page is the path's last page: make its very last sentence a clear, unmistakable close, for example everyone safe and happy, snuggled up, or fast asleep, and it may simply end with the words "The end." Never leave the last sentence open or unresolved.`;
 }
+
+/**
+ * `art` draws (and sends reference images for) only the bible characters a
+ * page's artPrompt names (art_request.ts charactersIn), so the art prompt has
+ * to name each character on the page exactly as the bible does, and no others.
+ */
+const ART_PROMPT_NAMES_INSTRUCTION =
+  "In artPrompt, name every character who appears by their bible name, and only those.";
 
 const PATH_PLANNING_GUIDE = [
   "Plan the whole story as a path of about 5 to 8 page beats in total, each one short sentence describing that page's moment.",
@@ -157,6 +166,7 @@ export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string 
     "Never use surnames, home addresses, school names, or phone numbers anywhere in the story text.",
     KID_SAFETY_RUBRIC,
     `One locked illustration style is used for every picture: ${ART_STYLE}. Write art prompts that fit this style and depict only what is safe to show this child.`,
+    ART_PROMPT_NAMES_INSTRUCTION,
     ...describeBible(input.bible),
   );
 
@@ -171,7 +181,13 @@ export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string 
 
   lines.push(PATH_PLANNING_GUIDE);
 
-  if (input.input && input.input.text.trim() !== "") {
+  if (input.input && isOpeningIdea(input.index, input.pages.length, input.input.text)) {
+    const whose = input.input.speaker === "kid" ? `${input.kid.firstName}'s` : "The parent's";
+    lines.push(
+      `${whose} opening idea for the story: "${input.input.text}". Plan the whole path from it, with the brief as background.`,
+      "Fold this opening idea into the bible's directions so it carries into every later page.",
+    );
+  } else if (input.input && input.input.text.trim() !== "") {
     lines.push(
       `A direction just came in — kind: ${input.input.kind}, speaker: ${input.input.speaker}: "${input.input.text}"`,
       `Fold this direction into the bible's directions so it carries into every later page, and re-plan the path from page ${input.index} on. The ending may change, but the path must still reach one.`,
@@ -225,6 +241,7 @@ export function buildStoryPageSystemPrompt(input: StoryPagePromptInput): string 
     "Never use surnames, home addresses, school names, or phone numbers anywhere in the story text.",
     KID_SAFETY_RUBRIC,
     `One locked illustration style is used for every picture: ${ART_STYLE}. Write an art prompt that fits this style and depicts only what is safe to show this child.`,
+    ART_PROMPT_NAMES_INSTRUCTION,
     ...describeBible(input.bible),
     ...brandInstruction([...input.kid.interests, ...input.brief.interests, ...bibleTexts(input.bible)], input.kid.firstName),
   ];

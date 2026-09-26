@@ -16,17 +16,43 @@ export const STANDARD_DIMENSIONS: Record<"16:9" | "2:3" | "1:1", { width: number
   "1:1": { width: 1024, height: 1024 },
 };
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Whole-word, case-insensitive: `phrase` with no letter, digit or underscore right before or after it, so "Rusty" never matches "Rustyville". */
+function mentions(prompt: string, phrase: string): boolean {
+  const trimmed = phrase.trim();
+  if (trimmed === "") return false;
+  const body = trimmed.split(/\s+/).map(escapeRegExp).join("\\s+");
+  return new RegExp(`(?<![\\p{L}\\p{N}_])${body}(?![\\p{L}\\p{N}_])`, "iu").test(prompt);
+}
+
+/**
+ * The bible characters a page's art prompt names, by their whole name
+ * ("Bella the bunny") or their id ("bella"). A page picture draws only these:
+ * sending every bible character, and every reference image, painted
+ * characters into pages they aren't on. The story prompt asks the model to
+ * name each character on the page by its bible name (story_prompt.ts).
+ */
+export function charactersIn(prompt: string, characters: Character[]): Character[] {
+  return characters.filter((c) => mentions(prompt, c.name) || mentions(prompt, c.id));
+}
+
 /**
  * Which of this request's characters need their reference image sent to
- * Gemini for consistency: the single named character for `character`/`cutout`,
- * every character with a saved reference for `page`/`cover`, none for `plate`
- * (which draws the scene with no characters at all).
+ * the image model for consistency: the single named character for `character`/`cutout`,
+ * every character with a saved reference for `cover`, only those the prompt
+ * names for `page` (charactersIn), none for `plate` (which draws the scene with
+ * no characters at all).
  */
 export function referencePathsFor(
   kind: ArtKind,
   characters: Character[],
   characterId?: string | null,
+  prompt = "",
 ): string[] {
+  const withReference = (list: Character[]) => list.filter((c) => c.referencePath).map((c) => c.referencePath as string);
   switch (kind) {
     case "character":
     case "cutout": {
@@ -34,8 +60,9 @@ export function referencePathsFor(
       return match?.referencePath ? [match.referencePath] : [];
     }
     case "page":
+      return withReference(charactersIn(prompt, characters));
     case "cover":
-      return characters.filter((c) => c.referencePath).map((c) => c.referencePath as string);
+      return withReference(characters);
     case "plate":
     case "drawing":
       // `plate` draws no characters at all; `drawing`'s only "reference" is
@@ -77,11 +104,15 @@ export function buildArtPrompt(
   if (kind === "cutout" || kind === "character") {
     const character = characters.find((c) => c.id === characterId);
     if (character) lines.push(`This character: ${character.name} — ${character.description}`);
-  } else if ((kind === "page" || kind === "cover") && characters.length > 0) {
-    lines.push(
-      "Characters appearing in this picture — keep each one's look identical to its reference image if one is attached: " +
-        characters.map((c) => `${c.name} (${c.description})`).join("; "),
-    );
+  } else if (kind === "page" || kind === "cover") {
+    // A cover shows the whole cast; a page only the characters its prompt names.
+    const appearing = kind === "page" ? charactersIn(prompt, characters) : characters;
+    if (appearing.length > 0) {
+      lines.push(
+        "Characters appearing in this picture — keep each one's look identical to its reference image if one is attached: " +
+          appearing.map((c) => `${c.name} (${c.description})`).join("; "),
+      );
+    }
   }
 
   lines.push(prompt);

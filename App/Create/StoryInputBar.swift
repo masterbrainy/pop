@@ -9,6 +9,11 @@ struct StoryInputBar: View {
     let isListening: Bool
     let partial: String
     let isWorking: Bool
+    /// No page is shown yet: the field asks for the opening prompt.
+    var isStarting = false
+    /// An opening prompt that didn't work, put back in the field (each new id once).
+    var returnedPrompt: String? = nil
+    var returnedPromptId: UUID? = nil
     let onToggleMic: () -> Void
     let onSubmit: (String) -> Void
 
@@ -36,7 +41,7 @@ struct StoryInputBar: View {
                 }
                 .accessibilityLabel(isListening ? "Stop listening" : "Tell the story out loud")
 
-                TextField(speaker == .parent ? "Steer what happens next…" : "What happens next?", text: $typed)
+                TextField(placeholder, text: $typed)
                     .focused($typing)
                     .submitLabel(.send)
                     .onSubmit(send)
@@ -75,6 +80,18 @@ struct StoryInputBar: View {
         .padding(8)
         .background(.ultraThinMaterial, in: .rect(cornerRadius: 26))
         .animation(.easeInOut(duration: 0.2), value: isListening)
+        .onChange(of: returnedPromptId) { _, id in
+            if id != nil, let returnedPrompt, typed.isEmpty { typed = returnedPrompt }
+        }
+    }
+
+    private var placeholder: String {
+        switch (isStarting, speaker) {
+        case (true, .parent): "Start the story: who's it about?"
+        case (true, .kid): "What's the story about?"
+        case (false, .parent): "Steer what happens next…"
+        case (false, .kid): "What happens next?"
+        }
     }
 
     private func send() {

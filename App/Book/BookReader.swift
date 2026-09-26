@@ -20,8 +20,11 @@ final class BookReader {
 
     @ObservationIgnored var onPageChange: @MainActor (PageContent?) -> Void = { _ in }
     @ObservationIgnored var onClosedHold: @MainActor () -> Void = {}
-    /// A turn while creating, before the page behind has its words: nothing turns.
+    /// A turn while creating, before the page behind is ready: nothing turns.
     @ObservationIgnored var onTurnBlocked: @MainActor () -> Void = {}
+    /// Whether a turn may open the page behind. By default, once it has its words; the story
+    /// maker asks for its picture too ("no page until painted").
+    @ObservationIgnored var canOpenPending: @MainActor (PageContent) -> Bool = { !$0.text.isEmpty }
 
     init(book: Book, mode: BookMode) {
         let starting = mode == .creating && book.pages.isEmpty ? book.with(pages: [PageContent(index: 0, text: "")]) : book
@@ -59,8 +62,8 @@ final class BookReader {
         if case let .newPage(index) = outcome {
             // A page only follows one that has words, and nothing follows the story's ending.
             guard let current = currentPage, !current.text.isEmpty, !book.bible.isEnding(pageIndex: current.index) else { return }
-            // The next page opens only once it has its words; its picture may still be painting.
-            guard let pending = pendingNext, !pending.text.isEmpty else {
+            // The next page opens only once it's ready (the fold and the corner arrow both come here).
+            guard let pending = pendingNext, !pending.text.isEmpty, canOpenPending(pending) else {
                 onTurnBlocked()
                 return
             }

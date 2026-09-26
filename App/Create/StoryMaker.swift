@@ -102,7 +102,7 @@ final class StoryMaker {
     /// Whether the page on screen is the story's ending: there's no page behind it, and
     /// closing the book finishes it.
     var isOnLastPage: Bool {
-        guard let page = reader.currentPage, !page.text.isEmpty else { return false }
+        guard reader.book.status == .draft, let page = reader.currentPage, !page.text.isEmpty else { return false }
         return reader.book.bible.isEnding(pageIndex: page.index)
     }
 
@@ -150,6 +150,12 @@ final class StoryMaker {
                 await onScriptedFinish()
                 log.append("finished: \(reader.book.title ?? "?") · status \(reader.book.status)")
                 return
+            case let step where step.hasPrefix("fold during:"):
+                // A direction, then a fold before its words land (R-35 a).
+                submit(String(turn.dropFirst("fold during:".count)))
+                try? await Task.sleep(for: .milliseconds(400))
+                log.append("folding mid-rebuild: behind=\(reader.pendingNext.map { "p\($0.index + 1)" } ?? "none")")
+                reader.turnForward()
             default: submit(turn)
             }
             try? await Task.sleep(for: .milliseconds(300))
@@ -461,12 +467,17 @@ final class StoryMaker {
     }
 
     /// Pop-up layers for a page with a picture, made in the background (Phase 4).
-    private func prepareLayers(for page: PageContent) {
+    /// Layers made at the very start compete with the page, next-page and reference pictures,
+    /// and the image service sometimes turns them away, so a failure is tried once more.
+    private static let layerRetryDelay: Duration = .seconds(12)
+
+    private func prepareLayers(for page: PageContent, isRetry: Bool = false) {
         guard let server = services.server else { return }
         layerTasks[page.id]?.cancel()
         let book = reader.book
         let media = services.media
         layerTasks[page.id] = Task { [weak self] in
+            if isRetry { try? await Task.sleep(for: Self.layerRetryDelay) }
             do {
                 let layers = try await LayerMaker.makeLayers(for: page, book: book, server: server, media: media)
                 guard !Task.isCancelled, let self else { return }
@@ -475,7 +486,9 @@ final class StoryMaker {
                 self.reader.updatePage(index: page.index) { $0.with(layers: layers) }
                 self.scriptLog?.append("layers ready for page \(page.index + 1): \(layers.cutouts.count) cutouts")
             } catch {
-                self?.scriptLog?.append("layers failed for page \(page.index + 1): \(error.localizedDescription)")
+                guard !Task.isCancelled, let self else { return }
+                self.scriptLog?.append("layers failed for page \(page.index + 1)\(isRetry ? " again" : ""): \((error as? ServerError)?.serverDetail ?? error.localizedDescription)")
+                if !isRetry { self.prepareLayers(for: page, isRetry: true) }
             }
         }
     }

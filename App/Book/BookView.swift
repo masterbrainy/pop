@@ -65,7 +65,7 @@ struct BookView: View {
     @ViewBuilder private var content: some View {
         if hinge.state.phase == .closed {
             CoverView(book: reader.book, kid: kid)
-        } else if let maker {
+        } else if let maker, reader.book.status == .draft {
             SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,
                        curl: hinge.state.curl, popDepth: reader.popDepth, live: maker.live)
                 .overlay(alignment: .bottom) {
@@ -118,7 +118,7 @@ struct BookView: View {
                 Image(systemName: "xmark").font(.headline).padding(12).background(.ultraThinMaterial, in: .circle)
             }
             .accessibilityLabel("Back to the bookshelf")
-            if maker != nil {
+            if maker != nil, reader.book.status == .draft {
                 Button(action: { Task { await finish() } }) {
                     Label(finishing ? "Finishing…" : "Finish", systemImage: "checkmark")
                         .font(.subheadline.weight(.semibold))

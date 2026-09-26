@@ -17,6 +17,16 @@ final class HingeModel {
     /// The debug panel or a script is driving; device readings are ignored meanwhile.
     private(set) var overridden = LaunchOptions.debugHinge
     private(set) var lastDeviceAngle: Double?
+    /// The book is angled (partly folded): while it is, what's said goes into the story.
+    /// Opening it flat (to read) or closing it stops listening.
+    private(set) var isAngled = false
+    /// Whether any hinge reading has arrived (a Duo, or the debug panel). Without one the
+    /// posture can't say when to listen, so the mic button does.
+    var hasReadings: Bool { lastSample != nil }
+    /// Angled below this; flat (reading) again from `flatFrom` up, so a wobble near the line
+    /// doesn't switch the mic on and off.
+    private static let angledBelow = 160.0
+    private static let flatFrom = 170.0
     /// How far the real hinge must move to take control back from the debug panel.
     private static let handBackDegrees = 2.0
 
@@ -106,6 +116,8 @@ final class HingeModel {
         let (next, events) = machine.reduce(state, sample)
         state = next
         lastSample = sample
+        let angled = sample.posture != .closed && sample.angle < (isAngled ? Self.flatFrom : Self.angledBelow)
+        if angled != isAngled { isAngled = angled }
         for event in events {
             fileLog?.append("event \(event) phase \(state.phase)")
             onEvent(event)

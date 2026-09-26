@@ -46,6 +46,11 @@ struct BookView: View {
         .overlay(alignment: .topTrailing) { if hinge.state.phase != .closed { nextPageButton } }
         .readsHinge(into: hinge)
         .onTapGesture(count: 3) { showsDebugPanel.toggle() }
+        // On a Duo, angled is for talking into the story; open flat (to read) or closed isn't.
+        .onChange(of: hinge.hasReadings && hinge.isAngled, initial: true) { _, angled in
+            guard hinge.hasReadings, isCreating, !finishing, let maker else { return }
+            Task { await maker.setListeningByPosture(angled) }
+        }
         .onChange(of: hinge.state.popDepth) { _, depth in reader.setPopDepth(depth) }
         .task { await start() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
@@ -70,11 +75,13 @@ struct BookView: View {
         } else if let maker, reader.book.status == .draft {
             SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,
                        curl: hinge.state.curl, popDepth: reader.popDepth, live: maker.live,
-                       pictureUnavailable: reader.currentPage.map { maker.unavailablePictures.contains($0.id) } ?? false) {
+                       pictureUnavailable: reader.currentPage.map {
+                           maker.unavailablePictures.contains($0.id) || maker.picturelessPages.contains($0.id)
+                       } ?? false) {
                 if !maker.hasBegun {
                     StoryStartPanel(ideas: maker.openingIdeas,
                                     onRemove: { maker.removeOpeningIdea(at: $0) },
-                                    onBegin: { maker.beginStory() })
+                                    onBegin: { Task { await maker.beginStory() } })
                         .padding(.bottom, 70)
                 }
             }
@@ -92,7 +99,8 @@ struct BookView: View {
                 }
                 .overlay(alignment: .bottom) {
                     StoryInputBar(
-                        isListening: maker.isListening, partial: maker.partial, isWorking: maker.isWorking,
+                        isListening: maker.isListening, listensByPosture: hinge.hasReadings,
+                        partial: maker.partial, isWorking: maker.isWorking,
                         onToggleMic: { Task { await maker.toggleMic() } },
                         onSubmit: { maker.submit($0) }
                     )

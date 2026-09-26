@@ -23,14 +23,18 @@ final class StoryMaker {
     }
     private(set) var isWorking = false
     private(set) var isListening = false
+    /// The book is angled, so it listens (set from the hinge; the mic button decides on a
+    /// phone without one).
+    @ObservationIgnored private var postureWantsListening = false
     /// The words being said right now, still changing.
     private var livePartial = ""
     /// Sentences heard but not yet sent: they go to the story together once the speaker pauses.
     private var spokenSoFar: [String] = []
     @ObservationIgnored private var spokenSpeaker: Speaker?
     @ObservationIgnored private var spokenFlush: Task<Void, Never>?
-    /// This long with no new words ends what the parent is saying, and it goes to the story.
-    private static let speechPause: Duration = .milliseconds(1_200)
+    /// This long after the last accurate words, with nothing new heard, ends what the parent is
+    /// saying, and it goes to the story. Live preview words keep it waiting.
+    private static let speechPause: Duration = .milliseconds(1_500)
 
     /// Everything heard since the last direction went out, shown live above the input bar.
     var partial: String {
@@ -40,9 +44,15 @@ final class StoryMaker {
     private(set) var parentNote: String?
     /// Pages whose picture moderation turned away twice (IMP-10); they show a friendly card, not "Painting…".
     private(set) var unavailablePictures: Set<UUID> = []
-    /// Pages whose painting ended without a picture (a failure), so they may open without one;
-    /// painting is tried again once they show.
+    /// Pages whose painting failed even after its retries, so they may open without one (they
+    /// show the "imagine it" card); painting is tried again once they show.
     private(set) var picturelessPages: Set<UUID> = []
+    /// Failed paints so far per page. The image service turns bursts away (the server allows
+    /// 20 pictures a minute), so a failed picture waits and tries again before giving up.
+    @ObservationIgnored private var paintFailures: [UUID: Int] = [:]
+    /// The server's reason for the last failed picture (e.g. its daily picture limit).
+    @ObservationIgnored private var lastPaintFailure = ""
+    private static let paintRetryDelays: [Duration] = [.seconds(5), .seconds(15), .seconds(30)]
     /// Whether the parent has tapped Begin. Until then nothing is written.
     private(set) var hasBegun: Bool
     /// What the parent typed or said before Begin: together they direct the first page.
@@ -153,10 +163,17 @@ final class StoryMaker {
         return nil
     }
 
-    /// The loading screen saw the first page ready; it doesn't come back.
+    /// The loading screen saw the first page ready; it doesn't come back. The mic, off since
+    /// Begin, comes back on if the phone is in the talking position.
     func openingShown() {
         hasOpened = true
+        if postureWantsListening, !isListening {
+            Task { [weak self] in await self?.startListening() }
+        }
     }
+
+    /// Listening is off from Begin until the first page is ready.
+    var canListen: Bool { !hasBegun || hasOpened }
 
     /// Whether a page's picture is done: painted, turned away by moderation, or failed.
     func isPictureSettled(_ page: PageContent) -> Bool {
@@ -301,6 +318,7 @@ final class StoryMaker {
     func resumeLive() async {
         scriptLog?.append("app active again: warming the live session")
         guard let server = services.server, reader.book.status == .draft else { return }
+        if postureWantsListening, !isListening, canListen { await startListening() }
         await live.warmUp(server: server)
         pageChanged(to: reader.currentPage)
     }
@@ -335,9 +353,12 @@ final class StoryMaker {
         enqueue(input)
     }
 
-    /// Begin: the ideas gathered so far direct the first page, and the story starts.
-    func beginStory() {
-        guard !hasBegun, !hasEnded, let first = openingIdeas.first else { return }
+    /// Begin: the mic turns off (words still being said become ideas first), then the ideas
+    /// gathered so far direct the first page, and the story starts.
+    func beginStory() async {
+        guard !hasBegun, !hasEnded else { return }
+        if isListening { await stopListening() }
+        guard !hasBegun, let first = openingIdeas.first else { return }
         hasBegun = true
         let text = openingIdeas.map(\.text).joined(separator: " ")
         let kind = openingIdeas.allSatisfy { $0.kind == first.kind } ? first.kind : .typed
@@ -363,7 +384,23 @@ final class StoryMaker {
         }
     }
 
+    /// Angled: listen, so whatever's said goes into the story. Open flat to read, or closed:
+    /// stop, and what was already said still goes in.
+    func setListeningByPosture(_ wants: Bool) async {
+        postureWantsListening = wants
+        guard !hasEnded else { return }
+        if wants, !isListening, canListen {
+            await startListening()
+        } else if !wants, isListening {
+            await stopListening()
+        }
+    }
+
     func toggleMic() async {
+        guard isListening || canListen else {
+            note("The mic comes back on once the first page is ready.")
+            return
+        }
         if isListening {
             await stopListening()
         } else {
@@ -379,36 +416,40 @@ final class StoryMaker {
         }
     }
 
-    /// Listens with Apple's recogniser, which shows words live as they're said and ends each
-    /// sentence at a short pause (so the story follows along while the parent talks). OpenAI
-    /// Realtime is the fallback when Apple's can't start. The mic shows as on straight away; a
-    /// second tap while it starts stops it.
+    /// Listens through OpenAI Realtime: words show live while they're said, and each finished
+    /// utterance is transcribed whole (with the story's names as context) before it goes to the
+    /// story, so it's heard right. Apple's recogniser is the fallback when Realtime can't start.
+    /// The mic shows as on straight away; a second tap while it starts stops it.
     private func startListening() async {
         guard speech == nil else { return }
         isListening = true
+        guard let sttSecrets else {
+            await listenOnDevice(after: SpeechError.recognizerUnavailable)
+            return
+        }
         do {
-            try await listen(to: AppleTranscriber())
+            try await listen(to: RealtimeTranscriber(secrets: sttSecrets, vocabulary: vocabulary))
         } catch SpeechError.microphoneDenied {
             isListening = false
             note(SpeechError.microphoneDenied.localizedDescription)
         } catch {
-            AppLog.story.info("on-device listening unavailable: \(error.localizedDescription, privacy: .public)")
-            await listenThroughRealtime(after: error)
+            AppLog.story.info("realtime listening unavailable: \(error.localizedDescription, privacy: .public)")
+            await listenOnDevice(after: error)
         }
     }
 
-    /// Apple's recogniser couldn't start: keep the mic on and listen through OpenAI Realtime.
-    private func listenThroughRealtime(after error: any Error) async {
+    /// Names the transcriber should expect: the child and the story's characters.
+    private var vocabulary: [String] {
+        [kid.firstName] + reader.book.bible.characters.map(\.name)
+    }
+
+    /// Realtime couldn't start: keep the mic on and listen with Apple's recogniser instead.
+    private func listenOnDevice(after error: any Error) async {
         // The parent turned the mic off meanwhile.
         guard isListening, speech == nil else { return }
-        guard let sttSecrets else {
-            isListening = false
-            note(error.localizedDescription)
-            return
-        }
-        scriptLog?.append("speech: on-device recogniser unavailable, listening through Realtime")
+        scriptLog?.append("speech: realtime unavailable, listening on the device")
         do {
-            try await listen(to: RealtimeTranscriber(secrets: sttSecrets))
+            try await listen(to: AppleTranscriber())
         } catch {
             if speech == nil { isListening = false }
             note(error.localizedDescription)
@@ -451,10 +492,9 @@ final class StoryMaker {
             guard speech === input else { return }
             speech = nil
             livePartial = ""
-            // Apple's recogniser can't run here (it fails to start in the simulator): carry on
-            // through OpenAI Realtime instead of stopping.
-            if isListening, input is AppleTranscriber {
-                Task { [weak self] in await self?.listenThroughRealtime(after: SpeechError.recognizerUnavailable) }
+            // Realtime never connected: carry on with Apple's recogniser instead of stopping.
+            if isListening, let realtime = input as? RealtimeTranscriber, !realtime.hasOpened {
+                Task { [weak self] in await self?.listenOnDevice(after: SpeechError.recognizerUnavailable) }
                 return
             }
             isListening = false
@@ -607,14 +647,41 @@ final class StoryMaker {
             guard let self else { return }
             if self.paintTasks[page.id]?.run == run {
                 self.paintTasks[page.id] = nil
-                // Painting ended without a picture: don't hold the page back from opening.
-                if painted, let latest = self.reader.page(id: page.id), latest.stillPath == nil {
-                    self.picturelessPages.insert(page.id)
+                if painted, let latest = self.reader.page(id: page.id), latest.stillPath == nil,
+                   !self.unavailablePictures.contains(page.id) {
+                    self.paintFailed(latest)
                 }
             }
             self.refreshLatency()
         }
         paintTasks[page.id] = (run, task)
+    }
+
+    /// Painting ended without a picture: try again after a wait (the page keeps "Painting…"
+    /// and doesn't open meanwhile), and after the last retry let it open without one.
+    private func paintFailed(_ page: PageContent) {
+        // The daily picture limit won't clear in a few seconds, so retrying only adds to it.
+        if lastPaintFailure.contains("art-daily") {
+            paintFailures[page.id] = nil
+            picturelessPages.insert(page.id)
+            note("Pop! has made all the pictures it can for today, so these pages are ones to imagine.")
+            return
+        }
+        let failures = paintFailures[page.id, default: 0]
+        guard failures < Self.paintRetryDelays.count else {
+            paintFailures[page.id] = nil
+            picturelessPages.insert(page.id)
+            note("A picture didn't arrive, so this page is one to imagine for now.")
+            return
+        }
+        paintFailures[page.id] = failures + 1
+        let delay = Self.paintRetryDelays[failures]
+        scriptLog?.append("picture for page \(page.index + 1) failed; retrying in \(delay)")
+        Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !self.hasEnded, let latest = self.reader.page(id: page.id), latest.stillPath == nil else { return }
+            self.paint(latest)
+        }
     }
 
     /// A page behind was replaced by a rewrite: stop its picture, layers and motion.
@@ -707,7 +774,10 @@ final class StoryMaker {
             unavailablePictures.insert(key.id)
             note("That picture didn't turn out right, so this page is one to imagine.")
         case let .failed(message):
-            fail(message)
+            // A failed picture is retried (`paintFailed`); the parent hears only if it gives up.
+            lastPaintFailure = message
+            scriptLog?.append("paint failed: \(message.replacingOccurrences(of: "\n", with: " · "))")
+            AppLog.story.error("paint failed: \(message, privacy: .public)")
         case .pageWritten:
             break
         }
@@ -777,7 +847,10 @@ final class StoryMaker {
             let path = try await services.media.store(from: remote, named: "\(reader.book.id)-p\(page.index)-\(page.id.uuidString.prefix(8))-v\(page.version).png")
             // Only onto the same page and version; a page replaced meanwhile drops it.
             if let updated = reader.updatePage(id: key.id, version: key.version, { $0.with(stillPath: path) }) {
-                prepareLayers(for: updated)
+                paintFailures[updated.id] = nil
+                lastPaintFailure = ""
+                // Pop-up layers are several more pictures, so only the page on screen makes them.
+                if updated.id == reader.currentPage?.id { prepareLayers(for: updated) }
                 if !hasOpened, updated.id == reader.currentPage?.id { limitOpeningAnimationWait() }
             }
         } catch {
@@ -839,6 +912,7 @@ final class StoryMaker {
         refreshWorking()
         ensureBuilds()
         animate(page)
+        if page.stillPath != nil, page.layers == nil, layerTasks[page.id] == nil { prepareLayers(for: page) }
     }
 
     private func animate(_ page: PageContent) {

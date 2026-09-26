@@ -9,7 +9,8 @@ export const MINUTE_SECONDS = 60;
 // Suggested per-minute limits (task brief / ROADMAP §0.6).
 export const RATE_LIMITS_PER_MINUTE: Record<string, number> = {
   "story-turn": 30,
-  art: 20,
+  // Raised from 20: a page, its pop-up layers and character references are several pictures.
+  art: 40,
   "motion-prompt": 20,
   moderate: 60,
   tts: 30,
@@ -17,7 +18,8 @@ export const RATE_LIMITS_PER_MINUTE: Record<string, number> = {
   "reactor-token": 10,
 };
 
-export const ART_DAILY_LIMIT = 300;
+// Raised from 300, which a day of testing with pages built ahead used up.
+export const ART_DAILY_LIMIT = 1000;
 
 export async function enforceRateLimit(
   client: SupabaseClient,

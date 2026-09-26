@@ -5,7 +5,6 @@
 // own gate, not the app's primary safety mechanism.
 import { requireUser } from "../_shared/auth.ts";
 import { requireEnv } from "../_shared/env.ts";
-import { generateJSON } from "../_shared/gemini_client.ts";
 import { servePop } from "../_shared/handler.ts";
 import {
   buildMotionPromptInstruction,
@@ -13,7 +12,8 @@ import {
   MOTION_RESPONSE_SCHEMA,
   motionOutputSchema,
 } from "../_shared/motion_prompt.ts";
-import { parseModelJSON } from "../_shared/openai_chat.ts";
+import { MOTION_MODEL } from "../_shared/models.ts";
+import { chatJSON, parseModelJSON } from "../_shared/openai_chat.ts";
 import { enforceStandardRateLimit } from "../_shared/rate_limit.ts";
 import { parseRequest } from "../_shared/request.ts";
 import { PopError } from "../_shared/errors.ts";
@@ -30,14 +30,15 @@ Deno.serve((req) =>
     await enforceStandardRateLimit(client, "motion-prompt");
 
     const body = await parseRequest(req, requestSchema);
-    const geminiKey = requireEnv("GEMINI_API_KEY");
     const openaiKey = requireEnv("OPENAI_API_KEY");
 
     const still = await downloadAsBase64(client, body.stillPath);
-    const raw = await generateJSON(geminiKey, {
-      instruction: buildMotionPromptInstruction(body.text),
-      responseSchema: MOTION_RESPONSE_SCHEMA,
-      image: { mimeType: still.mimeType, data: still.base64 },
+    const raw = await chatJSON(openaiKey, {
+      model: MOTION_MODEL,
+      system: "You describe a children's picture-book page for a gentle animation. Reply with JSON only.",
+      user: buildMotionPromptInstruction(body.text),
+      jsonSchema: { name: "motion_prompt", strict: true, schema: MOTION_RESPONSE_SCHEMA },
+      imageDataUrl: `data:${still.mimeType};base64,${still.base64}`,
     });
     const modelOutput = parseModelJSON(raw, motionOutputSchema);
     // Orbis drifted from the watercolor still toward a photoreal look in the

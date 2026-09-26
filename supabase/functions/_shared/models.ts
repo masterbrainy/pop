@@ -16,10 +16,11 @@ export const TTS_MODEL = "gpt-4o-mini-tts";
 // this key's model list.
 export const TRANSCRIBE_MODEL = "gpt-4o-transcribe";
 
-export const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
-// gemini-2.5-flash returned HTTP 404 live on 2026-09-26 ("no longer available
-// to new users"; Google's error pointed at this replacement), even though it
-// still appears in this key's /v1beta/models listing.
-export const GEMINI_TEXT_MODEL = "gemini-3.8-flash";
+// P-05 (accepted 2026-09-26): OpenAI paints every picture; measured 12-13 s for a
+// 1536x1024 page at medium quality, about $0.011 each (docs/PIVOTS.md P-05).
+export const IMAGE_MODEL = "gpt-image-2.5-flare";
+export const IMAGE_QUALITY = "medium";
+// motion-prompt reads the page's still and text with the story model.
+export const MOTION_MODEL = STORY_MODEL;
 
 export const REACTOR_MODEL = "reactor/visko-orbis-stable";

@@ -13,7 +13,6 @@ Keep **DeviceHub** open (`Xcode-beta.app/Contents/Applications/DeviceHub.app`); 
 | Screenshot both screens into `build/shots/` | `scripts/sim.sh shot <name>` |
 | Animate one picture with Orbis (mints a 15-minute token from `.env`; about $0.30 per 30 s of video) | `scripts/probe-orbis.sh <still.png> "<motion prompt>" [seconds]` |
 | See or kill open Reactor sessions (run after any Orbis work) | `scripts/reactor-sessions.sh list` / `kill` |
-| One Gemini picture (dev only) | `scripts/gemini-image.sh "<prompt>" out.png [16:9]` |
 | Logic tests | `cd PopKit && swift test` |
 | Live-scene bridge tests and type check | `cd web/live-scene && npm test && npm run typecheck` |
 | Rebuild the live-scene page after changing `web/live-scene/src` | `cd web/live-scene && npm run build` (writes `App/LiveScene/Web/`) |
@@ -38,7 +37,7 @@ Keys stay in `supabase/functions/.env`. The scripts read them into shell variabl
   - A direction rebuilt the page behind in 3.5–4.4 s.
   - Fold mid-rebuild, a fold past the ending and a direction on the ending all behaved as specified.
   - All clips recorded, 0 frames flagged, 0 Reactor sessions left open.
-- **Gemini prepaid credit ran out** (HTTP 402 "prepayment credits are depleted", checked directly 2026-09-26). Pictures, layers, reference sheets, covers and motion prompts need Gemini. Story text is OpenAI. Image calls now retry 402/429/5xx for about 17 s and report Google's reason. Brian needs to top up before the demo.
+- **Gemini retired (P-05, 2026-09-26).** Its prepaid credit ran out (HTTP 402), so `art` now paints with OpenAI `gpt-image-2.5-flare` (1536×1024, medium; references go through the edits endpoint) and `motion-prompt` uses the OpenAI story model with the still attached. Live check: `art` HTTP 200 in 13.7 s at 1536×1024; `motion-prompt` HTTP 200 in 3.3 s with a style-locked scene. Orbis gets a 16:9 centre crop (`OrbisStill`). Image calls get one 30 s attempt plus one quick retry on 429/5xx (R-49).
 - **Fold → first live frame:** 2.4–3.5 s on a warm session (5 samples), 6.1 s on the session's first start (R-36 resolved).
 - **Eval: 83/83 pass, 0/36 safety misses, 1/47 false blocks (2.1%).** A parent's "the end" (said on its own) ends the path at that page, and the last page always closes with "The end." Branded characters (Mickey Mouse and others) are refused by the gate, not just the rubric. `scripts/eval/run.ts <id-prefix>` runs a subset.
 - **Golden book:** "Maya and the Star Stone", 8 pages, 54 MB (`scripts/golden-book.sh restore`).

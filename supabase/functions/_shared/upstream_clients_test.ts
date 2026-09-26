@@ -1,10 +1,10 @@
-// IMP-10: the OpenAI chat, OpenAI moderation and Gemini text clients each send a
+// IMP-10: the OpenAI chat, moderation and image clients each send a
 // deadline signal with every request and retry a 503 once. `fetch` is stubbed, so
 // no network call (and no paid API) is made.
 import { assert, assertEquals, assertRejects } from "jsr:@std/assert@1";
 import { chatJSON } from "./openai_chat.ts";
 import { moderateText } from "./openai_moderation.ts";
-import { generateJSON } from "./gemini_client.ts";
+import { generateImage, ImageBlockedError } from "./openai_images.ts";
 import { PopError } from "./errors.ts";
 
 async function withStubbedFetch(replies: Response[], run: () => Promise<void>): Promise<(AbortSignal | undefined)[]> {
@@ -45,12 +45,78 @@ Deno.test("moderateText retries a 503 once, then reports upstream if it fails ag
   assert(signals.every((signal) => signal instanceof AbortSignal));
 });
 
-Deno.test("generateJSON retries a 503 once and sends a deadline with each attempt", async () => {
-  let text = "";
-  const signals = await withStubbedFetch([busy(), json({ candidates: [{ content: { parts: [{ text: "{\"a\":1}" }] } }] })], async () => {
-    text = await generateJSON("key", { instruction: "i", responseSchema: {} });
+async function withRecordedFetch(replies: Response[], run: () => Promise<void>): Promise<{ url: string; init?: RequestInit }[]> {
+  const original = globalThis.fetch;
+  const calls: { url: string; init?: RequestInit }[] = [];
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return Promise.resolve(replies[Math.min(calls.length - 1, replies.length - 1)]);
+  }) as typeof fetch;
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = original;
+  }
+  return calls;
+}
+
+const picture = () => json({ data: [{ b64_json: "aW1n" }] });
+
+Deno.test("chatJSON sends a picture alongside the text when given one", async () => {
+  const calls = await withRecordedFetch([json({ choices: [{ message: { content: "{}" } }] })], async () => {
+    await chatJSON("key", {
+      model: "m", system: "s", user: "u", jsonSchema: { name: "n", strict: true, schema: {} },
+      imageDataUrl: "data:image/png;base64,aW1n",
+    });
   });
-  assertEquals(text, "{\"a\":1}");
+  const sent = JSON.parse(String(calls[0].init?.body));
+  assertEquals(sent.messages[1].content, [
+    { type: "text", text: "u" },
+    { type: "image_url", image_url: { url: "data:image/png;base64,aW1n" } },
+  ]);
+});
+
+Deno.test("generateImage paints a 16:9 page at OpenAI's 1536x1024 with no references", async () => {
+  let base64 = "";
+  const calls = await withRecordedFetch([picture()], async () => {
+    base64 = (await generateImage("key", { prompt: "a fox", aspectRatio: "16:9" })).base64;
+  });
+  assertEquals(base64, "aW1n");
+  assertEquals(calls[0].url, "https://api.openai.com/v1/images/generations");
+  assertEquals(JSON.parse(String(calls[0].init?.body)).size, "1536x1024");
+});
+
+Deno.test("generateImage sends reference images to the edits endpoint", async () => {
+  const calls = await withRecordedFetch([picture()], async () => {
+    await generateImage("key", {
+      prompt: "a fox", aspectRatio: "1:1",
+      referenceImages: [{ mimeType: "image/png", data: "aW1n" }, { mimeType: "image/jpeg", data: "aW1n" }],
+    });
+  });
+  assertEquals(calls[0].url, "https://api.openai.com/v1/images/edits");
+  const form = calls[0].init?.body as FormData;
+  assertEquals(form.getAll("image[]").length, 2);
+  assertEquals(form.get("size"), "1024x1024");
+});
+
+Deno.test("generateImage retries a 503 once, with a deadline on each attempt", async () => {
+  const signals = await withStubbedFetch([busy(), picture()], async () => {
+    await generateImage("key", { prompt: "a fox", aspectRatio: "16:9" });
+  });
   assertEquals(signals.length, 2);
   assert(signals.every((signal) => signal instanceof AbortSignal));
+});
+
+Deno.test("generateImage reports OpenAI's own safety refusal as ImageBlockedError", async () => {
+  const blocked = new Response(JSON.stringify({ error: { code: "moderation_blocked" } }), { status: 400 });
+  await withStubbedFetch([blocked], async () => {
+    await assertRejects(() => generateImage("key", { prompt: "x", aspectRatio: "16:9" }), ImageBlockedError);
+  });
+});
+
+Deno.test("generateImage fails as upstream on any other error", async () => {
+  await withStubbedFetch([new Response("nope", { status: 401 })], async () => {
+    const error = await assertRejects(() => generateImage("key", { prompt: "x", aspectRatio: "16:9" }), PopError);
+    assertEquals(error.code, "upstream");
+  });
 });

@@ -1,5 +1,6 @@
 // OpenAI Chat Completions with strict JSON-schema structured output, used by
-// story-turn's engine call, its safety-rubric check, and title generation.
+// story-turn's engine call, its safety-rubric check, title generation, and
+// motion-prompt (which also sends the page's still).
 import { PopError } from "./errors.ts";
 import { fetchWithOneRetry, UPSTREAM_TIMEOUTS_MS } from "./retry.ts";
 
@@ -16,6 +17,16 @@ export interface ChatJSONOptions {
   system: string;
   user: string;
   jsonSchema: JsonSchemaSpec;
+  /** A `data:` URL of a picture the model should look at alongside `user`. */
+  imageDataUrl?: string;
+}
+
+function userContent(text: string, imageDataUrl?: string) {
+  if (!imageDataUrl) return text;
+  return [
+    { type: "text", text },
+    { type: "image_url", image_url: { url: imageDataUrl } },
+  ];
 }
 
 interface RawChatResponse {
@@ -28,7 +39,7 @@ export async function chatJSON(apiKey: string, opts: ChatJSONOptions): Promise<s
     model: opts.model,
     messages: [
       { role: "system", content: opts.system },
-      { role: "user", content: opts.user },
+      { role: "user", content: userContent(opts.user, opts.imageDataUrl) },
     ],
     response_format: { type: "json_schema", json_schema: opts.jsonSchema },
   });

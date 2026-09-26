@@ -50,7 +50,7 @@
 | `PostureMachine` | Pure function from a stream of angles to effects: curl progress, turn committed or cancelled (with hysteresis), pop depth for the page now showing, and closed (after a ~1 s hold). Angles are normalised to the range measured in 0.1 | `HingeSource` values |
 | `PagePipeline` | Keeps the page behind the current one fully built: text → art → layers → animation prompt. A direction cancels and rebuilds the page behind; the page on screen never changes | StoryEngine, Art, Moderation |
 | `StoryEngine` | Plans a **story path** from the brief (interests, optional real moment, optional "teach something" note): an ordered list of page beats that always reaches an ending. It writes pages one at a time along the path. A direction (spoken or typed, parent or kid) re-plans the path from the page behind onward and rewrites that page. Output: path, page text, art prompt, bible and direction updates, parent question | `story-turn` function |
-| `Art` | Gemini page illustration (framing for the portrait page set at G0; see §3), background plate, character cutouts, cover | `art` function |
+| `Art` | OpenAI `gpt-image-2.5-flare` page illustration at 1536×1024, cropped to 16:9 in the app (P-05; framing for the portrait page set at G0; see §3), background plate, character cutouts, cover | `art` function |
 | `MotionPromptBuilder` | Builds the Orbis prompt for **one page only** from a fixed template (below) | `motion-prompt` function |
 | `LiveScene` | Protocol: `prepare(image:prompt:)`, `start()`, `stop()`, event stream. Implementations: `ReactorWebScene` (also records each page's clip), `StillPanScene` (fallback) and `ClipReplayScene` (plays a saved page's recorded clip) | Reactor JS SDK |
 | `SessionController` | Orbis session lifecycle: warm-up, token, reconnect with backoff, kill, server-side cleanup of stray sessions, credit meter | `reactor-*` functions |
@@ -158,7 +158,7 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 - `StoryEngine` with a strict response schema, reading-level limits, a story path planned from the brief (always reaching an ending), and directions that re-plan the path from the page behind (P-04). It leaves surnames, addresses, schools and phone numbers out of the story text.
 - The page behind: while a page shows, the next page along the path is fully built. A direction rebuilds it; the page on screen never changes, and only the parent's fold turns the page.
 - `StoryBible` and character registry (fixed description plus reference image).
-- `Art` (Gemini): locked art style, character references, framing from D9 (16:9 with important content central until G0).
+- `Art` (OpenAI images, P-05): locked art style, character references, framing from D9 (16:9 with important content central until G0).
 - Kid-safety gate (PRD §8.6 rubric): `omni-moderation-latest` on text, prompts and pictures, plus an LLM rubric check on text and prompts at the kid's reading level, and each category's response (rewrite, redirect, regenerate the picture, placeholder).
 - `PagePipeline`: keeps the page behind built, cancels it when a direction arrives, versions each page.
 - Persistence in Supabase (rows plus Storage); timing spans for every stage.
@@ -169,7 +169,7 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 - `ReactorWebScene` bridge (bundled JS, Swift event stream) and the `StillPanScene` fallback.
 - `SessionController`: warm up on New Book, reconnect with backoff (with a fresh token when one expires or runs out), kill, ask the server to clean up this user's leftover sessions at launch, credit meter.
-- `motion-prompt` function (Gemini reads the page text and still) and `MotionPromptBuilder`.
+- `motion-prompt` function (the OpenAI story model reads the page text and still, P-05) and `MotionPromptBuilder`.
 - On flip: the per-page sequence; crossfade from still to video; drift guard; audio off while the mic is live.
 - Frame tripwire: a sampled frame goes through image moderation, and the page switches back to the still if it's flagged.
 - Clip recording: record each page's final animation (method, length and looping from G0) and save it with the page.
@@ -179,7 +179,7 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 ### Phase 4: Pop-up (≈ 10 h · A 7, B 3) · must-have
 
-- Layer generation: plate and cutouts (Gemini) → chroma key → alpha PNGs, prepared early per page.
+- Layer generation: plate and cutouts (OpenAI images) → chroma key → alpha PNGs, prepared early per page.
 - Pop-up renderer: layered SwiftUI with 3D transforms; depth follows the angle; hands over from video to diorama and back. RealityKit is optional.
 - Gesture model from D1, wired into `PostureMachine`: the page now showing pops at about 90°, including page 1 as the book opens from its cover.
 
@@ -203,7 +203,7 @@ Confirm no audio is ever saved, that only the first name and interests are store
 
 ### Phase 8: Cut-list features, in order of priority (≈ 18 h)
 1. Read-along: `AVSpeechSynthesizer` with word highlighting · 4 h
-2. Kid's drawing as the hero: finger-drawing canvas → Gemini restyle → character reference · 5 h
+2. Kid's drawing as the hero: finger-drawing canvas → OpenAI image restyle → character reference · 5 h
 3. Reading together: parent co-pilot strip on the text page · 4 h
 4. Talking characters · 5 h
 
@@ -244,7 +244,7 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 3. Restore the golden book, which is the network-failure fallback: `scripts/golden-book.sh restore`, then `scripts/golden-book.sh show`.
 4. Install the current build (`scripts/sim.sh run`). Check that `scripts/reactor-sessions.sh list` shows 0 open sessions and there's Reactor credit for the demo (PRD §9).
 5. Open the Duo with the slider. If the inner screen stays black, click it once to wake it.
-6. Check Gemini has credit: `scripts/gemini-image.sh "a fox" /tmp/fox.png` must say HTTP 200. HTTP 402 "prepayment credits are depleted" means top up in AI Studio (ai.studio/projects). Without credit, new books get words but no pictures or animation.
+6. Pictures and motion prompts use OpenAI (P-05), the same key as the story, so there's no second vendor to top up.
 
 **Rehearsal (T-15 min):** make a book once (about 4 minutes for 8 pages). Then `scripts/golden-book.sh restore` so the golden book, "Maya and the Star Stone" (8 pages), is on the shelf. Mute the Mac, so Orbis sound can't reach the mic. Use a wired connection or a hotspot.
 
@@ -278,7 +278,7 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 | D2 | What the latency target means | G0 |
 | D3 | Orbis Stable vs Dynamic | G0 |
 | D4 | Record per-page clips | ✅ Resolved 2026-09-26 by P-01: required (saved books replay exactly). How, the minimum clip length, looping, and what Save does with incomplete clips: G0 |
-| D7 | Gemini: images and animation prompts. OpenAI: speech-to-text, story, moderation, and `tts` for talking characters and video export. Read-along narration uses Apple's on-device voice | ✅ Confirmed by Brian 2026-09-26 |
+| D7 | OpenAI for everything but Orbis: images (`gpt-image-2.5-flare`) and animation prompts (P-05, replacing Gemini), speech-to-text, story, moderation, and `tts` for talking characters and video export. Read-along narration uses Apple's on-device voice | ✅ Confirmed by Brian 2026-09-26; images moved to OpenAI 2026-09-26 (P-05) |
 | D8 | Demo date → cut line | ✅ Resolved 2026-09-26: no deadline; build the full scope, including talking characters |
 | D9 | How the 16:9 animation fills a portrait page (§3 options) | G0 |
 

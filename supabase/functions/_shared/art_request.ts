@@ -1,24 +1,24 @@
 // `art`'s own prompt- and reference-image-selection logic (docs/CONTRACTS.md
 // §3 `art`, PRD P2). Pure functions so the picking logic is unit-testable
-// without any network call; index.ts does the actual Gemini call and Storage
+// without any network call; index.ts does the actual image call and Storage
 // download/upload.
 import { decodeBase64 } from "jsr:@std/encoding@1/base64";
 import { ART_STYLE, CUTOUT_BACKGROUND_INSTRUCTION, DRAWING_INSTRUCTION, PLATE_INSTRUCTION } from "./art_style.ts";
 import type { ArtKind } from "./art_style.ts";
-import type { InlineImage } from "./gemini_client.ts";
+import type { InlineImage } from "./openai_images.ts";
 import { sniffImageMimeType } from "./image_format.ts";
 import type { Character } from "./schemas.ts";
 
-/** Declared placeholder dimensions when moderation blocks both attempts (no picture is generated). */
+/** Declared placeholder dimensions when moderation blocks both attempts (no picture is generated); OpenAI's sizes. */
 export const STANDARD_DIMENSIONS: Record<"16:9" | "2:3" | "1:1", { width: number; height: number }> = {
-  "16:9": { width: 1344, height: 768 },
-  "2:3": { width: 832, height: 1248 },
+  "16:9": { width: 1536, height: 1024 },
+  "2:3": { width: 1024, height: 1536 },
   "1:1": { width: 1024, height: 1024 },
 };
 
 /**
  * Which of this request's characters need their reference image sent to
- * Gemini for consistency: the single named character for `character`/`cutout`,
+ * the image model for consistency: the single named character for `character`/`cutout`,
  * every character with a saved reference for `page`/`cover`, none for `plate`
  * (which draws the scene with no characters at all).
  */
@@ -47,7 +47,7 @@ export function referencePathsFor(
 
 /**
  * For `kind: "drawing"` only: decodes the kid's drawing and sniffs its image
- * format, ready to attach to the Gemini request as an inline image part
+ * format, ready to attach to the image request as a reference
  * alongside (or instead of) any stored character references. Pure and
  * network-free so it's unit-testable; `index.ts` pushes the result onto the
  * same `referenceImages` array `loadReferenceImages` builds from storage.
@@ -61,7 +61,7 @@ export function drawingInlineImage(kind: ArtKind, drawing?: string | null): Inli
   return { mimeType, data: drawing };
 }
 
-/** Builds the full Gemini prompt: the locked style, kind-specific instructions, character notes, then the caller's own prompt. */
+/** Builds the full image prompt: the locked style, kind-specific instructions, character notes, then the caller's own prompt. */
 export function buildArtPrompt(
   kind: ArtKind,
   prompt: string,

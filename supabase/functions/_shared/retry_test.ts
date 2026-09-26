@@ -46,7 +46,7 @@ Deno.test("fetchWithRetry retries a network error, then rethrows it", async () =
   assertEquals(call, 2);
 });
 
-// IMP-10: every upstream attempt carries a deadline, and chat, moderation and Gemini text
+// IMP-10: every upstream attempt carries a deadline, and chat, moderation and image
 // get one jittered retry on 429/5xx.
 
 /** A fetcher that never answers until its signal aborts, like a hung upstream. */

@@ -180,6 +180,19 @@ extension LiveSceneBridge: WKScriptMessageHandler {
 }
 
 extension LiveSceneBridge: WKNavigationDelegate {
+    /// Only the bundled live-scene page (`popscene://app/...`) and `about:blank`
+    /// may load in this web view; everything else — a link the scene's own
+    /// script tried to open, a redirect, anything else — is cancelled (R-34).
+    private func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+        let isAllowedScene = url.scheme == SceneSchemeHandler.scheme && url.host == "app"
+        let isAboutBlank = url.scheme == "about" && url.path == "blank"
+        decisionHandler(isAllowedScene || isAboutBlank ? .allow : .cancel)
+    }
+
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
         receive(.error(code: "navigation", message: error.localizedDescription, recoverable: false))
     }

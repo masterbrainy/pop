@@ -14,8 +14,11 @@ export interface WordLimitCheck {
 }
 
 /** PRD §8.7 word-limit check, reusing the server's own reading-level table. */
-export function checkWordLimit(text: string, level: ReadingLevel): WordLimitCheck {
-  const limit = readingLevelLimits(level).maxWords;
+/** The ending page closes with "The end.", which may take it two words over (R-45). */
+const ENDING_ALLOWANCE = 2;
+
+export function checkWordLimit(text: string, level: ReadingLevel, isEnding = false): WordLimitCheck {
+  const limit = readingLevelLimits(level).maxWords + (isEnding ? ENDING_ALLOWANCE : 0);
   const words = countWords(text);
   return { ok: words <= limit, words, limit };
 }

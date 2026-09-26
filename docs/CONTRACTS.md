@@ -99,3 +99,5 @@ Header `x-pop-admin: <REACTOR_ADMIN_SECRET>`. Request `{ "action": "list | kill"
 ## 4. Database (Postgres, RLS on every table: a user sees only their own rows)
 
 `kids`, `books` (brief, bible and settings as jsonb), `pages` (unique `book_id, index, version`), `reactor_sessions` (`session_id`, `user_id`, `opened_at`, `ended_at`), `rate_limits` (`user_id`, `fn`, `window_start`, `count`). Storage bucket `pop-books` (private; a user reads and writes only under their own `userId/` prefix).
+
+**`reactor_sessions` and `rate_limits` are server-only (REVIEW.md R-27).** Unlike every other table, RLS grants the signed-in user's own client **no** policy at all on these two: only the service role reads or writes them (`reactor-token`'s service client, filtered by `user_id` in every query; `rate_limits` only through the `hit_rate_limit()` `security definer` RPC). This is what stops a signed-in user from resetting their own rate-limit counts or deleting their `reactor_sessions` rows through the REST API.

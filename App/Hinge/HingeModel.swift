@@ -17,6 +17,8 @@ final class HingeModel {
     /// The debug panel or a script is driving; device readings are ignored meanwhile.
     private(set) var overridden = LaunchOptions.debugHinge
     private(set) var lastDeviceAngle: Double?
+    /// How far the real hinge must move to take control back from the debug panel.
+    private static let handBackDegrees = 2.0
 
     @ObservationIgnored var onEvent: @MainActor (PostureEvent) -> Void = { _ in }
     @ObservationIgnored private let machine: PostureMachine
@@ -59,7 +61,16 @@ final class HingeModel {
     }
 
     func ingest(posture: HingePosture, degrees: Double, from source: Source) {
-        if source == .device { lastDeviceAngle = degrees }
+        if source == .device {
+            // Someone moved the real hinge (Device Hub's slider): it takes back over from the
+            // debug panel, so a book left in debug mode by a script still folds by hand.
+            // With no earlier reading, compare against open flat, where the Duo starts.
+            if overridden, abs(degrees - (lastDeviceAngle ?? 180)) >= Self.handBackDegrees {
+                setOverride(false)
+                fileLog?.append("device hinge moved: debug override off")
+            }
+            lastDeviceAngle = degrees
+        }
         fileLog?.append("\(source == .device ? "device" : "debug") \(posture) \(String(format: "%.1f", degrees))° overridden=\(overridden)")
         guard (source == .debug) == overridden else { return }
         apply(HingeSample(posture: posture, angle: degrees, time: elapsed()))

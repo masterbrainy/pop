@@ -19,7 +19,7 @@
 | App-side Supabase URL and publishable key in git-ignored `config/Supabase.local.xcconfig` | ✅ |
 | Private GitHub repo `masterbrainy/pop` | ✅ |
 | Claude Code ↔ Xcode tools (`xcrun mcpbridge`) | ✅ |
-| Claude Code ↔ iOS Simulator panel | ⚠ re-test on the Duo (the panel was still attached to the old simulator service before the app restart) |
+| Claude Code ↔ iOS Simulator panel attached to the **iPhone Duo** (466×678 pt reported at first boot; posture to be confirmed in Phase 0.1) | ✅ |
 | Sibling sessions: Review & QA, Pitch & Tech Log, Pivots & Ideas (roles in `CLAUDE.md`) | ⏳ waiting for Brian to start them |
 | **Build gate:** Brian verifies the setup and says to start | ⏳ |
 

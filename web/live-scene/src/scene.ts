@@ -4,6 +4,7 @@ import { log, post } from "./bridge.ts";
 import { ORBIS_MODEL_NAME, ORBIS_TRACKS, chunkIndexOf, describeMessage, unwrapOrbisMessage, type OrbisMessage } from "./orbis.ts";
 import { ClipRecorder, type ClipResult } from "./clip.ts";
 import { MessageWaiters } from "./waiters.ts";
+import { type FrameResult, sampleFrame } from "./frame.ts";
 
 const IMAGE_READY_TIMEOUT_MS = 30_000;
 /** Session start-up is measured in minutes; the starter's 15 s ceiling fired too early. */
@@ -128,6 +129,11 @@ export class LiveSceneController {
 
   cancelClip(): void {
     this.clips.cancel();
+  }
+
+  /** The frame now showing as a small JPEG, for the moderation tripwire. */
+  sampleFrame(maxSide: number): FrameResult {
+    return sampleFrame(this.video, maxSide);
   }
 
   setFit(fit: VideoFit): void {

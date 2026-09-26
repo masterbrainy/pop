@@ -30,9 +30,14 @@ struct BookView: View {
         ZStack(alignment: .bottom) {
             content
             if showsDebugPanel {
-                DebugHingePanel(hinge: hinge)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, maker == nil ? 20 : 84)
+                VStack(spacing: 8) {
+                    if let maker {
+                        SceneDebugOverlay(live: maker.live, latency: maker.latency)
+                    }
+                    DebugHingePanel(hinge: hinge)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, maker == nil ? 20 : 84)
             }
         }
         .overlay(alignment: .top) { banner }
@@ -154,7 +159,8 @@ struct BookView: View {
         _ = await maker.completeClips()
         await maker.end()
         let title = await BookFinisher.title(for: reader.book, kid: kid, settings: maker.settings)
-        let cover = reader.book.pages.first(where: { $0.stillPath != nil })?.stillPath
+        let firstStill = reader.book.pages.first(where: { $0.stillPath != nil })?.stillPath
+        let cover = await BookFinisher.coverArt(for: reader.book, title: title, log: maker.record) ?? firstStill
         reader.finish(title: title, coverPath: cover)
         onFinish(reader.book)
         finishing = false
@@ -179,5 +185,29 @@ enum BookFinisher {
         if let title = book.bible.title, !title.isEmpty { return title }
         let words = (book.pages.first?.text ?? "A new story").split(separator: " ").prefix(5).joined(separator: " ")
         return words.isEmpty ? "A new story" : words
+    }
+
+    /// Paints the cover (2:3, no lettering; the title is drawn over it) from the story's
+    /// characters and its first page. Nil if it can't, and the first page's picture is used.
+    static func coverArt(for book: Book, title: String, log: (String) -> Void = { _ in }) async -> String? {
+        guard let server = AppServices.shared.server else { return nil }
+        let media = AppServices.shared.media
+        let opening = book.pages.first.map { $0.artPrompt ?? $0.text } ?? ""
+        let prompt = "The cover of a picture book called \"\(title)\": the main characters together, inviting and joyful. Opening scene: \(opening)"
+        let request = ArtRequest(bookId: book.id, kind: .cover, version: 1, prompt: prompt, characters: book.bible.characters)
+        do {
+            let art = try await server.art(request)
+            guard !art.placeholder, let url = URL(string: art.url) else {
+                log("cover art: placeholder returned")
+                return nil
+            }
+            let path = try await media.store(from: url, named: "\(book.id)-cover.png")
+            log("cover art ready in \(art.ms) ms")
+            return path
+        } catch {
+            log("cover art failed: \(error.localizedDescription)")
+            AppLog.story.error("cover art failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 }

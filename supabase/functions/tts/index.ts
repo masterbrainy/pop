@@ -14,10 +14,11 @@ Deno.serve((req) =>
     const { client } = await requireUser(req);
     await enforceStandardRateLimit(client, "tts");
 
-    const { text, voice } = await parseRequest(req, requestSchema);
+    const { text, voice, instructions } = await parseRequest(req, requestSchema);
     const audioBase64 = await textToSpeechBase64(requireEnv("OPENAI_API_KEY"), {
       model: TTS_MODEL,
       voice,
+      instructions: instructions ?? undefined,
       text,
     });
 

@@ -8,7 +8,7 @@ const CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets";
 
 export async function textToSpeechBase64(
   apiKey: string,
-  opts: { model: string; voice: string; text: string },
+  opts: { model: string; voice: string; text: string; instructions?: string },
 ): Promise<string> {
   const res = await fetch(SPEECH_URL, {
     method: "POST",
@@ -20,6 +20,7 @@ export async function textToSpeechBase64(
       model: opts.model,
       voice: opts.voice,
       input: opts.text,
+      ...(opts.instructions ? { instructions: opts.instructions } : {}),
       response_format: "mp3",
     }),
   });

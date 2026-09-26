@@ -54,6 +54,10 @@ struct BookView: View {
                 readAloud.stop()
             }
         }
+        // Each page's voice is fetched as soon as its words exist, so reading starts at once.
+        .onChange(of: textsToPrepare, initial: true) { _, texts in
+            texts.forEach(readAloud.prepare)
+        }
         .onChange(of: readAloud.isReading) { _, reading in
             guard let maker, isCreating else { return }
             Task { await maker.setReadingAloud(reading) }
@@ -137,6 +141,15 @@ struct BookView: View {
         guard isCreating, ParentPreferences.readAlong, !showsCover, maker?.openingStage == nil,
               let page = reader.currentPage, !page.text.isEmpty else { return nil }
         return "\(page.id)#\(page.version)"
+    }
+
+    /// The page on screen and the next ones (built ahead while making, or the book's next page
+    /// while reading), whose voice to fetch ahead.
+    private var textsToPrepare: [String] {
+        guard ParentPreferences.readAlong else { return [] }
+        let index = reader.pageNumber - 1
+        let upcoming = isCreating ? reader.ahead : Array(reader.book.pages.dropFirst(index + 1).prefix(1))
+        return ([reader.currentPage].compactMap { $0 } + upcoming).map(\.text).filter { !$0.isEmpty }
     }
 
     /// Making the book (not reading a finished one): only then do the story banners show.

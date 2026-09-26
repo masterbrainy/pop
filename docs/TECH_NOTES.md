@@ -272,7 +272,7 @@ It's **unclear** whether billing starts at connection or at generation.
 **Confidence:** Decision (accepted, Brian).
 **So what for Pop!:** The vendors are now Reactor, Gemini, OpenAI and Supabase. PITCH.md matches: no pricing, no third-party analytics, and lessons appear only as an example.
 
-### TN-027 · 2026-09-25 · QA corrections: region meanings, screen sizes, nil hinge, crop, privacy wording
+### TN-027 · 2026-09-25 · QA corrections: region meanings, screen sizes, nil hinge, crop, privacy wording → confidence retagged, TN-028
 **Fact:**
 - **Region meanings are verified (R-13).** In `UIKit.framework/Headers/UIViewReservedRegion.h`, `occlusion` is "a region that is occluded by an element" and `division` is "a region where an element should divide into two separate regions". `frame` includes the `margins`, which are for interactive content. This replaces the "Inferred" tag in TN-005.
 - **466×678 pt is the outer screen (R-14).** The Duo simulator profile defines "LCD" (1398×2034 px at 3x, which is 466×678 pt, the outer screen) and "LCD-1" (2007×2853 px at 3x, native rotation 270, which is 951×669 pt landscape, the inner screen). So the device booted closed, and the simulator has a real outer screen, which supports TN-007. This corrects TN-022.
@@ -282,3 +282,9 @@ It's **unclear** whether billing starts at connection or at generation.
 **Evidence:** Review & QA findings R-04, R-10, R-11, R-13 and R-14 in `docs/REVIEW.md` @ `bdf8200`. This session re-read the two headers and confirmed the "LCD" and "LCD-1" entries (native rotations 0 and 270) in the Duo profile. The crop figure and the vendor retention terms are QA's, not re-checked here. QA also re-verified on 2026-09-25 that all three keys return HTTP 200 (401 with no key), 0 Reactor sessions are open, and the Reactor JS SDK is 3.0.2 (Apache-2.0).
 **Confidence:** Verified (headers, profile); QA-reported (crop math, vendor terms).
 **So what for Pop!:** Layout should treat the outer and inner screens as different sizes. Art must be composed for a narrow crop of the 16:9 frame. The pitch says "Pop! never stores audio; it's streamed to OpenAI only to transcribe it", never "audio is discarded" without that context.
+
+### TN-028 · 2026-09-25 · Retag: vendor data-retention terms are Reported, not Verified
+**Fact:** In TN-027, the vendor terms (OpenAI's API may keep inputs for abuse monitoring, by default up to 30 days unless zero data retention; Gemini's unpaid tier may use prompts) came from Review & QA's general knowledge, not from vendor docs read on 2026-09-25. The crop math in TN-027 is arithmetic on the verified profile numbers: (475/669) ÷ (16/9) ≈ 0.40, and 0.40 × 832 ≈ 332 px. So it stands as derived.
+**Evidence:** Review & QA's clarification message, 2026-09-25.
+**Confidence:** **Reported**, to confirm against the current OpenAI and Google API terms. This corrects the "QA-reported" tag in TN-027.
+**So what for Pop!:** The pitch's wording ("Pop! never stores audio; it's streamed to OpenAI only to transcribe it") makes no claim about vendor retention, so it stays as is. Confirm the terms before saying anything about them.

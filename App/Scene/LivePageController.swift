@@ -343,7 +343,7 @@ struct BridgeTransport: SceneTransport {
         return result.sessionId ?? ""
     }
 
-    /// Sends Orbis a ~832×480 JPEG rather than the stored 1344×768 PNG (about a tenth of the
+    /// Sends Orbis a ~832×468 16:9 JPEG rather than the stored 1536×1024 PNG (about a tenth of the
     /// bytes, so a shorter upload in every prepare). Runs on the session's actor, off the main thread.
     func prepare(still: Data, prompt: String, generation: Int) async throws {
         let upload = OrbisStill.jpeg(from: still) ?? still

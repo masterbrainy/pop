@@ -35,8 +35,9 @@ public enum OrbisStill {
     }
 
     /// Centre-crops a landscape image to `aspectRatio` when it's noticeably off; portrait
-    /// and near-16:9 images come back unchanged.
-    static func croppedToFrame(_ image: CGImage) -> CGImage {
+    /// and near-16:9 images come back unchanged. The page shows its still and plate through
+    /// this too, so the still and Orbis's video frame the same picture (R-50).
+    public static func croppedToFrame(_ image: CGImage) -> CGImage {
         let width = Double(image.width), height = Double(image.height)
         guard width > height, abs(width / height - aspectRatio) / aspectRatio > cropTolerance else { return image }
         let rect: CGRect

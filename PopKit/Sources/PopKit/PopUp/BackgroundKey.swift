@@ -1,6 +1,6 @@
 import CoreGraphics
 
-/// Cuts a generated character out of its backdrop (ROADMAP Phase 4). Gemini's "flat"
+/// Cuts a generated character out of its backdrop (ROADMAP Phase 4). The image model's "flat"
 /// backgrounds come back textured and not quite the colour asked for, and a character can
 /// share that colour (a green dragon on green), so this samples the backdrop from the image's
 /// border and clears only the pixels connected to the edges that are close to it.

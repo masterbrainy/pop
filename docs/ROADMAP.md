@@ -15,8 +15,7 @@
 | iOS 27.1 simulator; the **iPhone Duo** boots to its home screen with DeviceHub.app open (REVIEW R-21) | ✅ |
 | Duo APIs checked in the SDK (see §3) | ✅ |
 | Supabase CLI logged in and linked to the project | ✅ |
-| API keys (Reactor, Gemini, OpenAI): each returns HTTP 200, stored in Supabase secrets and the git-ignored `supabase/functions/.env` | ✅ |
-| Billing on for the Gemini key's Google project (its image models have no free tier). A test picture from `gemini-2.5-flash-image` returned HTTP 200 on 2026-09-26 | ✅ |
+| API keys (Reactor, OpenAI): each returns HTTP 200, stored in Supabase secrets and the git-ignored `supabase/functions/.env` | ✅ |
 | App-side Supabase URL and publishable key in git-ignored `config/Supabase.local.xcconfig` | ✅ |
 | Private GitHub repo `masterbrainy/pop` | ✅ |
 | Claude Code ↔ Xcode tools (`xcrun mcpbridge`) | ✅ |

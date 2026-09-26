@@ -23,6 +23,9 @@ final class StoryMaker {
     private(set) var settings: ParentSettings
 
     @ObservationIgnored private let services: AppServices
+    /// The kid's drawing of the hero, if the parent made one, seeded into the bible
+    /// the moment the book starts (ROADMAP Phase 8.2).
+    @ObservationIgnored private var heroDrawing: HeroDrawing?
     @ObservationIgnored private var motionPrompts: [UUID: String] = [:]
     @ObservationIgnored private var speech: (any SpeechInput)?
     @ObservationIgnored private var speechTask: Task<Void, Never>?
@@ -39,11 +42,12 @@ final class StoryMaker {
     /// Set by the book view: a scripted "pop" step folds to about 90° and back.
     @ObservationIgnored var onScriptedPop: @MainActor () async -> Void = {}
 
-    init(reader: BookReader, kid: KidProfile, settings: ParentSettings, services: AppServices = .shared) {
+    init(reader: BookReader, kid: KidProfile, settings: ParentSettings, services: AppServices = .shared, heroDrawing: HeroDrawing? = nil) {
         self.reader = reader
         self.kid = kid
         self.settings = settings
         self.services = services
+        self.heroDrawing = heroDrawing
         live.onClip = { [weak self] pageId, url in self?.attachClip(url, to: pageId) }
         live.onFrameFlagged = { [weak self] _ in
             self?.note("The moving picture drifted off, so this page keeps its still picture.")
@@ -65,7 +69,32 @@ final class StoryMaker {
             guard let self else { return }
             self.pageChanged(to: self.reader.currentPage)
         }
+        if let heroDrawing {
+            await seedHero(heroDrawing, server: server)
+        }
         await playScriptedTurns()
+    }
+
+    /// Turns the kid's drawing into the story's hero before the first page is told
+    /// (ROADMAP Phase 8.2): the `art` function's `drawing` kind redraws it as a character
+    /// reference sheet, which seeds the bible so the story engine draws this character —
+    /// and treats it as the protagonist — from the first turn on. A failed or moderation
+    /// placeholder result is skipped with a gentle parent note; the story is still told,
+    /// just without a hero drawn from the kid's picture.
+    private func seedHero(_ drawing: HeroDrawing, server: PopServer) async {
+        do {
+            let art = try await server.art(HeroCharacter.request(for: drawing, bookId: reader.book.id))
+            guard !art.placeholder else {
+                note("That drawing couldn't become a character this time, so Pop! will imagine one instead.")
+                scriptLog?.append("hero drawing: placeholder returned")
+                return
+            }
+            reader.update(book: HeroCharacter.seeding(reader.book, drawing: drawing, referencePath: art.path))
+            scriptLog?.append("hero ready in \(art.ms) ms")
+        } catch {
+            note("That drawing couldn't become a character this time, so Pop! will imagine one instead.")
+            scriptLog?.append("hero drawing failed: \(error.localizedDescription)")
+        }
     }
 
     /// Plays `-storyTurns` for automated end-to-end checks, waiting for each turn to finish.

@@ -14,6 +14,8 @@ struct BookshelfView: View {
     private struct OpenBook: Identifiable {
         let book: Book
         let mode: BookMode
+        /// Set only when this book is starting fresh from a brief that drew a hero.
+        var heroDrawing: HeroDrawing?
         var id: Book.ID { book.id }
     }
 
@@ -67,9 +69,9 @@ struct BookshelfView: View {
         }
         .task { await model.load() }
         .sheet(isPresented: $askingBrief) {
-            BriefSheet(kid: model.kid, onStart: { brief in
+            BriefSheet(kid: model.kid, onStart: { brief, heroDrawing in
                 askingBrief = false
-                openBook = OpenBook(book: model.newBook(brief: brief), mode: .creating)
+                openBook = OpenBook(book: model.newBook(brief: brief), mode: .creating, heroDrawing: heroDrawing)
             }, onCancel: { askingBrief = false })
         }
         .fullScreenCover(item: $gate) { target in
@@ -85,7 +87,7 @@ struct BookshelfView: View {
                 .presentationDetents([.height(160)])
         }
         .fullScreenCover(item: $openBook) { open in
-            BookView(book: open.book, kid: model.kid, settings: model.settings, mode: open.mode,
+            BookView(book: open.book, kid: model.kid, settings: model.settings, mode: open.mode, heroDrawing: open.heroDrawing,
                      onClose: { openBook = nil },
                      onFinish: { book in Task { await model.save(book) } })
         }

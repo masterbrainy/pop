@@ -71,6 +71,42 @@ Response `data` for `mode: "turn"`:
 - `page.question` is one short question for the parent to ask about the page (PRD C3, the co-pilot strip while reading). It goes through the same safety gate; it's an empty string for `none`. A safe addition that overflows a full page comes back as `new_page` with only the new words, and an overlong page is cut to whole sentences, rather than refused.
 - `mode: "title"` returns `{ "title": "Rex Learns to Share" }` from the whole book (the cover adds ", a story for {firstName}").
 
+### `story-turn` modes `path` and `page`: the story path (P-04; S5, S7, S12, S14)
+These replace `mode: "turn"`, which stays only until the app has moved over and is then removed.
+
+Request: the same envelope as above, with `mode`, the bible (which now carries the path) and the pages **already shown** (`pages`, oldest first). `current` is not used.
+```json
+{
+  "mode": "path | page",
+  "bookId": "uuid", "kid": { … }, "brief": { … }, "settings": { … },
+  "bible": { "title": null, "setting": "…", "characters": [ … ], "directions": [ … ],
+             "path": [ "Maya finds a red kite in the meadow.", "…", "Maya falls asleep holding the kite. The end." ] },
+  "pages": [ { "index": 0, "text": "…" } ],
+  "index": 1,
+  "input": { "kind": "speech | typed", "speaker": "parent | kid", "text": "wake the dragon up" }
+}
+```
+- `mode: "path"` plans the story path, or re-plans it, from `index` onward, then writes page `index`.
+  - At the start: `index: 0`, no `input`; the brief drives the path.
+  - For a direction: `index` is the page behind the one on screen, and `input` carries the direction.
+  - Beats before `index` (pages already shown) are never changed. The new path has about 5–8 beats in total, and its last beat always ends the story.
+- `mode: "page"` writes page `index` from the existing `bible.path[index]`, with no re-planning and no `input`. The app calls it after each fold, for the new page behind.
+
+Response `data`:
+```json
+{
+  "action": "page | none",
+  "page": { "index": 1, "text": "…", "artPrompt": "…", "question": "…", "isEnding": false },
+  "bible": { "title": "…", "setting": "…", "characters": [ … ], "directions": [ … ], "path": [ "…" ] },
+  "parentNote": null,
+  "timings": { "modelMs": 0, "safetyMs": 0 }
+}
+```
+- `page.isEnding` is true for the path's last beat; after it there's no page behind, and the parent closes the book to finish.
+- **Input safety (R-37, PRD §8.6):** `input.text` is moderated before it reaches the model. If it's flagged, or it sounds like the child describing real harm, the reply is `action: "none"` with the unchanged bible and a calm `parentNote`, and the words never enter the story.
+- The page goes through the same output gate as before: moderation plus the rubric at the reading level, with one rewrite, then `none`. Its text is kept within the level's word limit (cut to whole sentences, never refused for length), and it never retells earlier pages.
+- `page.question` is one short question for the parent to ask about the page (C3).
+
 ### `art`: one picture (S6, P2, pop-up layers, cover, kid's drawing as the hero)
 Request: `{ "bookId", "kind": "page | cover | character | plate | cutout | drawing", "pageIndex": 0, "version": 1, "prompt": "…", "characters": [ Character ], "characterId": null, "drawing": null }`.
 Response `data`: `{ "path": "userId/bookId/…png", "url": "signed URL, 1 h", "width": 1344, "height": 768, "placeholder": false, "ms": 0 }`.

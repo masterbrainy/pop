@@ -6,6 +6,9 @@ supabase/functions/.env
 supabase/.temp/
 config/*.local.xcconfig
 
+# Claude Code worktrees for sibling sessions
+.claude/worktrees/
+
 # Xcode / Swift
 DerivedData/
 build/

@@ -11,13 +11,17 @@
 | Item | Status |
 |---|---|
 | Xcode 27.1 beta (27A9269) installed and selected; license accepted; first-launch components installed | ✅ |
-| Old Xcode 27.0 and iOS 27.0 simulator removed (in the Trash) | ✅ (Trash still to be emptied) |
-| iOS 27.1 simulator (includes the iPhone Duo device) | ⏳ downloading |
+| Old Xcode 27.0 and every iOS 27.0 simulator image removed | ✅ |
+| iOS 27.1 simulator; **iPhone Duo** device boots | ✅ |
 | Duo APIs checked in the SDK (see §3) | ✅ |
-| Supabase CLI 2.118.0 | ✅ |
-| Claude Code ↔ iOS Simulator (panel, screenshots, input) | ✅ |
-| Claude Code ↔ Xcode tools (`xcrun mcpbridge`, project-local) | ✅ configured · ⏳ needs Xcode open plus a new Claude session |
-| API keys (Reactor, Gemini, OpenAI) stored in Supabase secrets | ⬜ set by the user; keys never go in chat or in the app |
+| Supabase CLI logged in and linked to the project | ✅ |
+| API keys (Reactor, Gemini, OpenAI): each returns HTTP 200, stored in Supabase secrets and the git-ignored `supabase/functions/.env` | ✅ |
+| App-side Supabase URL and publishable key in git-ignored `config/Supabase.local.xcconfig` | ✅ |
+| Private GitHub repo `masterbrainy/pop` | ✅ |
+| Claude Code ↔ Xcode tools (`xcrun mcpbridge`) | ✅ |
+| Claude Code ↔ iOS Simulator panel | ⚠ re-test on the Duo (the panel was still attached to the old simulator service before the app restart) |
+| Sibling sessions: Review & QA, Pitch & Tech Log, Pivots & Ideas (roles in `CLAUDE.md`) | ⏳ waiting for Brian to start them |
+| **Build gate:** Brian verifies the setup and says to start | ⏳ |
 
 ## 2. Architecture at a glance
 

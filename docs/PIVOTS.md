@@ -68,3 +68,20 @@
 - **Cost:** about neutral in hours. The code already built needs rework: `story-turn` currently returns `append / new_page / revise_current`, and it now needs to plan and re-plan a path instead. Risk: a single Orbis session can only animate one page, so the new page's animation starts after the fold (its still shows first, about the reset-to-first-frame time measured in probe 0.3). A second warm session could pre-roll the page behind, at double the credit.
 - **Recommendation:** Do it. It hides almost all generation latency and makes the story always land. Keep one Orbis session unless probe 0.3 shows a noticeable gap after the fold.
 - **Decision:** 2026-09-26, Brian decided directly in this session.
+
+### P-05 · Use OpenAI for images and remove Gemini · 2026-09-26 · Status: proposed
+- **Idea (Brian's words):** "Should I use the OpenAI key for image generation and then completely remove Gemini?"
+- **Measured today:** one portrait page picture (1024×1536, medium quality), prompt "a green dragon dazed under an oak tree, watercolor":
+
+  | Model | HTTP | Time | Look |
+  |---|---|---|---|
+  | `gpt-image-2.5-flare` | 200 | 14.4 s | Detailed, warm picture-book style |
+  | `gpt-image-1-mini` | 200 | 15.5 s | Softer, simpler, also good |
+  | `gpt-image-2` | 200 | 35.2 s | Too slow |
+  | `gemini-2.5-flash-image` | **402** | — | "Prepayment credits are depleted": Gemini art is down right now. Earlier probe: about 5 s |
+
+- **Changes:** PRD §11 vendors and D7, and the §5 "art ≤ 10 s after text" row (it becomes about 15 s). Roadmap: the `Art` unit, `motion-prompt` (the OpenAI story model reads the page text and still instead of Gemini), Phase 4 layer generation, Phase 8 drawing restyle, run-book step 6. Code: `_shared/gemini_client.ts` is replaced by an OpenAI images client; the `art` and `motion-prompt` functions are rewired.
+- **Cost:** about 3 h (rewire the two functions, then re-run probe 0.4 on OpenAI: character reference edits, cutouts and the portrait framing). About the same price per picture. One fewer key, one fewer bill, and no more running-out-of-credit outages on a second vendor.
+- **Risks:** pictures take about 3× as long (14 s vs 5 s). The page behind (P-04) hides this on every page except page 1 and right after a direction. `gpt-image-2.5-flare` is two weeks old, so check that edits with reference images and transparent backgrounds (which would remove the chroma-key step for pop-up cutouts) work before relying on them.
+- **Recommendation:** Do it, with `gpt-image-2.5-flare`. Simpler, one vendor for everything but Orbis, and the extra 9 s is mostly hidden. To speed up page 1, try `quality: "low"` just for it. If you'd rather keep Gemini's speed, top up its credits instead; but then you're paying and watching two vendors.
+- **Decision:** —

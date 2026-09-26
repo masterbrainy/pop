@@ -1,7 +1,7 @@
 # Pop! — shared instructions for every Claude session in this project
 
 Pop! lets a parent make a live picture book for their child on the iPhone Duo (Apple's foldable), either ahead of time or with the child watching. The parent tells or types the story and directs changes. Each page gets story text (left) and an illustration that comes alive as a per-page Orbis animation (right). Saved books replay exactly as made. Fold to turn the page, tilt to ~90° for a pop-up, close to finish the book.
-**Read first:** [docs/PRD.md](docs/PRD.md) (what and why) · [docs/ROADMAP.md](docs/ROADMAP.md) (how, phases, verified platform facts).
+**Read first:** [docs/ONBOARDING.md](docs/ONBOARDING.md) (the app as built today: flow, file map, how to run and test, gotchas, which docs are stale) · [docs/PRD.md](docs/PRD.md) (what and why) · [docs/ROADMAP.md](docs/ROADMAP.md) (how, phases, verified platform facts).
 
 ## What this is: a hackathon-style pitch, not a release (Brian, 2026-09-26)
 - **Everything is free.** Nothing is sold or released. Don't write pricing, paywalls, subscriptions, "Pro", unit-economics strategy, upsells, go-to-market or marketing plans, App Store or Kids Category planning, or legal-release checklists. If a VC asks how it makes money, one honest line is enough.

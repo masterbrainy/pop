@@ -42,8 +42,8 @@ struct BookView: View {
             }
         }
         .overlay(alignment: .top) { banner }
-        .overlay(alignment: .topLeading) { if hinge.state.phase != .closed { topBar } }
-        .overlay(alignment: .topTrailing) { if hinge.state.phase != .closed { nextPageButton } }
+        .overlay(alignment: .topLeading) { if !showsCover { topBar } }
+        .overlay(alignment: .topTrailing) { if !showsCover { nextPageButton } }
         .readsHinge(into: hinge)
         .onTapGesture(count: 3) { showsDebugPanel.toggle() }
         // On a Duo, angled is for talking into the story; open flat (to read) or closed isn't.
@@ -70,7 +70,7 @@ struct BookView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if hinge.state.phase == .closed {
+        if showsCover {
             CoverView(book: reader.book, kid: kid)
         } else if let maker, reader.book.status == .draft {
             SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,
@@ -114,6 +114,10 @@ struct BookView: View {
         }
     }
 
+    /// The phone is shut, or opening again after a close: the cover shows until the next page
+    /// replaces it (see `HingeModel.showsCover`).
+    private var showsCover: Bool { hinge.showsCover }
+
     /// Making the book (not reading a finished one): only then do the story banners show.
     private var isCreating: Bool { maker != nil && reader.book.status == .draft }
 
@@ -125,13 +129,13 @@ struct BookView: View {
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(.ultraThinMaterial, in: .capsule)
             }
-            if isCreating, maker?.isOnLastPage == true, hinge.state.phase != .closed {
+            if isCreating, maker?.isOnLastPage == true, !showsCover {
                 Label("The end. Tap Finish to save the book", systemImage: "book.closed")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14).padding(.vertical, 8)
                     .background(Theme.accent, in: .capsule)
-            } else if isCreating, hinge.state.phase != .closed, let status = maker?.nextPageStatus {
+            } else if isCreating, !showsCover, let status = maker?.nextPageStatus {
                 nextPageBanner(status)
             }
         }

@@ -71,7 +71,7 @@ Deno.serve((req) =>
       );
     }
 
-    const ms = performance.now() - start;
+    const ms = Math.round(performance.now() - start);
 
     if (verdict.flagged) {
       const { width, height } = STANDARD_DIMENSIONS[aspectRatio];

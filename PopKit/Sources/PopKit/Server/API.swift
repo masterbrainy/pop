@@ -158,6 +158,27 @@ public struct StoryTurnTimings: Codable, Sendable, Equatable {
         self.modelMs = modelMs
         self.safetyMs = safetyMs
     }
+
+    private enum CodingKeys: String, CodingKey { case modelMs, safetyMs }
+
+    /// Timings may arrive with fractions (JavaScript's `performance.now()`); round them.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        modelMs = try container.decodeWholeNumber(forKey: .modelMs)
+        safetyMs = try container.decodeWholeNumber(forKey: .safetyMs)
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// Decodes a number that should be whole but may arrive with a fraction, rounding it.
+    func decodeWholeNumber(forKey key: Key) throws -> Int {
+        if let whole = try? decode(Int.self, forKey: key) { return whole }
+        let value = try decode(Double.self, forKey: key)
+        guard value.isFinite, abs(value) < Double(Int.max) else {
+            throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "\(value) isn't a usable whole number")
+        }
+        return Int(value.rounded())
+    }
 }
 
 public struct StoryTurnResponse: Codable, Sendable, Equatable {
@@ -230,6 +251,18 @@ public struct ArtResponse: Codable, Sendable, Equatable {
         self.height = height
         self.placeholder = placeholder
         self.ms = ms
+    }
+
+    private enum CodingKeys: String, CodingKey { case path, url, width, height, placeholder, ms }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        path = try container.decode(String.self, forKey: .path)
+        url = try container.decode(String.self, forKey: .url)
+        width = try container.decodeWholeNumber(forKey: .width)
+        height = try container.decodeWholeNumber(forKey: .height)
+        placeholder = try container.decode(Bool.self, forKey: .placeholder)
+        ms = try container.decodeWholeNumber(forKey: .ms)
     }
 }
 

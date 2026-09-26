@@ -67,7 +67,9 @@ public enum PosturePhase: Sendable, Equatable {
     case unknown
     /// `armed` means the book has been open flat since the last turn, so folding can turn a page.
     case open(armed: Bool)
-    case closing(since: TimeInterval)
+    /// `turnsOnReopen`: the fold came straight from flat, past the turn point, so opening
+    /// again before the hold turns the page (the simulator reports only a fold's end points).
+    case closing(since: TimeInterval, turnsOnReopen: Bool)
     case closed
 }
 
@@ -135,22 +137,25 @@ public struct PostureMachine: Sendable {
         case .closed:
             if isClosed { return (PostureState(phase: .closed, angle: angle, curl: 0, popDepth: 0), []) }
             return reopen(at: angle, from: state, extra: [.opened])
-        case let .closing(since):
+        case let .closing(since, turnsOnReopen):
             if isClosed {
                 let held = sample.time - since >= config.closeHold
                 return (PostureState(phase: held ? .closed : state.phase, angle: angle, curl: 0, popDepth: 0), held ? [.closed] : [])
             }
-            return reopen(at: angle, from: state, extra: [])
+            // A quick close and reopen is a whole fold: the page turns, and the next one
+            // settles only once the book is back at flat.
+            return reopen(at: angle, from: state, extra: turnsOnReopen ? [.turnCommitted] : [])
         case let .open(armed):
             if isClosed {
-                let closing = PostureState(phase: .closing(since: sample.time), angle: angle, curl: 0, popDepth: 0)
+                let closing = PostureState(phase: .closing(since: sample.time, turnsOnReopen: armed), angle: angle, curl: 0, popDepth: 0)
                 return (closing, state.popDepth > 0 ? [.popEnded] : [])
             }
             return fold(to: angle, armed: armed, from: state)
         }
     }
 
-    /// Opening from closed, from a cancelled close, or the first reading: never turns a page.
+    /// Opening from closed, from a close that began after a turn, or the first reading: turns
+    /// a page only when `extra` says so.
     private func reopen(at angle: Double, from state: PostureState, extra: [PostureEvent]) -> (state: PostureState, events: [PostureEvent]) {
         let depth = popDepth(at: angle)
         let armed = angle >= config.openAngle

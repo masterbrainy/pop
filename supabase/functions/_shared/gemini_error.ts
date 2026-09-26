@@ -14,3 +14,13 @@ export function describeGeminiError(httpStatus: number, bodyText: string): strin
     return String(httpStatus);
   }
 }
+
+/** What the app may see: the HTTP status and Google's status word, never its message. */
+export function geminiErrorCode(httpStatus: number, bodyText: string): string {
+  try {
+    const status = (JSON.parse(bodyText) as { error?: { status?: string } }).error?.status;
+    return status ? `${httpStatus} ${status}` : String(httpStatus);
+  } catch {
+    return String(httpStatus);
+  }
+}

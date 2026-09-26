@@ -70,13 +70,14 @@ Response `data` for `mode: "turn"`:
 - The text obeys the reading level's limits (§8.7) and never contains surnames, addresses, schools or phone numbers.
 - `mode: "title"` returns `{ "title": "Rex Learns to Share" }` from the whole book (the cover adds ", a story for {firstName}").
 
-### `art`: one picture (S6, P2, pop-up layers, cover)
-Request: `{ "bookId", "kind": "page | cover | character | plate | cutout", "pageIndex": 0, "version": 1, "prompt": "…", "characters": [ Character ], "characterId": null }`.
+### `art`: one picture (S6, P2, pop-up layers, cover, kid's drawing as the hero)
+Request: `{ "bookId", "kind": "page | cover | character | plate | cutout | drawing", "pageIndex": 0, "version": 1, "prompt": "…", "characters": [ Character ], "characterId": null, "drawing": null }`.
 Response `data`: `{ "path": "userId/bookId/…png", "url": "signed URL, 1 h", "width": 1344, "height": 768, "placeholder": false, "ms": 0 }`.
-- One locked art style for every picture. `page`, `plate` and `cutout` are 16:9; `cover` is 2:3; `character` is a 1:1 reference sheet on a plain background.
+- One locked art style for every picture. `page`, `plate`, `cutout` and `drawing` are 16:9; `cover` is 2:3; `character` is a 1:1 reference sheet on a plain background.
 - Character reference images are sent to Gemini with the prompt for consistency.
 - The picture passes `omni-moderation-latest`; if it's flagged it's regenerated once with a safer prompt, and otherwise `placeholder: true` comes back with no picture.
 - `cutout` draws one character on flat magenta (#FF00FF), which the device removes by flood-filling the border-connected backdrop (`BackgroundKey`); `plate` is the scene without the characters.
+- `drawing` turns a kid's own finger drawing into a character reference image: requires `characterId` (like `character`) plus `drawing` — a base64 PNG or JPEG, ≤ 1.5 MB decoded, rejected with `bad_request` if missing, not valid base64, oversized or neither format — and a short `prompt` describing what it is (e.g. "a purple cat with wings"). The drawing and prompt each pass `omni-moderation-latest` before Gemini ever sees them (no regeneration attempt on a flagged drawing: it comes back as `placeholder: true` immediately). Gemini is sent the drawing as an inline image and redraws it keeping the drawing's shapes, colours and features recognisable, full body and centered on the same flat magenta backdrop as `cutout`.
 
 ### `motion-prompt`: the page's animation prompt (P4)
 Request: `{ "bookId", "pageIndex", "text": "…", "stillPath": "…" }` → `data`: `{ "scene": "…", "motion": "one gentle motion clause" }`. Gemini reads the page text and the still. The app builds the final prompt from the ROADMAP §2 template. Both parts pass the safety gate.

@@ -1,5 +1,6 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { buildArtPrompt, referencePathsFor, STANDARD_DIMENSIONS } from "./art_request.ts";
+import { encodeBase64 } from "jsr:@std/encoding@1/base64";
+import { buildArtPrompt, drawingInlineImage, referencePathsFor, STANDARD_DIMENSIONS } from "./art_request.ts";
 import type { Character } from "./schemas.ts";
 
 const rex: Character = { id: "rex", name: "Rex", description: "a friendly green dinosaur", referencePath: "u/b/character-rex-v1.png" };
@@ -56,4 +57,43 @@ Deno.test("buildArtPrompt always ends with the caller's own prompt", () => {
 
 Deno.test("STANDARD_DIMENSIONS matches CONTRACTS.md's example for 16:9", () => {
   assertEquals(STANDARD_DIMENSIONS["16:9"], { width: 1344, height: 768 });
+});
+
+Deno.test("referencePathsFor: drawing never includes any existing character reference", () => {
+  assertEquals(referencePathsFor("drawing", [rex, maya], "rex"), []);
+});
+
+Deno.test("buildArtPrompt redraws a drawing onto the same magenta backdrop as cutout", () => {
+  const prompt = buildArtPrompt("drawing", "a purple cat with wings", []);
+  assertEquals(prompt.includes("child's own drawing"), true);
+  assertEquals(prompt.includes("solid magenta background"), true);
+  assertEquals(prompt.includes("shapes, colours and distinguishing features recognisable"), true);
+});
+
+Deno.test("buildArtPrompt ends a drawing prompt with the kid's own description", () => {
+  const prompt = buildArtPrompt("drawing", "a purple cat with wings", []);
+  assertEquals(prompt.endsWith("a purple cat with wings"), true);
+});
+
+Deno.test("drawingInlineImage returns undefined for every kind except drawing", () => {
+  const png = encodeBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]));
+  assertEquals(drawingInlineImage("cutout", png), undefined);
+  assertEquals(drawingInlineImage("page", png), undefined);
+});
+
+Deno.test("drawingInlineImage returns undefined when no drawing was sent", () => {
+  assertEquals(drawingInlineImage("drawing", undefined), undefined);
+  assertEquals(drawingInlineImage("drawing", null), undefined);
+});
+
+Deno.test("drawingInlineImage sniffs a PNG drawing's mime type and keeps its base64 data intact", () => {
+  const png = encodeBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]));
+  const image = drawingInlineImage("drawing", png);
+  assertEquals(image, { mimeType: "image/png", data: png });
+});
+
+Deno.test("drawingInlineImage sniffs a JPEG drawing's mime type", () => {
+  const jpeg = encodeBase64(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]));
+  const image = drawingInlineImage("drawing", jpeg);
+  assertEquals(image, { mimeType: "image/jpeg", data: jpeg });
 });

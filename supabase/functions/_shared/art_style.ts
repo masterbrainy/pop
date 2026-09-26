@@ -22,7 +22,15 @@ export const PLATE_INSTRUCTION =
   "the same scene and setting with no characters present, as if they had stepped out of frame; " +
   "keep the background, props and lighting identical to the page illustration";
 
-export type ArtKind = "page" | "cover" | "character" | "plate" | "cutout";
+/** `drawing` kind (Phase 8 "kid's drawing as the hero"): redraws a kid's own
+ * finger drawing into a character reference image. Reuses the exact cutout
+ * backdrop treatment so the result is interchangeable with a `cutout` picture. */
+export const DRAWING_INSTRUCTION =
+  "The attached image is a child's own drawing. Redraw it as " +
+  CUTOUT_BACKGROUND_INSTRUCTION +
+  "; keep the drawing's shapes, colours and distinguishing features recognisable as the same character.";
+
+export type ArtKind = "page" | "cover" | "character" | "plate" | "cutout" | "drawing";
 
 /** Aspect ratio per CONTRACTS.md §3: page/plate/cutout 16:9, cover 2:3, character 1:1. */
 export function aspectRatioFor(kind: ArtKind): "16:9" | "2:3" | "1:1" {

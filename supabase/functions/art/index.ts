@@ -3,12 +3,18 @@
 // daily cap (ART_DAILY_LIMIT — image generation is the priciest call here).
 import { decodeBase64 } from "jsr:@std/encoding@1/base64";
 import { aspectRatioFor } from "../_shared/art_style.ts";
-import { buildArtPrompt, referencePathsFor, SAFER_REGENERATION_SUFFIX, STANDARD_DIMENSIONS } from "../_shared/art_request.ts";
+import {
+  buildArtPrompt,
+  drawingInlineImage,
+  referencePathsFor,
+  SAFER_REGENERATION_SUFFIX,
+  STANDARD_DIMENSIONS,
+} from "../_shared/art_request.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { requireEnv } from "../_shared/env.ts";
 import { servePop } from "../_shared/handler.ts";
 import { generateImage, type InlineImage } from "../_shared/gemini_client.ts";
-import { moderateImageDataUrl } from "../_shared/openai_moderation.ts";
+import { moderateImageDataUrl, moderateText } from "../_shared/openai_moderation.ts";
 import { pngDimensions } from "../_shared/png.ts";
 import { ART_DAILY_LIMIT, DAY_SECONDS, enforceRateLimit, enforceStandardRateLimit } from "../_shared/rate_limit.ts";
 import { parseRequest } from "../_shared/request.ts";
@@ -38,6 +44,20 @@ async function loadReferenceImages(
   return images;
 }
 
+/** For `kind: "drawing"`: moderates the kid's drawing and description before
+ * any Gemini call, so unsafe input never reaches image generation. */
+async function drawingInputFlagged(
+  openaiKey: string,
+  drawing: InlineImage,
+  prompt: string,
+): Promise<boolean> {
+  const [imageVerdict, textVerdict] = await Promise.all([
+    moderateImageDataUrl(openaiKey, `data:${drawing.mimeType};base64,${drawing.data}`),
+    moderateText(openaiKey, prompt),
+  ]);
+  return imageVerdict.flagged || textVerdict.flagged;
+}
+
 Deno.serve((req) =>
   servePop<ArtResponseData>(req, "art", async (req) => {
     const { client, userId } = await requireUser(req);
@@ -48,11 +68,20 @@ Deno.serve((req) =>
     const geminiKey = requireEnv("GEMINI_API_KEY");
     const openaiKey = requireEnv("OPENAI_API_KEY");
     const aspectRatio = aspectRatioFor(body.kind);
+    const start = performance.now();
+
+    const drawing = drawingInlineImage(body.kind, body.drawing);
+    if (drawing && await drawingInputFlagged(openaiKey, drawing, body.prompt)) {
+      const { width, height } = STANDARD_DIMENSIONS[aspectRatio];
+      return {
+        data: { path: "", url: "", width, height, placeholder: true, ms: Math.round(performance.now() - start) },
+      };
+    }
 
     const referenceImages = await loadReferenceImages(client, body);
+    if (drawing) referenceImages.push(drawing);
     const prompt = buildArtPrompt(body.kind, body.prompt, body.characters, body.characterId);
 
-    const start = performance.now();
     let generated = await generateImage(geminiKey, { prompt, aspectRatio, referenceImages });
     let verdict = await moderateImageDataUrl(
       openaiKey,

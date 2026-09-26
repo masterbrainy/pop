@@ -245,3 +245,9 @@ It's **unclear** whether billing starts at connection or at generation.
 **Evidence:** ROADMAP §1, updated by the builder in commit `80f3c2f` (Claude Code's simulator panel attached to the Duo).
 **Confidence:** Verified (builder, simulator panel) for the size. The posture is unconfirmed.
 **So what for Pop!:** It's the first real number for page layout. The Phase 0.1 and 0.2 probes should record the point size in each posture, alongside the reserved regions (TN-005).
+
+### TN-023 · 2026-09-25 · ROADMAP §3 now matches the SDK
+**Fact:** The builder re-checked TN-002 to TN-005 against the SDK on their own and corrected ROADMAP §3 and Phase 1. The roadmap now shows `ArrangementView` with `@ContentBuilder` closures (two panes only), `reservedRegions` with `layoutDirectionBehavior`, `DeviceHinge.Status` as a struct (so a `switch` needs a `default`), and a note that the angle is in radians. The "not listed in ROADMAP §3" note in TN-005 no longer applies.
+**Evidence:** Commit `d3f48c0`. The builder also re-read `UIHinge.h`, which says the angle is in radians and that its update rate is "system policy".
+**Confidence:** Verified (two independent SDK reads).
+**So what for Pop!:** The pitch, the tech log and the roadmap now agree on the Duo APIs. Phase 1's `PostureMachine` tests cover sparse and irregular angle sequences.

@@ -68,13 +68,18 @@ struct BookView: View {
         if hinge.state.phase == .closed {
             CoverView(book: reader.book, kid: kid)
         } else if let maker, reader.book.status == .draft {
-            SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,
+            // No page until painted: the spread shows a page only once its picture is finished.
+            let shown = maker.shownPage
+            SpreadView(page: shown, pageNumber: reader.pageNumber, level: kid.readingLevel,
                        curl: hinge.state.curl, popDepth: reader.popDepth, live: maker.live,
-                       pictureUnavailable: reader.currentPage.map { maker.unavailablePictures.contains($0.id) } ?? false)
+                       pictureUnavailable: maker.showsImagineCard(for: shown),
+                       emptyText: maker.openingText)
                 .overlay(alignment: .bottom) {
                     StoryInputBar(
                         speaker: Binding(get: { maker.speaker }, set: { maker.speaker = $0 }),
                         isListening: maker.isListening, partial: maker.partial, isWorking: maker.isWorking,
+                        isStarting: !maker.hasShownPage, returnedPrompt: maker.returnedPrompt?.text,
+                        returnedPromptId: maker.returnedPrompt?.id,
                         onToggleMic: { Task { await maker.toggleMic() } },
                         onSubmit: { maker.submit($0) }
                     )
@@ -114,12 +119,13 @@ struct BookView: View {
         .animation(.easeInOut, value: maker?.nextPageStatus)
     }
 
-    /// Says a direction was heard while it re-writes the page behind, then that the page is ready.
+    /// Says a direction was heard while it re-writes the page behind (until the rewritten page
+    /// is painted), then that the page is ready.
     @ViewBuilder private func nextPageBanner(_ status: NextPageStatus) -> some View {
         switch status {
         case let .rewriting(direction, _):
             Label {
-                Text("Rewriting the next page: “\(direction)”").lineLimit(2)
+                Text(direction.isEmpty ? "Rewriting the next page…" : "Rewriting the next page: “\(direction)”").lineLimit(2)
             } icon: {
                 ProgressView().controlSize(.small).tint(.white)
             }
@@ -129,7 +135,7 @@ struct BookView: View {
                             : "Next page ready · fold shut and open, or tap ›",
                   systemImage: rewritten ? "sparkles" : "book.pages")
                 .modifier(NextPageBannerStyle())
-        case .none, .writing:
+        case .none, .writing, .painting:
             EmptyView()
         }
     }
@@ -147,7 +153,7 @@ struct BookView: View {
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(.ultraThinMaterial, in: .capsule)
                 }
-                .disabled(finishing || reader.book.pages.allSatisfy { $0.text.isEmpty })
+                .disabled(finishing || maker?.hasShownPage != true)
             } else {
                 Button(action: toggleReading) {
                     Image(systemName: readAloud.isReading ? "speaker.slash.fill" : "speaker.wave.2.fill")
@@ -161,11 +167,12 @@ struct BookView: View {
     }
 
     /// The corner arrow: turns to the next page, the same as folding the Duo shut and opening it.
-    /// While creating it waits (a spinner) until the page behind has its words, and pulses while
-    /// a direction re-writes it (turning then shows the page behind as it was, PRD S7).
+    /// While creating it waits (a spinner) until the page behind is painted, and pulses while
+    /// a direction re-writes it (turning then shows the page behind as it was, PRD S7). It's
+    /// hidden until page 1 shows, and on the ending.
     @ViewBuilder private var nextPageButton: some View {
         let creating = maker != nil && reader.book.status == .draft
-        let hasNext = creating ? maker?.isOnLastPage == false : reader.pageNumber < reader.book.pages.count
+        let hasNext = creating ? (maker.map { $0.nextPageStatus != .none } ?? false) : reader.pageNumber < reader.book.pages.count
         if hasNext {
             let status = creating ? maker?.nextPageStatus : nil
             let ready = creating ? status?.canTurn == true : true
@@ -184,7 +191,7 @@ struct BookView: View {
             }
             .foregroundStyle(Theme.ink)
             .padding(20)
-            .accessibilityLabel(!ready ? "The next page is still being written"
+            .accessibilityLabel(!ready ? "The next page is still being made"
                                 : rewriting ? "Next page, as it was before your change" : "Next page")
         }
     }
@@ -237,7 +244,8 @@ struct BookView: View {
     }
 
     private func close() {
-        if maker != nil, reader.book.pages.contains(where: { !$0.text.isEmpty }), reader.book.status == .draft {
+        // Only a book with a shown page is kept (page 1 still being made isn't a book yet).
+        if maker?.hasShownPage == true, reader.book.status == .draft {
             onFinish(reader.book)
         }
         onClose()

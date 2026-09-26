@@ -2,14 +2,22 @@ import Foundation
 import Observation
 import PopKit
 
-/// Live, parent-driven creation along a story path (P-04): the brief plans a path that always
-/// ends, the page on screen is written first, and the next page is fully built behind it
-/// (words, picture, motion). A direction (speech or typing) re-plans from the page behind and
-/// rebuilds it; the page on screen never changes. Folding shows the page behind, and the one
-/// after it starts building. The engine never turns the page; the parent folds.
+/// Live, parent-driven creation along a story path (P-04). No page until prompted: the book
+/// opens empty, and the parent's first words (spoken or typed) plan a path that always ends and
+/// write page 1. No page until painted: a page shows only with its picture (or once its picture
+/// can't come), and the next page is fully built behind it (words, picture, motion). A direction
+/// re-plans from the page behind and rebuilds it; the page on screen never changes. Folding
+/// shows the page behind once it's ready, and the one after it starts building. The engine
+/// never turns the page; the parent folds.
 @MainActor
 @Observable
 final class StoryMaker {
+    /// An opening prompt that didn't work, handed back to the text field (each one is new).
+    struct ReturnedPrompt: Equatable {
+        let id = UUID()
+        let text: String
+    }
+
     /// Whose turn it is. Changing it while listening ends the utterance in progress, so the
     /// next words start fresh under the new speaker.
     var speaker: Speaker = .parent {
@@ -20,8 +28,21 @@ final class StoryMaker {
     private(set) var partial = ""
     /// A gentle note for the parent (an unsafe request, a failure), shown briefly.
     private(set) var parentNote: String?
-    /// Pages whose picture moderation turned away twice (IMP-10); they show a friendly card, not "Painting…".
-    private(set) var unavailablePictures: Set<UUID> = []
+    /// The opening prompt while page 1 is being made: nil before it, and once page 1 shows.
+    private(set) var openingPrompt: String?
+    /// Page 1 has taken a while; the left page says "Almost there…".
+    private(set) var isOpeningSlow = false
+    /// The kid's drawing is still becoming the hero.
+    private(set) var isHeroPending = false
+    private(set) var returnedPrompt: ReturnedPrompt?
+    /// Each page version's picture and motion ("no page until painted"). Moderation's
+    /// unavailable pictures (IMP-10) and given-up pictures show the imagine card.
+    private var pictureStates: [PageKey: PictureState] = [:]
+    private var motionStates: [PageKey: MotionState] = [:]
+    /// Bumped when a page's motion grace ends, so readiness (which depends on the time) is read again.
+    private var readinessTick = 0
+    /// Pages the parent has seen: page 1 once it's painted, every later page by a turn.
+    private var shownPageIds: Set<UUID> = []
     /// Latency p50s for the debug overlay.
     private(set) var latency: LatencyTable?
 
@@ -42,6 +63,19 @@ final class StoryMaker {
     /// Whose turn it was when each utterance began (PRD S3).
     @ObservationIgnored private var speakers = SpeakerLedger()
     @ObservationIgnored private var hasEnded = false
+    /// The kid's drawing becoming the hero; page 1 waits for it.
+    @ObservationIgnored private var heroTask: Task<Void, Never>?
+    /// The parent has sent the opening prompt (Orbis warms from then on).
+    @ObservationIgnored private var hasPrompted = false
+    @ObservationIgnored private var openingSubmittedAt: ContinuousClock.Instant?
+    /// Page 1's words calls so far for this opening prompt (it's tried twice).
+    @ObservationIgnored private var openingAttempt = 0
+    @ObservationIgnored private var openingSlowTask: Task<Void, Never>?
+    @ObservationIgnored private var stillStoredAt: [PageKey: Date] = [:]
+    /// Each painting page's deadline, after which it shows without its picture.
+    @ObservationIgnored private var giveUpTimers: [PageKey: Task<Void, Never>] = [:]
+    /// Pages painted again because their still couldn't be stored (once each).
+    @ObservationIgnored private var storeRepainted: Set<PageKey> = []
     /// One page's words being written (a `path` or `page` call). Its picture and motion are
     /// painted separately, per page id and version, once the words land.
     private struct Build {
@@ -96,55 +130,133 @@ final class StoryMaker {
         live.onFirstFrame = { [weak self] index, ms in self?.scriptLog?.append("first frame page \(index + 1) in \(ms) ms") }
         reader.onPageChange = { [weak self] page in self?.pageChanged(to: page) }
         reader.onTurnBlocked = { [weak self] in self?.turnBlocked() }
+        reader.canOpenPending = { [weak self] pending in self?.canOpen(pending) ?? false }
+        shownPageIds = Set(reader.book.pages.filter { !$0.text.isEmpty }.map(\.id))
     }
 
-    /// Whether the page behind has its words, so a turn can open it.
+    /// Whether the page behind is ready, so a turn can open it.
     var isNextPageReady: Bool {
         guard let pending = reader.pendingNext else { return false }
-        return !pending.text.isEmpty
+        return canOpen(pending)
     }
 
     /// What the banner and corner arrow say about the page behind, including a direction that
     /// is still re-writing it (so the parent sees it was heard straight away).
     var nextPageStatus: NextPageStatus {
-        NextPageStatus.of(current: reader.currentPage, isEnding: isOnLastPage, pendingNext: reader.pendingNext,
-                          direction: directionInFlight ? lastDirection : nil, rewrittenPageId: rewrittenPageId)
+        let pending = reader.pendingNext
+        return NextPageStatus.of(
+            current: reader.currentPage, currentShown: isShown(reader.currentPage), isEnding: isOnLastPage, pendingNext: pending,
+            behindReady: pending.map { readiness(of: $0, requiresMotion: true).isReady } ?? false,
+            direction: directionInFlight ? lastDirection : nil, rewrittenPageId: rewrittenPageId, lastDirection: lastDirection
+        )
     }
 
-    /// A turn came before the page behind was written: say so, and restart its build if it stopped.
+    /// A turn came before the page behind was ready: say so, and restart its build if it stopped.
     private func turnBlocked() {
-        note("The next page is still being written. It'll be ready in a moment.")
+        guard isShown(reader.currentPage) else { return }
+        let hasWords = reader.pendingNext.map { !$0.text.isEmpty } ?? false
+        note(hasWords ? "The next page is still being painted. It'll be ready in a moment."
+                      : "The next page is still being written. It'll be ready in a moment.")
         ensureBuilds()
     }
 
     var canCreate: Bool { services.server != nil }
 
-    /// Warms the living page so the first picture animates quickly.
+    /// Gets ready for the opening prompt: speech secrets, and the kid's drawing becoming the
+    /// hero. No page is written, and Orbis doesn't warm, until the parent starts the story.
     func begin() async {
         guard let server = services.server else {
             note("Pop! is offline, so new pages can't be made right now. Saved books still work.")
             return
         }
-        await sttSecrets?.prefetch()
-        // Warm Orbis alongside, so the parent can start telling the story straight away.
-        Task { [weak self] in
-            await self?.live.warmUp(server: server)
-            guard let self else { return }
-            self.pageChanged(to: self.reader.currentPage)
-        }
         if !LaunchOptions.storyTurns.isEmpty { scriptLog = FileLog(name: "story") }
         if let heroDrawing {
-            await seedHero(heroDrawing, server: server)
+            isHeroPending = true
+            heroTask = Task { [weak self] in
+                await self?.seedHero(heroDrawing, server: server)
+                self?.isHeroPending = false
+            }
         }
-        ensureBuilds()
+        await sttSecrets?.prefetch()
         await playScriptedTurns()
     }
 
     /// Whether the page on screen is the story's ending: there's no page behind it, and
     /// Finish saves the book.
     var isOnLastPage: Bool {
-        guard reader.book.status == .draft, let page = reader.currentPage, !page.text.isEmpty else { return false }
+        guard reader.book.status == .draft, let page = reader.currentPage, !page.text.isEmpty, isShown(page) else { return false }
         return reader.book.bible.isEnding(pageIndex: page.index)
+    }
+
+    // MARK: - Readiness (no page until prompted, no page until painted)
+
+    /// The page on screen once the parent may see it: nil until page 1 is painted.
+    var shownPage: PageContent? {
+        guard let page = reader.currentPage, shownPageIds.contains(page.id) else { return nil }
+        return page
+    }
+
+    /// Whether any page has been shown (Finish and saving count only shown pages).
+    var hasShownPage: Bool { !shownPageIds.isEmpty }
+
+    var openingState: OpeningState {
+        if shownPage != nil { return .shown }
+        let current = reader.currentPage
+        return OpeningState.of(current: current, isWritingFirst: openingPrompt != nil, heroPending: isHeroPending,
+                               readiness: current.map { readiness(of: $0, requiresMotion: false) } ?? .writing)
+    }
+
+    /// What the left page says until page 1 shows.
+    var openingText: String? {
+        openingState.leftPage(prompt: openingPrompt, isSlow: isOpeningSlow)
+    }
+
+    /// A page whose picture can't come (moderation, a failure, or its deadline): the imagine card.
+    func showsImagineCard(for page: PageContent?) -> Bool {
+        guard let page, page.stillPath == nil else { return false }
+        switch pictureStates[page.key] {
+        case .unavailable, .gaveUp: return true
+        default: return false
+        }
+    }
+
+    private func isShown(_ page: PageContent?) -> Bool {
+        page.map { shownPageIds.contains($0.id) } ?? false
+    }
+
+    private func readiness(of page: PageContent, requiresMotion: Bool) -> PageReadiness {
+        _ = readinessTick
+        let picture = page.stillPath != nil ? .stored : pictureStates[page.key] ?? .painting
+        return PageReadiness.of(page: page, picture: picture, motion: motionStates[page.key] ?? .pending,
+                                stillStoredAt: stillStoredAt[page.key], now: .now, requiresMotion: requiresMotion)
+    }
+
+    /// A turn opens the page behind only from a shown page, and only once the page behind is ready.
+    private func canOpen(_ pending: PageContent) -> Bool {
+        isShown(reader.currentPage) && readiness(of: pending, requiresMotion: true).isReady
+    }
+
+    /// Shows page 1 once it's painted, and keeps the working spinner in step.
+    private func refreshReadiness() {
+        if let current = reader.currentPage, !current.text.isEmpty, !isShown(current),
+           readiness(of: current, requiresMotion: false).isReady {
+            reveal(current)
+        }
+        refreshWorking()
+    }
+
+    /// The page on screen is ready: show it (words and picture together), start painting the
+    /// page behind, and bring it to life.
+    private func reveal(_ page: PageContent) {
+        shownPageIds.insert(page.id)
+        if let submitted = openingSubmittedAt {
+            let ms = Int((ContinuousClock.now - submitted) / .milliseconds(1))
+            scriptLog?.append("page \(page.index + 1) shown in \(ms) ms\(page.stillPath == nil ? " (no picture)" : "")")
+        }
+        endOpening()
+        refreshWorking()
+        ensureBuilds()
+        animate(page)
     }
 
     /// Turns the kid's drawing into the story's hero before the first page is told
@@ -214,10 +326,12 @@ final class StoryMaker {
         log.append("ended")
     }
 
-    /// Before a scripted fold: wait (up to a minute) until the page behind has its words.
+    /// Before a scripted fold: wait until the page behind is ready (painted, or past its deadline).
     private func waitForPageBehind() async {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(60))
-        while ContinuousClock.now < deadline, reader.pendingNext == nil, !isOnLastPage, builds[(reader.currentPage?.index ?? -2) + 1] != nil {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(PaintDeadlines.waitForPageBehind))
+        while ContinuousClock.now < deadline, !isNextPageReady, !isOnLastPage {
+            // Nothing is coming (its words failed): the fold will say so.
+            if reader.pendingNext == nil, builds[(reader.currentPage?.index ?? -2) + 1] == nil, !directionInFlight { break }
             try? await Task.sleep(for: .milliseconds(250))
         }
     }
@@ -229,16 +343,21 @@ final class StoryMaker {
         await live.kill()
     }
 
-    /// Back in the foreground: warm Orbis again and bring the page on screen back to life.
+    /// Back in the foreground: warm Orbis again and bring the page on screen back to life
+    /// (only once the story has started: Orbis warms from the opening prompt).
     func resumeLive() async {
+        guard let server = services.server, reader.book.status == .draft, hasPrompted else { return }
         scriptLog?.append("app active again: warming the live session")
-        guard let server = services.server, reader.book.status == .draft else { return }
         await live.warmUp(server: server)
         pageChanged(to: reader.currentPage)
     }
 
     func end() async {
         hasEnded = true
+        heroTask?.cancel()
+        openingSlowTask?.cancel()
+        giveUpTimers.values.forEach { $0.cancel() }
+        giveUpTimers = [:]
         buildTasks.values.forEach { $0.cancel() }
         buildTasks = [:]
         builds = [:]
@@ -259,7 +378,45 @@ final class StoryMaker {
         // Late words (a stop still finishing its transcripts) don't start pages after the book ended.
         guard !trimmed.isEmpty, !hasEnded else { return }
         lastDirection = trimmed
+        if reader.currentPage?.text.isEmpty == true, openingPrompt == nil { startOpening(with: trimmed) }
         enqueue(StoryTurnInput(kind: kind, speaker: speaker, text: trimmed))
+    }
+
+    /// The opening prompt came in: page 1 is made from it, and Orbis starts warming now
+    /// (connecting is free; billing starts once it's ready), hidden behind page 1's words and picture.
+    private func startOpening(with prompt: String) {
+        openingPrompt = prompt
+        openingSubmittedAt = .now
+        openingAttempt = 0
+        returnedPrompt = nil
+        isOpeningSlow = false
+        openingSlowTask?.cancel()
+        openingSlowTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(PaintDeadlines.firstPageSlow))
+            guard !Task.isCancelled else { return }
+            self?.isOpeningSlow = true
+        }
+        startLiveIfNeeded()
+        refreshWorking()
+    }
+
+    /// Page 1 showed, or its prompt didn't work: the book is no longer opening.
+    private func endOpening() {
+        openingPrompt = nil
+        openingSubmittedAt = nil
+        openingSlowTask?.cancel()
+        openingSlowTask = nil
+        isOpeningSlow = false
+    }
+
+    private func startLiveIfNeeded() {
+        guard !hasPrompted, let server = services.server else { return }
+        hasPrompted = true
+        Task { [weak self] in
+            await self?.live.warmUp(server: server)
+            guard let self, let page = self.shownPage else { return }
+            self.animate(page)
+        }
     }
 
     /// Routes a direction through `turnQueue` (R-31): runs it now if none is in flight, else
@@ -387,7 +544,7 @@ final class StoryMaker {
     // MARK: - Story path
 
     /// A direction re-plans the path from the page behind and rebuilds it. While the page on
-    /// screen is still empty (the story is just starting), it shapes that page instead.
+    /// screen is still empty, it's the opening prompt: it plans the path and writes page 1.
     private func runDirection(_ input: StoryTurnInput) {
         directionInFlight = true
         guard services.pipeline != nil, let current = reader.currentPage else {
@@ -400,7 +557,49 @@ final class StoryMaker {
             finishDirection()
             return
         }
-        startBuild(at: current.text.isEmpty ? current.index : current.index + 1, direction: input)
+        if current.text.isEmpty {
+            writeFirstPage(input)
+            return
+        }
+        startBuild(at: current.index + 1, direction: input)
+    }
+
+    /// Page 1 from the opening prompt, once the kid's drawing is the hero (if there is one).
+    private func writeFirstPage(_ input: StoryTurnInput) {
+        // A prompt queued behind one that didn't work opens the book afresh.
+        if openingPrompt == nil { startOpening(with: input.text) }
+        Task { [weak self] in
+            if let hero = self?.heroTask { await hero.value }
+            guard let self, !self.hasEnded else { return }
+            self.openingAttempt += 1
+            self.startBuild(at: 0, direction: input)
+        }
+    }
+
+    /// Page 1's words failed: try once more, then hand the prompt back with a note. True
+    /// while it's being tried again (the direction stays in flight).
+    private func retryOpening(_ input: StoryTurnInput) -> Bool {
+        guard !hasEnded else { return false }
+        if openingAttempt < 2 {
+            scriptLog?.append("page 1 failed, trying again")
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, !self.hasEnded else { return }
+                self.openingAttempt += 1
+                self.startBuild(at: 0, direction: input)
+            }
+            return true
+        }
+        scriptLog?.append("page 1 failed twice: back to the empty book")
+        endOpening()
+        returnedPrompt = ReturnedPrompt(text: input.text)
+        note("That didn't work. Try telling it again.")
+        return false
+    }
+
+    /// A words call for page 1 from the opening prompt (while page 1 is still empty).
+    private func isOpening(_ build: Build) -> Bool {
+        build.index == 0 && build.direction != nil && reader.book.pages.first?.text.isEmpty == true
     }
 
     /// The direction in flight has re-planned (or couldn't): run the next queued one.
@@ -416,20 +615,19 @@ final class StoryMaker {
         }
     }
 
-    /// Starts whatever the page on screen and the page behind still need: words for an empty
-    /// page, the next page behind, or a picture that never arrived.
+    /// Starts whatever the page on screen and the page behind still need: the next page
+    /// behind, or a picture that never arrived. An empty book needs nothing: page 1 is started
+    /// only by the opening prompt (`runDirection`).
     private func ensureBuilds() {
-        guard services.pipeline != nil, let current = reader.currentPage else { return }
+        guard services.pipeline != nil, let current = reader.currentPage, !current.text.isEmpty else { return }
         let bible = reader.book.bible
-        if current.text.isEmpty {
-            if builds[current.index] == nil { startBuild(at: current.index, direction: nil) }
-            return
-        }
         if current.stillPath == nil { paint(current) }
         let behind = current.index + 1
         guard bible.hasPage(after: current.index), builds[behind] == nil else { return }
         if let pending = reader.pendingNext, pending.index == behind {
-            if pending.stillPath == nil { paint(pending) }
+            // The page behind paints once the page on screen shows, so page 1's picture never
+            // waits behind page 2's.
+            if pending.stillPath == nil, isShown(current) { paint(pending) }
         } else {
             startBuild(at: behind, direction: nil)
         }
@@ -459,7 +657,8 @@ final class StoryMaker {
 
     /// Paints a page that has words and prepares its motion, unless it's already painting.
     private func paint(_ page: PageContent) {
-        guard let pipeline = services.pipeline, paintTasks[page.id] == nil, !unavailablePictures.contains(page.id) else { return }
+        guard let pipeline = services.pipeline, paintTasks[page.id] == nil, pictureStates[page.key] != .unavailable else { return }
+        scheduleGiveUp(for: page)
         let book = reader.book
         let run = UUID()
         let started = callPipeline { await pipeline.paint(page, book: book) }
@@ -503,6 +702,10 @@ final class StoryMaker {
     private func ended(_ build: Build) {
         buildTasks[build.id] = nil
         guard builds[build.index]?.id == build.id else { return }
+        if isOpening(build), let input = build.direction, retryOpening(input) {
+            builds[build.index] = nil
+            return
+        }
         wordsDone(build)
         refreshLatency()
     }
@@ -532,9 +735,10 @@ final class StoryMaker {
         }
     }
 
+    /// The spinner: a direction is being written, or page 1 is being made and isn't shown yet.
     private func refreshWorking() {
-        let writingCurrent = reader.currentPage.map { $0.text.isEmpty && builds[$0.index] != nil } ?? false
-        isWorking = directionInFlight || writingCurrent
+        let makingFirstPage = openingPrompt != nil && !isShown(reader.currentPage)
+        isWorking = directionInFlight || makingFirstPage
     }
 
     private func apply(_ event: PagePipelineEvent, from build: Build) {
@@ -542,9 +746,12 @@ final class StoryMaker {
         switch event {
         case let .pageWritten(outcome):
             written(outcome, by: build)
+        case let .failed(message) where isOpening(build):
+            // Page 1 is tried again, and only its final failure speaks (`retryOpening`).
+            scriptLog?.append("page 1 words failed: \(message.replacingOccurrences(of: "\n", with: " · "))")
         case let .failed(message):
             fail(message)
-        case .stillReady, .motionReady, .pictureUnavailable:
+        case .stillReady, .motionReady, .pictureUnavailable, .paintFailed, .motionFailed:
             break
         }
     }
@@ -559,16 +766,90 @@ final class StoryMaker {
         case let .motionReady(key, prompt):
             guard let page = reader.page(id: key.id), page.version == key.version else { return }
             motionPrompts[page.id] = prompt
-            if page.id == reader.currentPage?.id { animate(page) }
+            motionStates[key] = .ready
+            if page.id == reader.currentPage?.id, isShown(page) { animate(page) }
+            refreshReadiness()
+        case let .motionFailed(key):
+            guard let page = reader.page(id: key.id), page.version == key.version else { return }
+            scriptLog?.append("motion prompt failed for page \(page.index + 1): it keeps its still")
+            motionStates[key] = .failed
+            refreshReadiness()
         case let .pictureUnavailable(key):
             guard reader.page(id: key.id)?.version == key.version else { return }
-            unavailablePictures.insert(key.id)
+            pictureStates[key] = .unavailable
+            giveUpTimers[key]?.cancel()
             note("That picture didn't turn out right, so this page is one to imagine.")
+            refreshReadiness()
+        case let .paintFailed(key, detail):
+            scriptLog?.append("picture failed twice: \(detail.replacingOccurrences(of: "\n", with: " · "))")
+            giveUp(on: key, because: "A picture didn't arrive, so this page is one to imagine for now.")
         case let .failed(message):
             fail(message)
         case .pageWritten:
             break
         }
+    }
+
+    /// Past this deadline the page shows without its picture (the imagine card), so a slow
+    /// picture never holds the book; a still that lands later still shows (`PaintDeadlines`).
+    private func scheduleGiveUp(for page: PageContent) {
+        let key = page.key
+        guard giveUpTimers[key] == nil, page.stillPath == nil else { return }
+        let isFirstPage = page.id == reader.currentPage?.id && !isShown(page)
+        let seconds = isFirstPage ? PaintDeadlines.firstPage : PaintDeadlines.pageBehind
+        giveUpTimers[key] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            self?.giveUp(on: key, because: "This picture is taking a while, so this page is one to imagine for now.")
+        }
+    }
+
+    /// This page version's picture isn't coming (yet): it's ready without one.
+    private func giveUp(on key: PageKey, because message: String) {
+        guard let page = reader.page(id: key.id), page.version == key.version, page.stillPath == nil,
+              (pictureStates[key] ?? .painting) == .painting else { return }
+        pictureStates[key] = .gaveUp
+        scriptLog?.append("page \(page.index + 1) shows without its picture")
+        note(message)
+        refreshReadiness()
+    }
+
+    /// The still is on disk: the page on screen can show; the page behind waits up to the
+    /// motion grace for its motion prompt, so look again then.
+    private func stillStored(_ key: PageKey) {
+        pictureStates[key] = .stored
+        stillStoredAt[key] = .now
+        giveUpTimers[key]?.cancel()
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(PaintDeadlines.motionGrace))
+            self?.readinessTick += 1
+            self?.refreshReadiness()
+        }
+        refreshReadiness()
+    }
+
+    /// A still that couldn't be stored counts as a failed picture: paint it once more, then give up.
+    private func repaintAfterStoreFailure(_ page: PageContent) {
+        let key = page.key
+        guard !storeRepainted.contains(key), let pipeline = services.pipeline else {
+            giveUp(on: key, because: "A picture didn't arrive, so this page is one to imagine for now.")
+            return
+        }
+        storeRepainted.insert(key)
+        scriptLog?.append("page \(page.index + 1): its picture didn't store, painting it again")
+        paintTasks[page.id]?.task.cancel()
+        paintTasks[page.id] = nil
+        _ = callPipeline { await pipeline.cancelPaint(pageId: page.id) }
+        paint(page)
+    }
+
+    /// A page behind replaced by a rewrite: its picture and motion states go with it.
+    private func forgetReadiness(of page: PageContent) {
+        giveUpTimers[page.key]?.cancel()
+        giveUpTimers[page.key] = nil
+        pictureStates[page.key] = nil
+        motionStates[page.key] = nil
+        stillStoredAt[page.key] = nil
     }
 
     private func fail(_ message: String) {
@@ -583,14 +864,20 @@ final class StoryMaker {
         // Take only the bible, onto the latest book: pages may have gained pictures meanwhile.
         reader.updateStory { $0.with(bible: outcome.book.bible.carryingReferences(from: $0.bible)) }
         if let message = outcome.parentNote { note(message) }
+        // The opening prompt was turned away (the note says why): back to the empty book.
+        if outcome.page == nil, isOpening(build) { endOpening() }
         if let page = outcome.page {
             switch reader.place(page) {
             case let .onScreen(placed):
                 paint(placed)
             case let .behind(placed, replaced):
-                if let replaced { forget(replaced) }
+                if let replaced {
+                    forget(replaced)
+                    forgetReadiness(of: replaced)
+                }
                 if build.direction != nil { rewrittenPageId = placed.id }
-                paint(placed)
+                // It paints once the page on screen shows (`ensureBuilds` then).
+                if isShown(reader.currentPage) { paint(placed) }
             case .dropped:
                 scriptLog?.append("page \(page.index + 1) written but no longer needed")
             }
@@ -631,10 +918,12 @@ final class StoryMaker {
             let path = try await services.media.store(from: remote, named: "\(reader.book.id)-p\(page.index)-\(page.id.uuidString.prefix(8))-v\(page.version).png")
             // Only onto the same page and version; a page replaced meanwhile drops it.
             if let updated = reader.updatePage(id: key.id, version: key.version, { $0.with(stillPath: path) }) {
+                stillStored(key)
                 prepareLayers(for: updated)
             }
         } catch {
-            note("A picture didn't arrive. It will be tried again on the next turn.")
+            scriptLog?.append("still failed to store: \(error.localizedDescription)")
+            repaintAfterStoreFailure(page)
         }
     }
 
@@ -667,14 +956,15 @@ final class StoryMaker {
     // MARK: - Living page
 
     private func pageChanged(to page: PageContent?) {
+        // An empty book has nothing to change: page 1 waits for the opening prompt.
+        guard let page, !page.text.isEmpty else { return }
         Task { await live.pageWillChange() }
-        guard let page else { return }
         // Folded while a direction was re-building this page: the old page behind shows as it
         // was, and the direction applies to the new page behind instead.
         // Once its words have landed, the rebuilt page is what just showed, so the build only
         // finishes its picture (R-40).
         // A build stays in `builds` only until its words land, so this never re-applies a direction.
-        if !page.text.isEmpty, let build = builds[page.index], let direction = build.direction {
+        if let build = builds[page.index], let direction = build.direction {
             scriptLog?.append("folded mid-rebuild: the direction moves to page \(page.index + 2)")
             drop(build)
             note("Your change will show on the next page.")
@@ -682,7 +972,8 @@ final class StoryMaker {
         }
         refreshWorking()
         ensureBuilds()
-        animate(page)
+        // A page turned to was ready, so it shows now; page 1 shows once it's painted.
+        if isShown(page) { animate(page) } else { refreshReadiness() }
     }
 
     private func animate(_ page: PageContent) {

@@ -1,8 +1,9 @@
-// Gemini image generation for `art` (every picture kind). CONTRACTS.md §3 pins
-// the endpoint, headers and generationConfig shape. motion-prompt uses OpenAI.
+// Gemini image generation for `art` (every picture kind) and structured text
+// generation for `motion-prompt`. CONTRACTS.md §3 pins the endpoint, headers
+// and generationConfig shape.
 import { PopError } from "./errors.ts";
-import { GEMINI_IMAGE_MODEL } from "./models.ts";
-import { fetchWithRetry, UPSTREAM_TIMEOUTS_MS } from "./retry.ts";
+import { GEMINI_IMAGE_MODEL, GEMINI_TEXT_MODEL } from "./models.ts";
+import { fetchWithOneRetry, fetchWithRetry, UPSTREAM_TIMEOUTS_MS } from "./retry.ts";
 import { describeGeminiError, geminiErrorCode } from "./gemini_error.ts";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -24,6 +25,10 @@ interface GeminiResponse {
 
 function findImagePart(body: GeminiResponse): GeminiPart | undefined {
   return body.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+}
+
+function firstText(body: GeminiResponse): string | undefined {
+  return body.candidates?.[0]?.content?.parts?.find((p) => p.text)?.text;
 }
 
 export interface GenerateImageOptions {
@@ -81,4 +86,48 @@ export async function generateImage(
     base64: imagePart.inlineData.data,
     mimeType: imagePart.inlineData.mimeType ?? "image/png",
   };
+}
+
+export interface GenerateJSONOptions {
+  instruction: string;
+  responseSchema: unknown;
+  image?: InlineImage;
+}
+
+/** Returns the raw JSON text; callers parse+validate it against their own zod schema. */
+export async function generateJSON(
+  apiKey: string,
+  opts: GenerateJSONOptions,
+): Promise<string> {
+  const parts: GeminiPart[] = [{ text: opts.instruction }];
+  if (opts.image) {
+    parts.push({ inlineData: { mimeType: opts.image.mimeType, data: opts.image.data } });
+  }
+
+  const requestBody = JSON.stringify({
+    contents: [{ parts }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: opts.responseSchema,
+    },
+  });
+  const res = await fetchWithOneRetry((signal) =>
+    fetch(`${GEMINI_BASE}/${GEMINI_TEXT_MODEL}:generateContent`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: requestBody,
+      signal,
+    }), { timeoutMs: UPSTREAM_TIMEOUTS_MS.geminiText, label: "Gemini text request" });
+  if (!res.ok) {
+    throw new PopError("upstream", `Gemini text request failed (${res.status})`);
+  }
+  const body = await res.json() as GeminiResponse;
+  const text = firstText(body);
+  if (!text) {
+    throw new PopError("upstream", "Gemini text request returned no content");
+  }
+  return text;
 }

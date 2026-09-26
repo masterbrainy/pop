@@ -208,6 +208,10 @@ public struct Book: Codable, Equatable, Identifiable, Sendable {
         Book(id: id, kidId: kidId, brief: brief, bible: bible, pages: pages, status: status, title: title, coverPath: coverPath, createdAt: createdAt, finishedAt: finishedAt)
     }
 
+    public func with(brief: StoryBrief) -> Book {
+        Book(id: id, kidId: kidId, brief: brief, bible: bible, pages: pages, status: status, title: title, coverPath: coverPath, createdAt: createdAt, finishedAt: finishedAt)
+    }
+
     public func finished(title: String, coverPath: String?, at date: Date) -> Book {
         Book(id: id, kidId: kidId, brief: brief, bible: bible, pages: pages, status: .finished, title: title, coverPath: coverPath, createdAt: createdAt, finishedAt: date)
     }

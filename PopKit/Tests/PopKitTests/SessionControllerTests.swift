@@ -43,14 +43,15 @@ struct SessionControllerTests {
         await controller.warmUp()
 
         let still = Data([1, 2, 3])
-        await controller.animate(page: 2, still: still, prompt: "a fox sways")
+        let outcome = await controller.animate(page: 2, still: still, prompt: "a fox sways", generation: 1)
 
+        #expect(outcome == .started)
         let state = await controller.state
         #expect(state.phase == .animating(page: 2))
         let prepareCalls = await transport.prepareCalls
         #expect(prepareCalls.count == 1 && prepareCalls[0].still == still && prepareCalls[0].prompt == "a fox sways")
-        let startCount = await transport.startCallCount
-        #expect(startCount == 1)
+        #expect(prepareCalls[0].generation == 1)
+        #expect(await transport.startGenerations == [1])
     }
 
     @Test func aDropReconnectsAndResumesTheSamePageUsingTheFakeClockWithNoRealDelay() async throws {
@@ -59,7 +60,7 @@ struct SessionControllerTests {
         let clock = FakeSessionClock(now: t0)
         let controller = SessionController(server: server, transport: transport, clock: clock)
         await controller.warmUp()
-        await controller.animate(page: 4, still: Data(), prompt: "prompt")
+        _ = await controller.animate(page: 4, still: Data(), prompt: "prompt", generation: 1)
 
         await controller.reportDisconnected("ICE dropped")
         try await settle()
@@ -204,5 +205,96 @@ struct SessionControllerTeardownTests {
 
         #expect(await controller.state.phase == .killed)
         #expect(await transport.disconnectCallCount > disconnectsBeforeKill)
+    }
+}
+
+/// Overlapping page flows on one session (a turn or revision during the ~1.6 s prepare):
+/// the newest generation wins, an older one ends as superseded without touching the
+/// session's phase, and a real stage failure leaves the session ready for the next page.
+struct SessionControllerPageFlowTests {
+    private let t0 = Date(timeIntervalSince1970: 3_000_000)
+
+    private func readyController(_ transport: FakeSceneTransport) async -> SessionController {
+        let server = FakePopServer()
+        let expiresAt = t0.addingTimeInterval(3600).timeIntervalSince1970
+        await server.onReactorMint { ReactorMintResponse(jwt: "jwt-1", expiresAt: expiresAt) }
+        let controller = SessionController(server: server, transport: transport, clock: FakeSessionClock(now: t0))
+        await controller.warmUp()
+        return controller
+    }
+
+    @Test func aNewerPageDuringPrepareSupersedesTheOlderOneWhichNeverStarts() async throws {
+        let transport = FakeSceneTransport()
+        await transport.onPrepare { _, _, generation in
+            if generation == 1 { try await Task.sleep(for: .milliseconds(120)) }
+        }
+        let controller = await readyController(transport)
+
+        let older = Task { await controller.animate(page: 1, still: Data([1]), prompt: "one", generation: 1) }
+        try await Task.sleep(for: .milliseconds(30))
+        let newer = await controller.animate(page: 2, still: Data([2]), prompt: "two", generation: 2)
+        let olderOutcome = await older.value
+
+        #expect(newer == .started)
+        #expect(olderOutcome == .superseded)
+        #expect(await transport.startGenerations == [2])
+        #expect(await controller.state.phase == .animating(page: 2))
+    }
+
+    @Test func aSupersededErrorFromTheTransportIsNotAStageFailure() async {
+        let transport = FakeSceneTransport()
+        await transport.onPrepare { _, _, _ in throw SceneTransportError.superseded }
+        let controller = await readyController(transport)
+
+        let outcome = await controller.animate(page: 1, still: Data(), prompt: "p", generation: 1)
+
+        #expect(outcome == .superseded)
+        #expect(await controller.state.phase == .animating(page: 1))
+        #expect(await transport.connectCalls.count == 1) // no reconnect ladder
+    }
+
+    @Test func aRealStageFailureReportsFailedAndLeavesTheSessionReady() async throws {
+        let transport = FakeSceneTransport()
+        await transport.onStart { _ in throw ServerError.upstream("generation_started did not arrive") }
+        let controller = await readyController(transport)
+
+        let outcome = await controller.animate(page: 1, still: Data(), prompt: "p", generation: 1)
+        try await Task.sleep(for: .milliseconds(30))
+
+        guard case .failed = outcome else {
+            Issue.record("expected failed, got \(outcome)")
+            return
+        }
+        #expect(await controller.state.phase == .ready)
+        #expect(await transport.connectCalls.count == 1)
+        await transport.onStart { _ in }
+        #expect(await controller.animate(page: 1, still: Data(), prompt: "p", generation: 2) == .started)
+    }
+
+    @Test func anOlderFlowFailingAfterANewerOneBeganDoesNotResetTheSession() async throws {
+        let transport = FakeSceneTransport()
+        await transport.onPrepare { _, _, generation in
+            if generation == 1 {
+                try await Task.sleep(for: .milliseconds(120))
+                throw ServerError.upstream("set_image: rejected")
+            }
+        }
+        let controller = await readyController(transport)
+
+        let older = Task { await controller.animate(page: 1, still: Data(), prompt: "one", generation: 1) }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await controller.animate(page: 2, still: Data(), prompt: "two", generation: 2) == .started)
+        #expect(await older.value == .superseded)
+        #expect(await controller.state.phase == .animating(page: 2))
+    }
+
+    @Test func aPageShownBeforeTheSessionIsConnectedIsReportedNotReady() async {
+        let transport = FakeSceneTransport()
+        let controller = SessionController(server: FakePopServer(), transport: transport, clock: FakeSessionClock(now: t0))
+
+        let outcome = await controller.animate(page: 0, still: Data(), prompt: "p", generation: 1)
+
+        #expect(outcome == .notReady)
+        #expect(await transport.prepareCalls.isEmpty)
     }
 }

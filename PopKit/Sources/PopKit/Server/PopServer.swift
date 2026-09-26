@@ -96,20 +96,33 @@ public actor HTTPPopServer: PopServer {
 
     private func call<Req: Encodable, Res: Decodable>(_ name: String, _ body: Req) async throws -> Res {
         let token = try await auth.accessToken()
-        let (data, _) = try await perform(name, body, accessToken: token)
+        let (data, response) = try await perform(name, body, accessToken: token)
 
-        switch Envelope.decode(data, as: Res.self) {
+        switch Self.decode(data, response, from: name, as: Res.self) {
         case .success(let value):
             return value
         case .failure(.unauthorized):
             let refreshed = try await auth.refreshedAccessToken()
-            let (retryData, _) = try await perform(name, body, accessToken: refreshed)
-            switch Envelope.decode(retryData, as: Res.self) {
-            case .success(let value): return value
-            case .failure(let error): throw error
-            }
+            let (retryData, retryResponse) = try await perform(name, body, accessToken: refreshed)
+            return try Self.decode(retryData, retryResponse, from: name, as: Res.self).get()
         case .failure(let error):
             throw error
+        }
+    }
+
+    /// Decodes the envelope. When the body isn't one (a gateway 401, 429 or 5xx page), the
+    /// HTTP status decides, so the refresh-and-retry and the friendly messages still apply (IMP-10).
+    private static func decode<Res: Decodable>(
+        _ data: Data, _ response: HTTPURLResponse, from name: String, as type: Res.Type
+    ) -> Result<Res, ServerError> {
+        let result = Envelope.decode(data, as: type)
+        guard case .failure(.decoding) = result else { return result }
+        let detail = "HTTP \(response.statusCode) from \(name)"
+        switch response.statusCode {
+        case 401: return .failure(.unauthorized(detail))
+        case 429: return .failure(.rateLimited(detail))
+        case 500...599: return .failure(.upstream(detail))
+        default: return result
         }
     }
 
@@ -119,6 +132,7 @@ public actor HTTPPopServer: PopServer {
         request.setValue(publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = PopServerTimeouts.seconds(for: name)
         do {
             request.httpBody = try JSONEncoder().encode(body)
         } catch {

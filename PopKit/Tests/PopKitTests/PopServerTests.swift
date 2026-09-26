@@ -132,4 +132,74 @@ struct PopServerTests {
             _ = try await server.moderate(.text("hi"))
         }
     }
+
+    // MARK: - IMP-10: timeouts and non-envelope gateway replies
+
+    @Test func eachFunctionCallCarriesItsOwnTimeout() async throws {
+        let transport = FakeHTTPTransport { request in
+            let body: String = switch request.url?.lastPathComponent {
+            case "story-turn": #"{"ok":true,"data":{"title":"T"}}"#
+            case "art": #"{"ok":true,"data":{"path":"p","url":"https://x","width":1,"height":1,"placeholder":false,"ms":1}}"#
+            case "motion-prompt": #"{"ok":true,"data":{"scene":"s","motion":"m"}}"#
+            default: #"{"ok":true,"data":{"flagged":false,"categories":[]}}"#
+            }
+            return (Data(body.utf8), .fake(status: 200, url: request.url!))
+        }
+        let server = HTTPPopServer(supabaseURL: baseURL, publishableKey: "pub-key", transport: transport, auth: auth())
+        let kid = StoryTurnKid(firstName: "Maya", readingLevel: .listener, interests: [])
+        _ = try await server.storyTitle(.title(bookId: UUID(), kid: kid, brief: StoryBrief(interests: []), settings: ParentSettings(), bible: .empty, pages: []))
+        _ = try await server.art(ArtRequest(bookId: UUID(), kind: .page, pageIndex: 0, version: 1, prompt: "a fox"))
+        _ = try await server.motionPrompt(MotionPromptRequest(bookId: UUID(), pageIndex: 0, text: "t", stillPath: "s.png"))
+        _ = try await server.moderate(.text("hi"))
+
+        let timeouts = await transport.requests.map { ($0.url!.lastPathComponent, $0.timeoutInterval) }
+        #expect(timeouts.map(\.0) == ["story-turn", "art", "motion-prompt", "moderate"])
+        #expect(timeouts.map(\.1) == [25, 45, 20, 8])
+    }
+
+    @Test func aNonEnvelope5xxFromTheGatewayIsAnUpstreamError() async throws {
+        let transport = FakeHTTPTransport.json(502, body: "<html>Bad Gateway</html>")
+        let server = HTTPPopServer(supabaseURL: baseURL, publishableKey: "pub-key", transport: transport, auth: auth())
+        await #expect(throws: ServerError.upstream("HTTP 502 from moderate")) {
+            _ = try await server.moderate(.text("hi"))
+        }
+    }
+
+    @Test func aNonEnvelope429IsRateLimited() async throws {
+        let transport = FakeHTTPTransport.json(429, body: #"{"message":"too many"}"#)
+        let server = HTTPPopServer(supabaseURL: baseURL, publishableKey: "pub-key", transport: transport, auth: auth())
+        await #expect(throws: ServerError.rateLimited("HTTP 429 from moderate")) {
+            _ = try await server.moderate(.text("hi"))
+        }
+    }
+
+    @Test func aNonEnvelope401FromTheGatewayStillRefreshesAndRetries() async throws {
+        let functionsTransport = FakeHTTPTransport { request in
+            if request.value(forHTTPHeaderField: "Authorization") == "Bearer tok-old" {
+                return (Data(#"{"code":401,"message":"Invalid JWT"}"#.utf8), .fake(status: 401, url: request.url!))
+            }
+            return (Data(#"{"ok":true,"data":{"flagged":false,"categories":[]}}"#.utf8), .fake(status: 200, url: request.url!))
+        }
+        let authTransport = FakeHTTPTransport { request in
+            (Data(#"{"access_token":"tok-new","refresh_token":"ref-new","expires_in":3600,"user":{"id":"u-1"}}"#.utf8), .fake(status: 200, url: request.url!))
+        }
+        let store = InMemorySessionStore(initial: StoredSession(accessToken: "tok-old", refreshToken: "ref-old", expiresAt: .distantFuture, userId: "u-1"))
+        let auth = AnonymousAuth(supabaseURL: baseURL, publishableKey: "pub-key", transport: authTransport, store: store)
+        let server = HTTPPopServer(supabaseURL: baseURL, publishableKey: "pub-key", transport: functionsTransport, auth: auth)
+
+        #expect(try await server.moderate(.text("hi")).flagged == false)
+        #expect(await functionsTransport.requestCount == 2)
+        #expect(await authTransport.lastRequest?.timeoutInterval == 15)
+    }
+
+    @Test func a200WithAnUnexpectedBodyIsStillADecodingError() async throws {
+        let transport = FakeHTTPTransport.json(200, body: "not json")
+        let server = HTTPPopServer(supabaseURL: baseURL, publishableKey: "pub-key", transport: transport, auth: auth())
+        await #expect {
+            _ = try await server.moderate(.text("hi"))
+        } throws: { error in
+            if case .decoding = error as? ServerError { return true }
+            return false
+        }
+    }
 }

@@ -8,6 +8,11 @@ import PopKit
 /// Orbis is off or fails. `SessionController` owns the lifecycle and reconnects. While a page
 /// is live, sampled frames go through moderation (`FrameTripwire`); a flagged frame sends the
 /// page back to its still for good.
+///
+/// Each show is a numbered page flow (`LiveShowTracker`): a turn or revision mid-prepare
+/// supersedes the older flow, only the newest flow's first frame makes a page live, and a
+/// flow with no first frame within `firstFrameWatchdog` is retried once, then the page keeps
+/// its still until it's shown again.
 @MainActor
 @Observable
 final class LivePageController {
@@ -23,6 +28,8 @@ final class LivePageController {
 
     /// How long each page's clip runs; saved books loop it (G0/D4).
     static let clipSeconds = FrameTripwire.clipSeconds
+    /// `generation_started` → first frame measured 4.8 s (ROADMAP 0.3a); twice that is a stall.
+    static let firstFrameWatchdog: Duration = .seconds(10)
 
     private(set) var status: Status = .off
     private(set) var credits: Double = 0
@@ -30,6 +37,9 @@ final class LivePageController {
     private(set) var framesFlagged = 0
     /// Page shown → first live frame, in ms, for every page so far (R-36).
     private(set) var firstFrameMs: [Int] = []
+    /// The page version ("id#version") the live video belongs to, so a view never shows one
+    /// page's video over another page's still.
+    private(set) var liveKey: String?
     let bridge = LiveSceneBridge()
 
     /// Called with (page id, clip file) when a page's clip is recorded.
@@ -48,6 +58,8 @@ final class LivePageController {
     @ObservationIgnored private var clipTask: Task<Void, Never>?
     @ObservationIgnored private var currentPage: PageContent?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private var watchdogTask: Task<Void, Never>?
+    @ObservationIgnored private var tracker = LiveShowTracker()
 
     /// Whether a session is up (or coming up) to animate pages.
     var canAnimate: Bool {
@@ -60,6 +72,12 @@ final class LivePageController {
     var isLive: Bool {
         if case .live = status { return true }
         return false
+    }
+
+    /// Whether the live video on screen is this version of `page`.
+    func isShowingLive(_ page: PageContent?) -> Bool {
+        guard isLive, let page else { return false }
+        return liveKey == Self.key(page)
     }
 
     /// Loads the page and connects, so the first page animates quickly (ROADMAP §9 warm-up).
@@ -80,27 +98,35 @@ final class LivePageController {
     }
 
     /// Animates `page` if it has a still and a motion prompt; otherwise keeps the still.
+    ///
+    /// StoryMaker calls this and `pageWillChange` from separate Tasks, so every state change
+    /// happens before the first `await`; a suspended call can't then undo a newer one.
     func show(_ page: PageContent, still: Data, prompt: String) async {
-        guard let session else { return }
+        guard session != nil else { return }
         guard !isHeld(page) else {
-            await stopClip()
+            leaveCurrentPage()
             currentPage = page
             status = .held(page: page.index)
+            await stopClip()
             return
         }
-        if currentPage?.id == page.id, currentPage?.version == page.version, isLive || status == .preparing(page: page.index) { return }
-        await stopClip()
+        if currentPage.map(Self.key) == Self.key(page), isLive || status == .preparing(page: page.index) { return }
+        leaveCurrentPage()
         currentPage = page
-        status = .preparing(page: page.index)
         shownAt = .now
-        await session.animate(page: page.index, still: still, prompt: prompt)
+        let generation = tracker.begin(key: Self.key(page))
+        status = .preparing(page: page.index)
+        await stopClip()
+        guard tracker.isCurrent(generation) else { return }
+        await run(generation, page: page, still: still, prompt: prompt)
     }
 
-    /// The page turned away before its clip was done: drop the partial clip.
+    /// The page turned away before its clip was done: drop the partial clip, and make sure
+    /// nothing still running for it (a late first frame, a watchdog) can touch the next page.
     func pageWillChange() async {
-        await stopClip()
+        leaveCurrentPage()
         currentPage = nil
-        if case .live = status { status = .warming }
+        await stopClip()
     }
 
     /// Whether a flagged frame keeps this version of `page` on its still.
@@ -113,10 +139,69 @@ final class LivePageController {
         clipTask?.cancel()
         eventsTask?.cancel()
         pollTask?.cancel()
+        watchdogTask?.cancel()
+        tracker.leave()
+        liveKey = nil
         await bridge.cancelClip()
         await session?.kill()
         session = nil
         status = .off
+    }
+
+    // MARK: - page flows
+
+    /// Prepares and starts one page flow and handles how it ended.
+    private func run(_ generation: Int, page: PageContent, still: Data, prompt: String) async {
+        guard let session else { return }
+        status = .preparing(page: page.index)
+        let outcome = await session.animate(page: page.index, still: still, prompt: prompt, generation: generation)
+        guard tracker.isCurrent(generation) else { return }
+        switch outcome {
+        case .started:
+            armWatchdog(generation, page: page, still: still, prompt: prompt)
+        case .superseded:
+            break
+        case .notReady:
+            // Not connected yet: step back so the next show of this page (after warm-up) runs.
+            if status == .preparing(page: page.index) { status = .warming }
+        case let .failed(reason):
+            await recover(generation, page: page, still: still, prompt: prompt, reason: reason)
+        }
+    }
+
+    /// No first frame arrived in time: the page mustn't sit in `.preparing` forever.
+    private func armWatchdog(_ generation: Int, page: PageContent, still: Data, prompt: String) {
+        watchdogTask?.cancel()
+        watchdogTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.firstFrameWatchdog)
+            guard !Task.isCancelled, let self, self.tracker.isCurrent(generation), !self.isLive else { return }
+            await self.recover(generation, page: page, still: still, prompt: prompt, reason: "no first frame within \(Self.firstFrameWatchdog)")
+        }
+    }
+
+    private func recover(_ generation: Int, page: PageContent, still: Data, prompt: String, reason: String) async {
+        switch tracker.stalled(generation: generation) {
+        case .ignore:
+            return
+        case let .retry(next):
+            AppLog.scene.error("page \(page.index + 1) did not come alive (\(reason, privacy: .public)); retrying once")
+            await run(next, page: page, still: still, prompt: prompt)
+        case .giveUp:
+            AppLog.scene.error("page \(page.index + 1) did not come alive (\(reason, privacy: .public)); keeping its still")
+            if status == .preparing(page: page.index) { status = .warming }
+        }
+    }
+
+    /// Synchronous on purpose (see `show`); the caller stops the clip afterwards.
+    private func leaveCurrentPage() {
+        watchdogTask?.cancel()
+        watchdogTask = nil
+        tracker.leave()
+        liveKey = nil
+        switch status {
+        case .live, .preparing, .held: status = .warming
+        default: break
+        }
     }
 
     private func stopClip() async {
@@ -140,8 +225,12 @@ final class LivePageController {
 
     private func handle(_ event: SceneEvent) async {
         switch event {
-        case .firstFrame:
-            guard let page = currentPage else { return }
+        case let .firstFrame(generation, _, _, _):
+            // Only the newest flow's first frame counts; a late one from a page already left is dropped.
+            guard let page = currentPage, tracker.firstFrame(generation: generation) else { return }
+            watchdogTask?.cancel()
+            watchdogTask = nil
+            liveKey = Self.key(page)
             status = .live(page: page.index)
             if let shownAt {
                 let ms = Int((ContinuousClock.now - shownAt) / .milliseconds(1))
@@ -214,6 +303,7 @@ final class LivePageController {
         await bridge.cancelClip()
         try? await bridge.pause()
         guard currentPage?.id == page.id else { return }
+        liveKey = nil
         status = .held(page: page.index)
         onFrameFlagged(page.id)
     }
@@ -253,16 +343,32 @@ struct BridgeTransport: SceneTransport {
         return result.sessionId ?? ""
     }
 
-    func prepare(still: Data, prompt: String) async throws {
-        let mime = still.starts(with: [0x89, 0x50, 0x4E, 0x47]) ? "image/png" : "image/jpeg"
-        _ = try await bridge.prepare(still: still, mimeType: mime, prompt: prompt)
+    /// Sends Orbis a ~832×480 JPEG rather than the stored 1344×768 PNG (about a tenth of the
+    /// bytes, so a shorter upload in every prepare). Runs on the session's actor, off the main thread.
+    func prepare(still: Data, prompt: String, generation: Int) async throws {
+        let upload = OrbisStill.jpeg(from: still) ?? still
+        let mime = upload.starts(with: [0x89, 0x50, 0x4E, 0x47]) ? "image/png" : "image/jpeg"
+        try await superseding {
+            _ = try await bridge.prepare(still: upload, mimeType: mime, prompt: prompt, generation: generation)
+        }
     }
 
-    func start() async throws {
-        _ = try await bridge.start()
+    func start(generation: Int) async throws {
+        try await superseding {
+            _ = try await bridge.start(generation: generation)
+        }
     }
 
     func disconnect() async {
         try? await bridge.disconnect()
+    }
+
+    /// The page's "superseded: …" rejection becomes `SceneTransportError.superseded`.
+    private func superseding(_ body: () async throws -> Void) async throws {
+        do {
+            try await body()
+        } catch let error as LiveSceneBridge.BridgeError where error.isSuperseded {
+            throw SceneTransportError.superseded
+        }
     }
 }

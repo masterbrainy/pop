@@ -383,11 +383,26 @@ public struct ReactorTokenRequest: Codable, Sendable, Equatable {
 
 public struct ReactorMintResponse: Codable, Sendable, Equatable {
     public let jwt: String
+    /// Unix seconds. Older `reactor-token` deployments sent milliseconds, so any value
+    /// above 1e12 (which as seconds would be the year 33658) is read as milliseconds.
     public let expiresAt: Double
 
     public init(jwt: String, expiresAt: Double) {
         self.jwt = jwt
-        self.expiresAt = expiresAt
+        self.expiresAt = Self.seconds(fromEither: expiresAt)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(jwt: try container.decode(String.self, forKey: .jwt), expiresAt: try container.decode(Double.self, forKey: .expiresAt))
+    }
+
+    private enum CodingKeys: String, CodingKey { case jwt, expiresAt }
+
+    private static let millisecondsThreshold = 1e12
+
+    private static func seconds(fromEither value: Double) -> Double {
+        value > millisecondsThreshold ? value / 1000 : value
     }
 }
 

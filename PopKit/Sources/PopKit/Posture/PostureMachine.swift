@@ -42,9 +42,15 @@ public struct PostureConfig: Sendable, Equatable {
     public let popHysteresis: Double
     /// The curl only starts this far below `openAngle`, so a wobble near flat doesn't flicker it.
     public let curlDeadband: Double
+    /// How a page turns: by folding past `turnAngle` (the PRD's D1), or, for the demo, only by
+    /// folding to `turnAngle` or below and opening again (`closeAndReopen`).
+    public let gesture: TurnGesture
+    /// With `closeAndReopen`: how far past `turnAngle` the hinge must open again before the
+    /// page turns, so a hinge resting near `turnAngle` can't turn twice.
+    public let reopenMargin: Double
 
     public init(openAngle: Double, turnAngle: Double, popStartAngle: Double, popFullAngle: Double, closedAngle: Double, closeHold: TimeInterval,
-                popHysteresis: Double = 5, curlDeadband: Double = 3) {
+                popHysteresis: Double = 5, curlDeadband: Double = 3, gesture: TurnGesture = .fold, reopenMargin: Double = 20) {
         self.openAngle = openAngle
         self.turnAngle = turnAngle
         self.popStartAngle = popStartAngle
@@ -53,14 +59,34 @@ public struct PostureConfig: Sendable, Equatable {
         self.closeHold = closeHold
         self.popHysteresis = popHysteresis
         self.curlDeadband = curlDeadband
+        self.gesture = gesture
+        self.reopenMargin = reopenMargin
     }
 
     public static let standard = PostureConfig(openAngle: 170, turnAngle: 140, popStartAngle: 130, popFullAngle: 90, closedAngle: 10, closeHold: 1.0)
 
+    /// The demo: a page turns only when the Duo folds to 80° or below and opens past 100° again.
+    /// Folding less never turns a page, and the pop-up at about 90° still works.
+    public static let closeToTurn = PostureConfig(openAngle: 170, turnAngle: 80, popStartAngle: 130, popFullAngle: 90, closedAngle: 10,
+                                                  closeHold: 1.0, gesture: .closeAndReopen, reopenMargin: 20)
+
     public var isValid: Bool {
-        openAngle <= 180 && openAngle > turnAngle && turnAngle > popStartAngle
-            && popStartAngle > popFullAngle && popFullAngle > closedAngle && closedAngle >= 0 && closeHold >= 0
+        let common = openAngle <= 180 && popStartAngle > popFullAngle && closedAngle >= 0 && closeHold >= 0
+        switch gesture {
+        case .fold:
+            return common && openAngle > turnAngle && turnAngle > popStartAngle && popFullAngle > closedAngle
+        case .closeAndReopen:
+            return common && openAngle > popStartAngle && popFullAngle > turnAngle && turnAngle > closedAngle
+                && reopenMargin > 0 && turnAngle + reopenMargin < openAngle
+        }
     }
+}
+
+public enum TurnGesture: Sendable, Equatable {
+    /// Folding past the turn point turns the page (PRD D1).
+    case fold
+    /// Only folding to the turn point or below and opening again turns the page.
+    case closeAndReopen
 }
 
 public enum PosturePhase: Sendable, Equatable {
@@ -98,12 +124,16 @@ public struct PostureState: Sendable, Equatable {
     public let curl: Double
     /// How far the page now showing has popped up, 0…1.
     public let popDepth: Double
+    /// With `closeAndReopen`: the book was folded shut from an open page, so opening it turns
+    /// the page rather than going back to the cover's page 1.
+    public let turnPending: Bool
 
-    public init(phase: PosturePhase, angle: Double, curl: Double, popDepth: Double) {
+    public init(phase: PosturePhase, angle: Double, curl: Double, popDepth: Double, turnPending: Bool = false) {
         self.phase = phase
         self.angle = angle
         self.curl = curl
         self.popDepth = popDepth
+        self.turnPending = turnPending
     }
 
     public static let initial = PostureState(phase: .unknown, angle: 0, curl: 0, popDepth: 0)
@@ -127,6 +157,7 @@ public struct PostureMachine: Sendable {
     }
 
     public func reduce(_ state: PostureState, _ sample: HingeSample) -> (state: PostureState, events: [PostureEvent]) {
+        if config.gesture == .closeAndReopen { return reduceClosingToTurn(state, sample) }
         let angle = min(max(sample.angle, 0), 180)
         let isClosed = sample.posture == .closed || angle <= config.closedAngle
 
@@ -175,6 +206,41 @@ public struct PostureMachine: Sendable {
 
         let phase = PosturePhase.open(armed: (armed && !turned) || rearmed)
         return (PostureState(phase: phase, angle: angle, curl: curl, popDepth: depth), turnEvents + popEvents + settleEvents)
+    }
+
+    /// The demo's model: folding to `turnAngle` or below starts a close; opening past
+    /// `turnAngle + reopenMargin` turns the page, however long the book stayed shut. Holding it
+    /// at `closedAngle` shows the cover. There's no curl, and folding less only pops the page up.
+    private func reduceClosingToTurn(_ state: PostureState, _ sample: HingeSample) -> (state: PostureState, events: [PostureEvent]) {
+        let angle = min(max(sample.angle, 0), 180)
+        let isShut = sample.posture == .closed || angle <= config.turnAngle
+        let isReopened = sample.posture != .closed && angle > config.turnAngle + config.reopenMargin
+
+        switch state.phase {
+        case .unknown:
+            if isShut { return (PostureState(phase: .closed, angle: angle, curl: 0, popDepth: 0), []) }
+            return reopen(at: angle, from: state, extra: [])
+        case .closed:
+            guard isReopened else {
+                return (PostureState(phase: .closed, angle: angle, curl: 0, popDepth: 0, turnPending: state.turnPending), [])
+            }
+            return reopen(at: angle, from: state, extra: state.turnPending ? [.turnCommitted] : [.opened])
+        case let .closing(since, _):
+            if isReopened { return reopen(at: angle, from: state, extra: [.turnCommitted]) }
+            let isClosed = sample.posture == .closed || angle <= config.closedAngle
+            let held = isClosed && sample.time - since >= config.closeHold
+            return (PostureState(phase: held ? .closed : state.phase, angle: angle, curl: 0, popDepth: 0, turnPending: true), held ? [.closed] : [])
+        case let .open(armed):
+            if isShut {
+                let closing = PostureState(phase: .closing(since: sample.time, turnsOnReopen: true), angle: angle, curl: 0, popDepth: 0, turnPending: true)
+                return (closing, state.popDepth > 0 ? [.popEnded] : [])
+            }
+            let depth = popDepth(at: angle, wasPopped: state.popDepth > 0)
+            let flat = angle >= config.openAngle
+            let popEvents: [PostureEvent] = state.popDepth == 0 && depth > 0 ? [.popBegan] : (state.popDepth > 0 && depth == 0 ? [.popEnded] : [])
+            let settleEvents: [PostureEvent] = !armed && flat ? [.pageSettled] : []
+            return (PostureState(phase: .open(armed: armed || flat), angle: angle, curl: 0, popDepth: depth), popEvents + settleEvents)
+        }
     }
 
     private func curlProgress(at angle: Double) -> Double {

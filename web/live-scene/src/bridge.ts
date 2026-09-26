@@ -10,7 +10,7 @@ export type SceneEvent =
   | { event: "chunk"; index: number | null; frames: number | null }
   | { event: "model"; type: string; json: string }
   | { event: "runtime"; type: string; json: string }
-  | { event: "firstFrame"; sinceStartMs: number | null; width: number; height: number }
+  | { event: "firstFrame"; generation: number; sinceStartMs: number | null; width: number; height: number }
   | { event: "stats"; fps: number | null; rttMs: number | null; kbps: number | null }
   | { event: "error"; code: string; message: string; recoverable: boolean }
   | { event: "log"; text: string };

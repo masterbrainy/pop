@@ -6,27 +6,29 @@ actor FakeSceneTransport: SceneTransport {
     /// `attempt` is this call's 1-based index, so a test can make the Nth connect fail
     /// without needing its own external counter.
     var connectHandler: (@Sendable (_ jwt: String, _ attempt: Int) async throws -> String) = { jwt, _ in "session-for-\(jwt)" }
-    var prepareHandler: (@Sendable (Data, String) async throws -> Void)?
-    var startHandler: (@Sendable () async throws -> Void)?
+    var prepareHandler: (@Sendable (Data, String, Int) async throws -> Void)?
+    var startHandler: (@Sendable (Int) async throws -> Void)?
 
     private(set) var connectCalls: [String] = []
-    private(set) var prepareCalls: [(still: Data, prompt: String)] = []
-    private(set) var startCallCount = 0
+    private(set) var prepareCalls: [(still: Data, prompt: String, generation: Int)] = []
+    private(set) var startGenerations: [Int] = []
     private(set) var disconnectCallCount = 0
+
+    var startCallCount: Int { startGenerations.count }
 
     func connect(jwt: String) async throws -> String {
         connectCalls.append(jwt)
         return try await connectHandler(jwt, connectCalls.count)
     }
 
-    func prepare(still: Data, prompt: String) async throws {
-        prepareCalls.append((still, prompt))
-        try await prepareHandler?(still, prompt)
+    func prepare(still: Data, prompt: String, generation: Int) async throws {
+        prepareCalls.append((still, prompt, generation))
+        try await prepareHandler?(still, prompt, generation)
     }
 
-    func start() async throws {
-        startCallCount += 1
-        try await startHandler?()
+    func start(generation: Int) async throws {
+        startGenerations.append(generation)
+        try await startHandler?(generation)
     }
 
     func disconnect() async {
@@ -37,8 +39,12 @@ actor FakeSceneTransport: SceneTransport {
         connectHandler = handler
     }
 
-    func onPrepare(_ handler: @escaping @Sendable (Data, String) async throws -> Void) {
+    func onPrepare(_ handler: @escaping @Sendable (Data, String, Int) async throws -> Void) {
         prepareHandler = handler
+    }
+
+    func onStart(_ handler: @escaping @Sendable (Int) async throws -> Void) {
+        startHandler = handler
     }
 }
 

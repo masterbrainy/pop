@@ -10,12 +10,18 @@ import PopKit
 @MainActor
 @Observable
 final class StoryMaker {
-    var speaker: Speaker = .parent
+    /// Whose turn it is. Changing it while listening ends the utterance in progress, so the
+    /// next words start fresh under the new speaker.
+    var speaker: Speaker = .parent {
+        didSet { if oldValue != speaker { speech?.endUtterance() } }
+    }
     private(set) var isWorking = false
     private(set) var isListening = false
     private(set) var partial = ""
     /// A gentle note for the parent (an unsafe request, a failure), shown briefly.
     private(set) var parentNote: String?
+    /// Pages whose picture moderation turned away twice (IMP-10); they show a friendly card, not "Painting…".
+    private(set) var unavailablePictures: Set<UUID> = []
     /// Latency p50s for the debug overlay.
     private(set) var latency: LatencyTable?
 
@@ -31,7 +37,13 @@ final class StoryMaker {
     @ObservationIgnored private var motionPrompts: [UUID: String] = [:]
     @ObservationIgnored private var speech: (any SpeechInput)?
     @ObservationIgnored private var speechTask: Task<Void, Never>?
-    /// One page being built: its words (a `path` or `page` call), then picture and motion.
+    /// Speech secrets minted ahead of the mic tap, so listening starts without a server wait.
+    @ObservationIgnored private let sttSecrets: OneTimeSecrets<RealtimeTranscriber.Secret>?
+    /// Whose turn it was when each utterance began (PRD S3).
+    @ObservationIgnored private var speakers = SpeakerLedger()
+    @ObservationIgnored private var hasEnded = false
+    /// One page's words being written (a `path` or `page` call). Its picture and motion are
+    /// painted separately, per page id and version, once the words land.
     private struct Build {
         let id = UUID()
         let index: Int
@@ -39,16 +51,22 @@ final class StoryMaker {
         let direction: StoryTurnInput?
     }
 
-    /// The build in flight for each page index; events from a replaced build are ignored.
+    /// The words being written for each page index, until they land; events from a replaced
+    /// build are ignored.
     @ObservationIgnored private var builds: [Int: Build] = [:]
     @ObservationIgnored private var buildTasks: [UUID: Task<Void, Never>] = [:]
+    /// The picture and motion being painted for each page id.
+    @ObservationIgnored private var paintTasks: [UUID: (run: UUID, task: Task<Void, Never>)] = [:]
     /// Pipeline calls go in order, so a newer build for a page always replaces an older one.
     @ObservationIgnored private var pipelineCalls: Task<Void, Never>?
     /// Serializes directions so a second one while one is in flight isn't lost (R-31).
     @ObservationIgnored private let turnQueue = TurnQueue()
-    @ObservationIgnored private var directionInFlight = false
-    /// Direction builds that already handed the queue on to the next direction.
-    @ObservationIgnored private var handedOn: Set<UUID> = []
+    /// A direction is being written or waits in the queue.
+    private var directionInFlight = false
+    /// The latest direction the parent gave, shown while it's being written.
+    private var lastDirection: String?
+    /// The last page behind that a direction wrote, so the banner can say it changed.
+    private var rewrittenPageId: UUID?
     @ObservationIgnored private var noteTask: Task<Void, Never>?
     @ObservationIgnored private var scriptLog: FileLog?
     @ObservationIgnored private var layerTasks: [UUID: Task<Void, Never>] = [:]
@@ -65,17 +83,38 @@ final class StoryMaker {
         self.settings = settings
         self.services = services
         self.heroDrawing = heroDrawing
+        sttSecrets = services.server.map(Self.speechSecrets)
         live.onClip = { [weak self] pageId, url in self?.attachClip(url, to: pageId) }
         live.onFrameFlagged = { [weak self] pageId in
             guard let self else { return }
             // A clip saved before the flag must not replay in the finished book (R-38).
-            if let page = self.reader.page(id: pageId), page.clipPath != nil {
-                self.reader.updatePage(index: page.index) { $0.with(clipPath: nil) }
+            if self.reader.page(id: pageId)?.clipPath != nil {
+                self.reader.updatePage(id: pageId) { $0.with(clipPath: nil) }
             }
             self.note("The moving picture drifted off, so this page keeps its still picture.")
         }
         live.onFirstFrame = { [weak self] index, ms in self?.scriptLog?.append("first frame page \(index + 1) in \(ms) ms") }
         reader.onPageChange = { [weak self] page in self?.pageChanged(to: page) }
+        reader.onTurnBlocked = { [weak self] in self?.turnBlocked() }
+    }
+
+    /// Whether the page behind has its words, so a turn can open it.
+    var isNextPageReady: Bool {
+        guard let pending = reader.pendingNext else { return false }
+        return !pending.text.isEmpty
+    }
+
+    /// What the banner and corner arrow say about the page behind, including a direction that
+    /// is still re-writing it (so the parent sees it was heard straight away).
+    var nextPageStatus: NextPageStatus {
+        NextPageStatus.of(current: reader.currentPage, isEnding: isOnLastPage, pendingNext: reader.pendingNext,
+                          direction: directionInFlight ? lastDirection : nil, rewrittenPageId: rewrittenPageId)
+    }
+
+    /// A turn came before the page behind was written: say so, and restart its build if it stopped.
+    private func turnBlocked() {
+        note("The next page is still being written. It'll be ready in a moment.")
+        ensureBuilds()
     }
 
     var canCreate: Bool { services.server != nil }
@@ -86,6 +125,7 @@ final class StoryMaker {
             note("Pop! is offline, so new pages can't be made right now. Saved books still work.")
             return
         }
+        await sttSecrets?.prefetch()
         // Warm Orbis alongside, so the parent can start telling the story straight away.
         Task { [weak self] in
             await self?.live.warmUp(server: server)
@@ -101,7 +141,7 @@ final class StoryMaker {
     }
 
     /// Whether the page on screen is the story's ending: there's no page behind it, and
-    /// closing the book finishes it.
+    /// Finish saves the book.
     var isOnLastPage: Bool {
         guard reader.book.status == .draft, let page = reader.currentPage, !page.text.isEmpty else { return false }
         return reader.book.bible.isEnding(pageIndex: page.index)
@@ -121,7 +161,7 @@ final class StoryMaker {
                 scriptLog?.append("hero drawing: placeholder returned")
                 return
             }
-            reader.update(book: HeroCharacter.seeding(reader.book, drawing: drawing, referencePath: art.path))
+            reader.updateStory { HeroCharacter.seeding($0, drawing: drawing, referencePath: art.path) }
             scriptLog?.append("hero ready in \(art.ms) ms")
         } catch {
             note("That drawing couldn't become a character this time, so Pop! will imagine one instead.")
@@ -185,7 +225,7 @@ final class StoryMaker {
     /// The app went to the background: end the Orbis session so nothing keeps billing (R-30).
     func pauseLive() async {
         scriptLog?.append("app in background: ending the live session")
-        await stopListening()
+        await stopListening(waitingForWords: false)
         await live.kill()
     }
 
@@ -198,18 +238,27 @@ final class StoryMaker {
     }
 
     func end() async {
+        hasEnded = true
         buildTasks.values.forEach { $0.cancel() }
         buildTasks = [:]
         builds = [:]
-        await stopListening()
+        paintTasks.values.forEach { $0.task.cancel() }
+        paintTasks = [:]
+        await stopListening(waitingForWords: false)
         await live.kill()
     }
 
     // MARK: - Input
 
     func submit(_ text: String, kind: InputKind = .typed) {
+        submit(text, kind: kind, by: speaker)
+    }
+
+    private func submit(_ text: String, kind: InputKind, by speaker: Speaker) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        // Late words (a stop still finishing its transcripts) don't start pages after the book ended.
+        guard !trimmed.isEmpty, !hasEnded else { return }
+        lastDirection = trimmed
         enqueue(StoryTurnInput(kind: kind, speaker: speaker, text: trimmed))
     }
 
@@ -232,47 +281,107 @@ final class StoryMaker {
         }
     }
 
-    private func startListening() async {
-        let input: any SpeechInput
-        if let server = services.server {
-            input = RealtimeTranscriber {
-                let token = try await server.sttToken()
-                return RealtimeTranscriber.Secret(value: token.clientSecret, model: token.model)
-            }
-        } else {
-            input = AppleTranscriber()
-        }
-        do {
-            try await input.start()
-        } catch {
-            note(error.localizedDescription)
-            return
-        }
-        speech = input
-        isListening = true
-        speechTask = Task { [weak self] in
-            for await update in input.updates {
-                guard let self else { return }
-                switch update {
-                case let .partial(text): self.partial = text
-                case let .final(text):
-                    self.partial = ""
-                    self.submit(text, kind: .speech)
-                case let .failed(message):
-                    self.note(message)
-                    await self.stopListening()
-                }
-            }
+    private static func speechSecrets(from server: any PopServer) -> OneTimeSecrets<RealtimeTranscriber.Secret> {
+        OneTimeSecrets(expiry: \.expiresAt) {
+            let token = try await server.sttToken()
+            return RealtimeTranscriber.Secret(value: token.clientSecret, model: token.model,
+                                              expiresAt: Date(timeIntervalSince1970: token.expiresAt))
         }
     }
 
-    private func stopListening() async {
-        speechTask?.cancel()
-        speechTask = nil
-        await speech?.stop()
-        speech = nil
+    /// Listens through OpenAI Realtime, or Apple's on-device recogniser if Realtime can't start.
+    /// The mic shows as on straight away; a second tap while it starts stops it.
+    private func startListening() async {
+        guard speech == nil else { return }
+        isListening = true
+        do {
+            if let sttSecrets {
+                do {
+                    try await listen(to: RealtimeTranscriber(secrets: sttSecrets))
+                    return
+                } catch SpeechError.microphoneDenied {
+                    throw SpeechError.microphoneDenied
+                } catch {
+                    AppLog.story.info("realtime listening unavailable: \(error.localizedDescription, privacy: .public)")
+                    guard isListening else { return }
+                    await listenOnDevice()
+                    return
+                }
+            }
+            try await listen(to: AppleTranscriber())
+        } catch {
+            if speech == nil { isListening = false }
+            note(error.localizedDescription)
+        }
+    }
+
+    /// Realtime couldn't connect (no secret, or its socket never opened): keep the mic on and
+    /// listen with Apple's on-device recogniser instead.
+    private func listenOnDevice() async {
+        // The parent turned the mic off meanwhile.
+        guard isListening, speech == nil else { return }
+        scriptLog?.append("speech: realtime never connected, listening on the device")
+        do {
+            try await listen(to: AppleTranscriber())
+        } catch {
+            if speech == nil { isListening = false }
+            note(error.localizedDescription)
+        }
+    }
+
+    /// Starts `input` and routes what it hears; throws if it couldn't start.
+    private func listen(to input: any SpeechInput) async throws {
+        speech = input
+        let task = Task { [weak self] in
+            for await update in input.updates {
+                self?.heard(update, from: input)
+            }
+        }
+        speechTask = task
+        do {
+            try await input.start()
+        } catch {
+            task.cancel()
+            if speech === input { speech = nil }
+            throw error
+        }
+        // Stopped while it was starting.
+        if speech !== input { await input.stop(waitingForWords: false) }
+    }
+
+    private func heard(_ update: SpeechUpdate, from input: any SpeechInput) {
+        switch update {
+        case let .began(utterance):
+            speakers.began(utterance, by: speaker)
+        case let .partial(text):
+            if speech === input || speech == nil { partial = text }
+        case let .final(text, utterance):
+            submit(text, kind: .speech, by: speakers.speaker(of: utterance, current: speaker))
+        case let .failed(message):
+            guard speech === input else { return }
+            speech = nil
+            partial = ""
+            if isListening, let realtime = input as? RealtimeTranscriber, !realtime.hasOpened {
+                Task { [weak self] in await self?.listenOnDevice() }
+                return
+            }
+            isListening = false
+            note(message)
+        }
+    }
+
+    /// Turns the mic off at once. With `waitingForWords` (the parent tapped stop), words already
+    /// spoken still become story turns; leaving the book or the app drops them.
+    private func stopListening(waitingForWords: Bool = true) async {
         isListening = false
-        partial = ""
+        guard let input = speech else { return }
+        speech = nil
+        if !waitingForWords {
+            speechTask?.cancel()
+            speechTask = nil
+        }
+        await input.stop(waitingForWords: waitingForWords)
+        if speech == nil { partial = "" }
     }
 
     // MARK: - Story path
@@ -280,13 +389,14 @@ final class StoryMaker {
     /// A direction re-plans the path from the page behind and rebuilds it. While the page on
     /// screen is still empty (the story is just starting), it shapes that page instead.
     private func runDirection(_ input: StoryTurnInput) {
+        directionInFlight = true
         guard services.pipeline != nil, let current = reader.currentPage else {
             note("Pop! is offline, so new pages can't be made right now.")
             finishDirection()
             return
         }
         if isOnLastPage {
-            note("This is the last page. Close the book to finish the story.")
+            note("This is the last page. Tap Finish to save the book.")
             finishDirection()
             return
         }
@@ -315,18 +425,18 @@ final class StoryMaker {
             if builds[current.index] == nil { startBuild(at: current.index, direction: nil) }
             return
         }
-        if current.stillPath == nil, builds[current.index] == nil { startPicture(for: current) }
+        if current.stillPath == nil { paint(current) }
         let behind = current.index + 1
         guard bible.hasPage(after: current.index), builds[behind] == nil else { return }
         if let pending = reader.pendingNext, pending.index == behind {
-            if pending.stillPath == nil { startPicture(for: pending) }
+            if pending.stillPath == nil { paint(pending) }
         } else {
             startBuild(at: behind, direction: nil)
         }
     }
 
-    /// Writes page `index` (a `path` call to plan or follow a direction, else a `page` call
-    /// along the path), then paints it and prepares its motion.
+    /// Writes page `index`: a `path` call to plan or follow a direction, else a `page` call
+    /// along the path. Its picture is painted once the words land.
     private func startBuild(at index: Int, direction: StoryTurnInput?) {
         guard let pipeline = services.pipeline else { return }
         let book = reader.book
@@ -335,56 +445,90 @@ final class StoryMaker {
             ? StoryEngine.pathRequest(book: book, kid: kid, settings: settings, shownPages: shown, index: index, input: direction)
             : StoryEngine.pageRequest(book: book, kid: kid, settings: settings, shownPages: shown, index: index)
         scriptLog?.append("building page \(index + 1) · \(request.mode.rawValue)\(direction == nil ? "" : " for a direction")")
-        run(Build(index: index, direction: direction)) { await pipeline.buildPage(request, book: book) }
-    }
-
-    /// Paints a page whose words are already known (its earlier build was replaced or failed).
-    private func startPicture(for page: PageContent) {
-        guard let pipeline = services.pipeline else { return }
-        let book = reader.book
-        run(Build(index: page.index, direction: nil)) { await pipeline.preparePendingDraft(page, book: book) }
-    }
-
-    private func run(_ build: Build, _ start: @escaping @Sendable () async -> AsyncStream<PagePipelineEvent>) {
-        builds[build.index] = build
+        let build = Build(index: index, direction: direction)
+        builds[index] = build
         refreshWorking()
-        let previous = pipelineCalls
-        let started = Task { () -> AsyncStream<PagePipelineEvent> in
-            await previous?.value
-            return await start()
-        }
-        pipelineCalls = Task { _ = await started.value }
+        let started = callPipeline { await pipeline.writePage(request, book: book) }
         buildTasks[build.id] = Task { [weak self] in
             for await event in await started.value {
-                await self?.apply(event, from: build)
+                self?.apply(event, from: build)
             }
             self?.ended(build)
         }
     }
 
+    /// Paints a page that has words and prepares its motion, unless it's already painting.
+    private func paint(_ page: PageContent) {
+        guard let pipeline = services.pipeline, paintTasks[page.id] == nil, !unavailablePictures.contains(page.id) else { return }
+        let book = reader.book
+        let run = UUID()
+        let started = callPipeline { await pipeline.paint(page, book: book) }
+        let task = Task { [weak self] in
+            if let stream = await started.value {
+                for await event in stream {
+                    await self?.applyPaint(event)
+                }
+            }
+            if self?.paintTasks[page.id]?.run == run { self?.paintTasks[page.id] = nil }
+            self?.refreshLatency()
+        }
+        paintTasks[page.id] = (run, task)
+    }
+
+    /// A page behind was replaced by a rewrite: stop its picture, layers and motion.
+    private func forget(_ page: PageContent) {
+        paintTasks[page.id]?.task.cancel()
+        paintTasks[page.id] = nil
+        layerTasks[page.id]?.cancel()
+        layerTasks[page.id] = nil
+        motionPrompts[page.id] = nil
+        if let pipeline = services.pipeline {
+            _ = callPipeline { await pipeline.cancelPaint(pageId: page.id) }
+        }
+    }
+
+    /// Runs a pipeline call after the ones before it, so a newer call for a page always
+    /// supersedes an older one.
+    private func callPipeline<T: Sendable>(_ call: @escaping @Sendable () async -> T) -> Task<T, Never> {
+        let previous = pipelineCalls
+        let task = Task { () -> T in
+            await previous?.value
+            return await call()
+        }
+        pipelineCalls = Task { _ = await task.value }
+        return task
+    }
+
+    /// A build's stream ended without its words landing (a failure, or it was cancelled).
     private func ended(_ build: Build) {
         buildTasks[build.id] = nil
         guard builds[build.index]?.id == build.id else { return }
+        wordsDone(build)
+        refreshLatency()
+    }
+
+    /// This build's words landed or failed: the page is no longer being written, and a
+    /// direction hands the queue on to the next one (its picture keeps painting).
+    private func wordsDone(_ build: Build) {
         builds[build.index] = nil
-        if build.direction != nil, handedOn.insert(build.id).inserted { finishDirection() }
+        if build.direction != nil { finishDirection() }
         refreshWorking()
+    }
+
+    private func refreshLatency() {
         Task { [weak self] in
             guard let self, let pipeline = self.services.pipeline else { return }
             self.latency = await pipeline.latencyTable()
         }
     }
 
-    /// Stops a build (its page was shown before it finished re-planning).
+    /// Stops a build (its page was shown before its words landed).
     private func drop(_ build: Build) {
         builds[build.index] = nil
         buildTasks[build.id]?.cancel()
         buildTasks[build.id] = nil
         if let pipeline = services.pipeline {
-            let previous = pipelineCalls
-            pipelineCalls = Task {
-                await previous?.value
-                await pipeline.cancel(pageIndex: build.index)
-            }
+            _ = callPipeline { await pipeline.cancel(pageIndex: build.index) }
         }
     }
 
@@ -393,43 +537,68 @@ final class StoryMaker {
         isWorking = directionInFlight || writingCurrent
     }
 
-    private func apply(_ event: PagePipelineEvent, from build: Build) async {
+    private func apply(_ event: PagePipelineEvent, from build: Build) {
         guard builds[build.index]?.id == build.id else { return }
         switch event {
         case let .pageWritten(outcome):
             written(outcome, by: build)
-        case let .stillReady(pageIndex, path, url):
-            makeReferences(fromStill: path)
-            await storeStill(url: url, pageIndex: pageIndex)
-        case let .motionReady(pageIndex, prompt):
-            if let page = pageWith(index: pageIndex) {
-                motionPrompts[page.id] = prompt
-                if page.id == reader.currentPage?.id { animate(page) }
-            }
         case let .failed(message):
-            let lines = message.split(separator: "\n", maxSplits: 1).map(String.init)
-            if lines.count > 1 { scriptLog?.append("failure detail: \(lines[1])") }
-            note(lines.first ?? message)
+            fail(message)
+        case .stillReady, .motionReady, .pictureUnavailable:
+            break
         }
+    }
+
+    /// A picture or motion prompt applies only to the page (and version) it was made for.
+    private func applyPaint(_ event: PagePipelineEvent) async {
+        switch event {
+        case let .stillReady(key, path, url):
+            guard reader.page(id: key.id)?.version == key.version else { return }
+            makeReferences(fromStill: path)
+            await storeStill(url: url, for: key)
+        case let .motionReady(key, prompt):
+            guard let page = reader.page(id: key.id), page.version == key.version else { return }
+            motionPrompts[page.id] = prompt
+            if page.id == reader.currentPage?.id { animate(page) }
+        case let .pictureUnavailable(key):
+            guard reader.page(id: key.id)?.version == key.version else { return }
+            unavailablePictures.insert(key.id)
+            note("That picture didn't turn out right, so this page is one to imagine.")
+        case let .failed(message):
+            fail(message)
+        case .pageWritten:
+            break
+        }
+    }
+
+    private func fail(_ message: String) {
+        let lines = message.split(separator: "\n", maxSplits: 1).map(String.init)
+        if lines.count > 1 { scriptLog?.append("failure detail: \(lines[1])") }
+        note(lines.first ?? message)
     }
 
     /// A page's words arrived: an empty page on screen takes them, otherwise they become the
     /// page behind. A page the reader has already seen is never changed.
     private func written(_ outcome: PathOutcome, by build: Build) {
-        // Take only the bible: pages may have gained pictures since the request went out.
-        reader.update(book: reader.book.with(bible: outcome.book.bible.carryingReferences(from: reader.book.bible)))
+        // Take only the bible, onto the latest book: pages may have gained pictures meanwhile.
+        reader.updateStory { $0.with(bible: outcome.book.bible.carryingReferences(from: $0.bible)) }
         if let message = outcome.parentNote { note(message) }
         if let page = outcome.page {
-            if let shown = reader.book.pages.first(where: { $0.index == page.index }) {
-                if shown.text.isEmpty { reader.replace(page) }
-            } else if page.index == (reader.currentPage?.index ?? -2) + 1 {
-                reader.pendingNext = page
+            switch reader.place(page) {
+            case let .onScreen(placed):
+                paint(placed)
+            case let .behind(placed, replaced):
+                if let replaced { forget(replaced) }
+                if build.direction != nil { rewrittenPageId = placed.id }
+                paint(placed)
+            case .dropped:
+                scriptLog?.append("page \(page.index + 1) written but no longer needed")
             }
             scriptLog?.append("page \(page.index + 1)/\(reader.book.bible.path.count) written\(build.direction == nil ? "" : " for a direction")")
         }
         // The next direction can go as soon as these words land; the picture keeps going.
-        if build.direction != nil, handedOn.insert(build.id).inserted { finishDirection() }
-        refreshWorking()
+        wordsDone(build)
+        refreshLatency()
         ensureBuilds()
     }
 
@@ -445,7 +614,7 @@ final class StoryMaker {
                 do {
                     let art = try await server.art(request)
                     guard let self, !art.placeholder else { return }
-                    self.reader.update(book: self.reader.book.with(bible: self.reader.book.bible.settingReference(art.path, for: character.id)))
+                    self.reader.updateStory { $0.with(bible: $0.bible.settingReference(art.path, for: character.id)) }
                     self.scriptLog?.append("reference ready for \(character.id) in \(art.ms) ms")
                 } catch {
                     self?.scriptLog?.append("reference failed for \(character.id): \(error.localizedDescription)")
@@ -455,13 +624,15 @@ final class StoryMaker {
         }
     }
 
-    private func storeStill(url: String, pageIndex: Int) async {
-        guard let remote = URL(string: url), let page = pageWith(index: pageIndex) else { return }
+    private func storeStill(url: String, for key: PageKey) async {
+        guard let remote = URL(string: url), let page = reader.page(id: key.id), page.version == key.version else { return }
         do {
-            // Named by page id too: a rebuilt page behind reuses its index and version.
-            let path = try await services.media.store(from: remote, named: "\(reader.book.id)-p\(pageIndex)-\(page.id.uuidString.prefix(8))-v\(page.version).png")
-            reader.updatePage(index: pageIndex) { $0.with(stillPath: path) }
-            if let updated = pageWith(index: pageIndex) { prepareLayers(for: updated) }
+            // Named by page id and version: a rebuilt page behind reuses its index.
+            let path = try await services.media.store(from: remote, named: "\(reader.book.id)-p\(page.index)-\(page.id.uuidString.prefix(8))-v\(page.version).png")
+            // Only onto the same page and version; a page replaced meanwhile drops it.
+            if let updated = reader.updatePage(id: key.id, version: key.version, { $0.with(stillPath: path) }) {
+                prepareLayers(for: updated)
+            }
         } catch {
             note("A picture didn't arrive. It will be tried again on the next turn.")
         }
@@ -482,9 +653,8 @@ final class StoryMaker {
             do {
                 let layers = try await LayerMaker.makeLayers(for: page, book: book, server: server, media: media)
                 guard !Task.isCancelled, let self else { return }
-                // Only if the page is still the one (and version) these layers were drawn for.
-                guard let now = self.pageWith(index: page.index), now.id == page.id, now.version == page.version else { return }
-                self.reader.updatePage(index: page.index) { $0.with(layers: layers) }
+                // Only onto the page (and version) these layers were drawn for.
+                guard self.reader.updatePage(id: page.id, version: page.version, { $0.with(layers: layers) }) != nil else { return }
                 self.scriptLog?.append("layers ready for page \(page.index + 1): \(layers.cutouts.count) cutouts")
             } catch {
                 guard !Task.isCancelled, let self else { return }
@@ -492,10 +662,6 @@ final class StoryMaker {
                 if !isRetry { self.prepareLayers(for: page, isRetry: true) }
             }
         }
-    }
-
-    private func pageWith(index: Int) -> PageContent? {
-        reader.book.pages.first { $0.index == index } ?? (reader.pendingNext?.index == index ? reader.pendingNext : nil)
     }
 
     // MARK: - Living page
@@ -507,9 +673,11 @@ final class StoryMaker {
         // was, and the direction applies to the new page behind instead.
         // Once its words have landed, the rebuilt page is what just showed, so the build only
         // finishes its picture (R-40).
-        if !page.text.isEmpty, let build = builds[page.index], let direction = build.direction, !handedOn.contains(build.id) {
+        // A build stays in `builds` only until its words land, so this never re-applies a direction.
+        if !page.text.isEmpty, let build = builds[page.index], let direction = build.direction {
             scriptLog?.append("folded mid-rebuild: the direction moves to page \(page.index + 2)")
             drop(build)
+            note("Your change will show on the next page.")
             runDirection(direction)
         }
         refreshWorking()
@@ -526,19 +694,21 @@ final class StoryMaker {
 
     /// Before saving: animate and record any page whose clip isn't complete yet (ROADMAP
     /// Phase 5), so the saved book replays every page. Pages without a picture or motion
-    /// prompt keep their still. Each page waits at most `perPage`.
-    func completeClips(perPage: Duration = .seconds(45)) async -> (recorded: Int, missing: Int) {
+    /// prompt keep their still. Each page waits at most `perPage`, and nothing waits past
+    /// `deadline`: pages left over keep their still (IMP-13).
+    func completeClips(perPage: Duration = .seconds(45), until deadline: ContinuousClock.Instant? = nil) async -> (recorded: Int, missing: Int) {
         var recorded = 0
         var missing = 0
         for page in reader.book.pages where page.clipPath == nil && !page.text.isEmpty && !live.isHeld(page) {
-            guard live.canAnimate, let prompt = motionPrompts[page.id], let data = StillImageLoader.data(for: page.stillPath) else {
+            let hasTime = deadline.map { ContinuousClock.now < $0 } ?? true
+            guard hasTime, live.canAnimate, let prompt = motionPrompts[page.id], let data = StillImageLoader.data(for: page.stillPath) else {
                 missing += 1
                 continue
             }
             await live.pageWillChange()
             await live.show(page, still: data, prompt: prompt)
-            let deadline = ContinuousClock.now.advanced(by: perPage)
-            while ContinuousClock.now < deadline, reader.page(id: page.id)?.clipPath == nil {
+            let pageDeadline = min(ContinuousClock.now.advanced(by: perPage), deadline ?? .now.advanced(by: perPage))
+            while ContinuousClock.now < pageDeadline, reader.page(id: page.id)?.clipPath == nil {
                 try? await Task.sleep(for: .milliseconds(500))
             }
             if reader.page(id: page.id)?.clipPath != nil { recorded += 1 } else { missing += 1 }
@@ -553,8 +723,7 @@ final class StoryMaker {
     }
 
     private func attachClip(_ url: URL, to pageId: UUID) {
-        guard let page = reader.page(id: pageId) else { return }
-        reader.updatePage(index: page.index) { $0.with(clipPath: url.path(percentEncoded: false)) }
+        reader.updatePage(id: pageId) { $0.with(clipPath: url.path(percentEncoded: false)) }
     }
 
     private func note(_ message: String) {

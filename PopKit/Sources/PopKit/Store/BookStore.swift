@@ -15,6 +15,18 @@ public protocol BookStoring: Sendable {
     func delete(_ bookId: UUID) async throws
 }
 
+/// The result of reading the whole shelf: the books that loaded, and a count of the
+/// ones that didn't, so the app can say "some books couldn't be opened" without losing the rest.
+public struct BookShelfLoad: Sendable, Equatable {
+    public let books: [Book]
+    public let unreadableCount: Int
+
+    public init(books: [Book], unreadableCount: Int) {
+        self.books = books
+        self.unreadableCount = unreadableCount
+    }
+}
+
 /// Saves each book as `{root}/{bookId}/book.json` plus its media under
 /// `{root}/{bookId}/media/`. Paths inside `book.json` are relative, `file:`-prefixed
 /// references into that same `media/` folder (for example `file:cover.png`), so a
@@ -60,17 +72,28 @@ public actor FileBookStore: BookStoring {
     }
 
     public func loadAll() async throws -> [Book] {
-        guard fileManager.fileExists(atPath: root.path) else { return [] }
+        try await loadShelf().books
+    }
+
+    /// Every readable saved book, newest first, plus how many `book.json` files couldn't
+    /// be read or decoded. One corrupt book is skipped rather than hiding the whole shelf.
+    public func loadShelf() async throws -> BookShelfLoad {
+        guard fileManager.fileExists(atPath: root.path) else { return BookShelfLoad(books: [], unreadableCount: 0) }
         let entries = try fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
 
         var books: [Book] = []
+        var unreadableCount = 0
         for directory in entries {
             let bookFile = directory.appendingPathComponent("book.json")
             guard fileManager.fileExists(atPath: bookFile.path) else { continue }
-            let data = try Data(contentsOf: bookFile)
-            books.append(try Self.decoder.decode(Book.self, from: data))
+            do {
+                let data = try Data(contentsOf: bookFile)
+                books.append(try Self.decoder.decode(Book.self, from: data))
+            } catch {
+                unreadableCount += 1
+            }
         }
-        return books.sorted { $0.createdAt > $1.createdAt }
+        return BookShelfLoad(books: books.sorted { $0.createdAt > $1.createdAt }, unreadableCount: unreadableCount)
     }
 
     public func delete(_ bookId: UUID) async throws {
@@ -117,12 +140,19 @@ public actor FileBookStore: BookStoring {
     /// Copies the file at `sourcePath` (a local path or `file:` URL) into
     /// `mediaDirectory`, keeping its original extension, and returns the new
     /// relative `file:` reference.
+    ///
+    /// A reopened book points at this store's own files (either as `file:<name>` or as the
+    /// resolved absolute path), so the source can already *be* the destination. Deleting
+    /// the destination first would then delete the only copy (IMP-23), so that case is a no-op.
     private func copyMedia(from sourcePath: String, into mediaDirectory: URL, baseName: String) throws -> String {
-        let sourceURL = Self.resolveLocalURL(sourcePath)
+        let sourceURL = Self.resolveLocalURL(sourcePath, mediaDirectory: mediaDirectory)
         let ext = sourceURL.pathExtension
         let filename = ext.isEmpty ? baseName : "\(baseName).\(ext)"
         let destinationURL = mediaDirectory.appendingPathComponent(filename)
 
+        if Self.isSameFile(sourceURL, destinationURL) {
+            return "\(Self.filePrefix)\(filename)"
+        }
         if fileManager.fileExists(atPath: destinationURL.path) {
             try fileManager.removeItem(at: destinationURL)
         }
@@ -130,7 +160,16 @@ public actor FileBookStore: BookStoring {
         return "\(Self.filePrefix)\(filename)"
     }
 
-    private static func resolveLocalURL(_ path: String) -> URL {
+    private static func isSameFile(_ lhs: URL, _ rhs: URL) -> Bool {
+        lhs.standardizedFileURL.resolvingSymlinksInPath().path == rhs.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    /// `file:<name>` (no `//`) is this store's own relative reference into the book's
+    /// `media/` folder; anything else is a real URL or an absolute path.
+    private static func resolveLocalURL(_ path: String, mediaDirectory: URL) -> URL {
+        if path.hasPrefix(filePrefix), !path.hasPrefix("\(filePrefix)//") {
+            return mediaDirectory.appendingPathComponent(String(path.dropFirst(filePrefix.count)))
+        }
         if let url = URL(string: path), url.scheme != nil {
             return url
         }

@@ -28,7 +28,9 @@ struct SceneEventTests {
 
     @Test func decodesFirstFrameAndStats() {
         let frame: [String: Any] = ["event": "firstFrame", "sinceStartMs": 2150, "width": 832, "height": 480]
-        #expect(SceneEvent(body: frame) == .firstFrame(sinceStartMs: 2150, width: 832, height: 480))
+        #expect(SceneEvent(body: frame) == .firstFrame(generation: nil, sinceStartMs: 2150, width: 832, height: 480))
+        let tagged: [String: Any] = ["event": "firstFrame", "generation": NSNumber(value: 7.0), "sinceStartMs": NSNull(), "width": 1920, "height": 1080]
+        #expect(SceneEvent(body: tagged) == .firstFrame(generation: 7, sinceStartMs: nil, width: 1920, height: 1080))
         let stats: [String: Any] = ["event": "stats", "fps": 17.8, "rttMs": NSNull(), "kbps": 2400]
         #expect(SceneEvent(body: stats) == .stats(fps: 17.8, rttMs: nil, kbps: 2400))
     }

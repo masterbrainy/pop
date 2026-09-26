@@ -16,6 +16,12 @@ final class LiveSceneBridge: NSObject {
             case let .script(function, message): "popScene.\(function) failed: \(message)"
             }
         }
+
+        /// A newer page flow replaced this one (web/live-scene/src/gate.ts `SupersededError`).
+        var isSuperseded: Bool {
+            if case let .script(_, message) = self { return message.contains("superseded:") }
+            return false
+        }
     }
 
     struct ConnectResult: Sendable {
@@ -78,19 +84,23 @@ final class LiveSceneBridge: NSObject {
         return ConnectResult(sessionId: result["sessionId"] as? String, connectMs: Self.int(result["connectMs"]) ?? 0)
     }
 
-    /// reset (if needed) → set_image → set_prompt → conditions_ready. The still is served to the page only while this runs.
-    func prepare(still: Data, mimeType: String, prompt: String, seed: Int? = nil) async throws -> PrepareResult {
+    /// reset (if needed) → set_image → set_prompt → conditions_ready, as page flow `generation`
+    /// (newest wins; an older one throws "superseded: …"). The still is served to the page only while this runs.
+    func prepare(still: Data, mimeType: String, prompt: String, seed: Int? = nil, generation: Int? = nil) async throws -> PrepareResult {
         let stillURL = schemeHandler.registerStill(still, mimeType: mimeType)
         defer { schemeHandler.removeStill(at: stillURL) }
-        let base: [String: Any] = ["imageUrl": stillURL.absoluteString, "prompt": prompt]
-        let arguments = seed.map { base.merging(["seed": $0]) { _, new in new } } ?? base
+        var arguments: [String: Any] = ["imageUrl": stillURL.absoluteString, "prompt": prompt]
+        if let seed { arguments["seed"] = seed }
+        if let generation { arguments["generation"] = generation }
         let result = try await call("prepare", arguments) as? [String: Any] ?? [:]
         return PrepareResult(width: Self.int(result["width"]), height: Self.int(result["height"]), prepareMs: Self.int(result["prepareMs"]) ?? 0)
     }
 
-    /// Sends `start` and waits for `generation_started`; returns how long that took in ms.
-    func start() async throws -> Int {
-        let result = try await call("start") as? [String: Any] ?? [:]
+    /// Sends `start` for page flow `generation` (default: the newest prepared) and waits for
+    /// `generation_started`; returns how long that took in ms.
+    func start(generation: Int? = nil) async throws -> Int {
+        let arguments: [String: Any] = generation.map { ["generation": $0] } ?? [:]
+        let result = try await call("start", arguments) as? [String: Any] ?? [:]
         return Self.int(result["startMs"]) ?? 0
     }
 

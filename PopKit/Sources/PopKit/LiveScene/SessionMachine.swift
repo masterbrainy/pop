@@ -51,7 +51,7 @@ public enum SessionEvent: Sendable, Equatable {
     case animateRequested(page: Int)
     /// The transport reported the connection dropped while ready or animating.
     case disconnected(String)
-    /// `prepare` or `start` failed while ready or animating.
+    /// `prepare` or `start` failed while connected; the session stays open and ready.
     case stageFailed(String)
     /// The backoff timer fired; try again.
     case reconnectTick(now: Date)
@@ -111,8 +111,18 @@ public struct SessionMachine: Sendable {
             )
             return (updated, .showPage(index: page))
 
-        case (.ready, .disconnected), (.animating, .disconnected), (.ready, .stageFailed), (.animating, .stageFailed):
+        case (.ready, .disconnected), (.animating, .disconnected):
             return attemptFailed(state, failedAttempt: 0)
+
+        // A page that failed to prepare or start is not a dropped connection. The session is
+        // still open (and its `connect` refuses a second connection), so reconnecting could
+        // only walk the ladder into fallback for the whole book. Stay ready for the next page.
+        case (.ready, .stageFailed), (.animating, .stageFailed):
+            let updated = SessionState(
+                phase: .ready, jwt: state.jwt, jwtExpiresAt: state.jwtExpiresAt,
+                sessionId: state.sessionId, connectedSince: state.connectedSince
+            )
+            return (updated, nil)
 
         case let (.reconnecting, .reconnectTick(tickNow)):
             if let jwt = state.jwt, let expiresAt = state.jwtExpiresAt, tickNow < expiresAt {

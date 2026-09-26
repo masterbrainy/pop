@@ -1,20 +1,17 @@
 import Foundation
+import PopKit
 
-/// What a speech recogniser reports while the parent (or kid) tells the story (PRD S1).
-enum SpeechUpdate: Sendable, Equatable {
-    /// Words so far in the current utterance; replaces the previous partial.
-    case partial(String)
-    /// A finished utterance, ready to become a story turn.
-    case final(String)
-    case failed(String)
-}
-
-/// A live transcriber. Audio is never stored (PRD §10): it streams to the recogniser and is dropped.
+/// A live transcriber. Audio is never stored (PRD §10): it streams to the recogniser and is
+/// dropped. `updates` finishes once the transcriber has stopped (or failed) for good.
 @MainActor
 protocol SpeechInput: AnyObject {
     var updates: AsyncStream<SpeechUpdate> { get }
     func start() async throws
-    func stop() async
+    /// Stops the mic. With `waitingForWords`, words already spoken still arrive as finals
+    /// (a few seconds at most) before `updates` finishes.
+    func stop(waitingForWords: Bool) async
+    /// Ends the utterance in progress, so words after this start a new one (the turn changed).
+    func endUtterance()
 }
 
 enum SpeechError: LocalizedError {

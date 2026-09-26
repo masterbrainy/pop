@@ -2,7 +2,7 @@
 /// can only be moved by hand in DeviceHub, so these replay the same sweeps (ROADMAP §3).
 public enum HingeScript {
     public enum Move: String, Sendable, CaseIterable {
-        /// Fold from flat past the turn point and open flat again.
+        /// Fold from flat to 60° and open flat again: turns the page under either gesture model.
         case turn
         /// Fold from flat to 90°, hold, and open flat again (turns the page on the way down).
         case pop
@@ -27,7 +27,7 @@ public enum HingeScript {
 
     public static func angles(for move: Move) -> [Double] {
         switch move {
-        case .turn: sweep(from: 180, to: 120) + sweep(from: 120, to: 180).dropFirst()
+        case .turn: sweep(from: 180, to: 60) + sweep(from: 60, to: 180).dropFirst()
         case .pop: sweep(from: 180, to: 90) + hold(90, samples: 20) + sweep(from: 90, to: 180).dropFirst()
         case .close: sweep(from: 180, to: 0) + hold(0, samples: 30)
         case .open: sweep(from: 0, to: 180)

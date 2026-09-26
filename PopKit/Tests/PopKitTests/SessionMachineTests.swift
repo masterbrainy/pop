@@ -69,6 +69,23 @@ struct SessionMachineTests {
         }
     }
 
+    /// A page that fails to prepare or start is not a dropped connection: the session stays
+    /// connected and ready for the next page instead of starting a reconnect ladder whose
+    /// `connect` the still-open session refuses (ending in fallback for the whole book).
+    @Test func aStageFailureWhileConnectedGoesBackToReadyWithoutReconnecting() {
+        for base in [readyState(), readyState(page: 3)] {
+            let (state, effect) = machine.reduce(base, .stageFailed("conditions_ready did not arrive"), now: t0)
+            #expect(state.phase == .ready)
+            #expect(effect == nil)
+            #expect(state.sessionId == base.sessionId)
+            #expect(state.connectedSince == base.connectedSince)
+            #expect(state.currentPage == nil)
+            let (again, showEffect) = machine.reduce(state, .animateRequested(page: 4), now: t0)
+            #expect(again.phase == .animating(page: 4))
+            #expect(showEffect == .showPage(index: 4))
+        }
+    }
+
     @Test func backoffDoublesEachFailedAttemptUpToFiveThenFallsBack() {
         var state = readyState()
         (state, _) = machine.reduce(state, .disconnected("drop"), now: t0)

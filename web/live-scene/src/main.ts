@@ -3,7 +3,7 @@
 // through `window.webkit.messageHandlers.pop` (see bridge.ts).
 
 import { post } from "./bridge.ts";
-import { LiveSceneController, type PrepareArgs, type VideoFit } from "./scene.ts";
+import { LiveSceneController, type PrepareArgs, type StartArgs, type VideoFit } from "./scene.ts";
 
 const video = document.getElementById("scene");
 if (!(video instanceof HTMLVideoElement)) throw new Error("live-scene.html has no <video id=\"scene\">");
@@ -13,7 +13,7 @@ const controller = new LiveSceneController(video);
 const popScene = {
   connect: (args: { jwt: string; modelName?: string }) => controller.connect(args.jwt, args.modelName),
   prepare: (args: PrepareArgs) => controller.prepare(args),
-  start: () => controller.start(),
+  start: (args: StartArgs = {}) => controller.start(args),
   setPrompt: (args: { prompt: string }) => controller.setPrompt(args.prompt),
   pause: () => controller.pause(),
   resume: () => controller.resume(),

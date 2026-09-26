@@ -20,6 +20,7 @@ struct HingeScriptTests {
 
     @Test func turnGoesPastTheTurnPointAndPopReachesNinety() {
         #expect(HingeScript.angles(for: .turn).min()! < PostureConfig.standard.turnAngle)
+        #expect(HingeScript.angles(for: .turn).min()! <= PostureConfig.closeToTurn.turnAngle)
         #expect(HingeScript.angles(for: .pop).min()! <= PostureConfig.standard.popFullAngle)
     }
 

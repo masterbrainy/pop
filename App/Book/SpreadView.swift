@@ -13,6 +13,7 @@ struct SpreadView<Controls: View>: View {
     var live: LivePageController? = nil
     var replaysClips = false
     var highlight: NSRange? = nil
+    var pictureUnavailable = false
     @ViewBuilder var controls: () -> Controls
 
     /// The co-pilot question shows while reading a book, not while making one.
@@ -30,7 +31,7 @@ struct SpreadView<Controls: View>: View {
                     .padding(.bottom, 20)
             }
         } secondary: {
-            ArtPageView(page: page, live: live, popDepth: popDepth, replaysClips: replaysClips)
+            ArtPageView(page: page, live: live, popDepth: popDepth, replaysClips: replaysClips, pictureUnavailable: pictureUnavailable)
                 .pageCurl(progress: curl)
                 .id(page?.id)
                 .transition(PageFlipTransition())
@@ -44,8 +45,8 @@ struct SpreadView<Controls: View>: View {
 
 extension SpreadView where Controls == EmptyView {
     init(page: PageContent?, pageNumber: Int, level: ReadingLevel, curl: Double, popDepth: Double = 0,
-         live: LivePageController? = nil, replaysClips: Bool = false, highlight: NSRange? = nil) {
+         live: LivePageController? = nil, replaysClips: Bool = false, highlight: NSRange? = nil, pictureUnavailable: Bool = false) {
         self.init(page: page, pageNumber: pageNumber, level: level, curl: curl, popDepth: popDepth,
-                  live: live, replaysClips: replaysClips, highlight: highlight) { EmptyView() }
+                  live: live, replaysClips: replaysClips, highlight: highlight, pictureUnavailable: pictureUnavailable) { EmptyView() }
     }
 }

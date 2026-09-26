@@ -2,6 +2,7 @@
 // function so it's tested against a recorded fixture, with no network call.
 import { MODERATION_MODEL } from "./models.ts";
 import { PopError } from "./errors.ts";
+import { fetchWithOneRetry, UPSTREAM_TIMEOUTS_MS } from "./retry.ts";
 import type { ModerationResult } from "./safety.ts";
 
 const MODERATION_URL = "https://api.openai.com/v1/moderations";
@@ -22,19 +23,21 @@ export function parseModerationResponse(body: RawModerationResponse): Moderation
 }
 
 async function callModeration(apiKey: string, input: unknown): Promise<ModerationResult> {
-  const res = await fetch(MODERATION_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ model: MODERATION_MODEL, input }),
-  });
+  const body = JSON.stringify({ model: MODERATION_MODEL, input });
+  const res = await fetchWithOneRetry((signal) =>
+    fetch(MODERATION_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body,
+      signal,
+    }), { timeoutMs: UPSTREAM_TIMEOUTS_MS.moderation, label: "Moderation request" });
   if (!res.ok) {
     throw new PopError("upstream", `Moderation request failed (${res.status})`);
   }
-  const body = await res.json() as RawModerationResponse;
-  return parseModerationResponse(body);
+  return parseModerationResponse(await res.json() as RawModerationResponse);
 }
 
 export function moderateText(apiKey: string, text: string): Promise<ModerationResult> {

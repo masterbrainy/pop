@@ -125,6 +125,7 @@ public actor AnonymousAuth {
         request.httpMethod = "POST"
         request.setValue(publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = PopServerTimeouts.standard
         do {
             request.httpBody = try JSONEncoder().encode(body)
         } catch {

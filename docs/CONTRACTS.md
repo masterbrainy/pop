@@ -102,7 +102,7 @@ Request: `{ "text": "…", "voice": "…" }` → `data`: `{ "audioBase64": "…"
 Request: `{}` → `data`: `{ "clientSecret": "…", "expiresAt": 0, "model": "…" }`, a short-lived OpenAI Realtime transcription secret. Audio goes from the app straight to OpenAI and is never stored.
 
 ### `reactor-token`: Orbis access (ROADMAP §2)
-Request: `{ "action": "mint" }` → `data`: `{ "jwt": "…", "expiresAt": 0 }` (1 h, 2 sessions; cleans up this user's leftover sessions first). `{ "action": "report", "sessionId": "…" }` records a session the app opened. `{ "action": "cleanup" }` ends this user's recorded sessions → `data`: `{ "ended": 0 }`.
+Request: `{ "action": "mint" }` → `data`: `{ "jwt": "…", "expiresAt": 0 }` (`expiresAt` in Unix seconds; the app also reads a value above 1e12 as milliseconds, which older deployments sent) (1 h, 2 sessions; cleans up this user's leftover sessions first). `{ "action": "report", "sessionId": "…" }` records a session the app opened. `{ "action": "cleanup" }` ends this user's recorded sessions → `data`: `{ "ended": 0 }`.
 
 ### `reactor-sessions`: admin only
 Header `x-pop-admin: <REACTOR_ADMIN_SECRET>`. Request `{ "action": "list | kill" }` → `data`: `{ "open": [ { "sessionId", "state" } ] }` or `{ "ended": 0 }`. The app never calls it; the run-book does.

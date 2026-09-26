@@ -63,6 +63,19 @@ struct TurnQueueTests {
         #expect(!(await queue.isBusy))
     }
 
+    @Test func aKidsWordsBetweenTheParentsAreNeverMergedIntoTheParents() async {
+        let queue = TurnQueue()
+        _ = await queue.submit(input("Once upon a time", speaker: .parent))
+        _ = await queue.submit(input("make it snow", speaker: .parent, kind: .speech))
+        _ = await queue.submit(input("a snowman!", speaker: .kid, kind: .speech))
+        _ = await queue.submit(input("and a sled", speaker: .parent, kind: .speech))
+
+        #expect(await queue.drain() == input("make it snow", speaker: .parent, kind: .speech))
+        #expect(await queue.drain() == input("a snowman!", speaker: .kid, kind: .speech))
+        #expect(await queue.drain() == input("and a sled", speaker: .parent, kind: .speech))
+        #expect(await queue.drain() == nil)
+    }
+
     @Test func drainingAnEmptyQueueMarksItIdle() async {
         let queue = TurnQueue()
         _ = await queue.submit(input("Once upon a time"))

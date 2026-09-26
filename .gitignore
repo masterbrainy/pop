@@ -4,6 +4,7 @@
 *.env
 supabase/functions/.env
 supabase/.temp/
+config/*.local.xcconfig
 
 # Xcode / Swift
 DerivedData/

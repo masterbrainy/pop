@@ -10,7 +10,15 @@ export type SceneEvent =
   | { event: "chunk"; index: number | null; frames: number | null }
   | { event: "model"; type: string; json: string }
   | { event: "runtime"; type: string; json: string }
-  | { event: "firstFrame"; generation: number; sinceStartMs: number | null; width: number; height: number }
+  | {
+      event: "firstFrame";
+      generation: number;
+      sinceStartMs: number | null;
+      width: number;
+      height: number;
+      /** True when the flow runs hidden (reveal:false) and its video was not shown. */
+      background: boolean;
+    }
   | { event: "stats"; fps: number | null; rttMs: number | null; kbps: number | null }
   | { event: "error"; code: string; message: string; recoverable: boolean }
   | { event: "log"; text: string };

@@ -28,9 +28,12 @@ struct SceneEventTests {
 
     @Test func decodesFirstFrameAndStats() {
         let frame: [String: Any] = ["event": "firstFrame", "sinceStartMs": 2150, "width": 832, "height": 480]
-        #expect(SceneEvent(body: frame) == .firstFrame(generation: nil, sinceStartMs: 2150, width: 832, height: 480))
+        #expect(SceneEvent(body: frame) == .firstFrame(generation: nil, sinceStartMs: 2150, width: 832, height: 480, background: false))
         let tagged: [String: Any] = ["event": "firstFrame", "generation": NSNumber(value: 7.0), "sinceStartMs": NSNull(), "width": 1920, "height": 1080]
-        #expect(SceneEvent(body: tagged) == .firstFrame(generation: 7, sinceStartMs: nil, width: 1920, height: 1080))
+        #expect(SceneEvent(body: tagged) == .firstFrame(generation: 7, sinceStartMs: nil, width: 1920, height: 1080, background: false))
+        // A hidden page flow (the page behind, pre-animated) reports its first frame as background.
+        let hidden: [String: Any] = ["event": "firstFrame", "generation": 8, "sinceStartMs": 4100, "width": 832, "height": 480, "background": true]
+        #expect(SceneEvent(body: hidden) == .firstFrame(generation: 8, sinceStartMs: 4100, width: 832, height: 480, background: true))
         let stats: [String: Any] = ["event": "stats", "fps": 17.8, "rttMs": NSNull(), "kbps": 2400]
         #expect(SceneEvent(body: stats) == .stats(fps: 17.8, rttMs: nil, kbps: 2400))
     }

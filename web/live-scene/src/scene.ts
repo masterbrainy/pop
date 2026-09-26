@@ -2,20 +2,26 @@ import { Reactor, type ConnectionStats, type ReactorError, type ReactorMessage }
 
 import { log, post } from "./bridge.ts";
 import { ORBIS_MODEL_NAME, ORBIS_TRACKS, chunkIndexOf, describeMessage, unwrapOrbisMessage, type OrbisMessage } from "./orbis.ts";
-import { ClipRecorder, type ClipResult } from "./clip.ts";
+import { ClipRecorder, type ClipResult, checkClipGeneration } from "./clip.ts";
 import { MessageWaiters } from "./waiters.ts";
 import { type FrameResult, sampleFrame } from "./frame.ts";
 import { FirstFrameWatch, GenerationGate, conditionsReadyTimeoutMs } from "./gate.ts";
 import { DELIVERY_COMMANDS } from "./orbis.ts";
+import { RevealState, type RevealResult } from "./reveal.ts";
 
 const IMAGE_READY_TIMEOUT_MS = 30_000;
 const COMMAND_EVENT_TIMEOUT_MS = 20_000;
 
 export type ConnectResult = { sessionId: string | null; connectMs: number };
-/** `generation` numbers page flows (newest wins); Swift passes one, the probe may not. */
-export type PrepareArgs = { imageUrl: string; prompt: string; seed?: number; generation?: number };
+/**
+ * `generation` numbers page flows (newest wins); Swift passes one, the probe may not.
+ * `reveal: false` runs the flow hidden (a page pre-animated behind the one on screen): its
+ * first frame doesn't show the video until `reveal()`. Defaults to true.
+ */
+export type PrepareArgs = { imageUrl: string; prompt: string; seed?: number; generation?: number; reveal?: boolean };
 export type PrepareResult = { width: number | null; height: number | null; prepareMs: number; generation: number };
-export type StartArgs = { generation?: number };
+/** `reveal`, if given, overrides what prepare recorded for this generation. */
+export type StartArgs = { generation?: number; reveal?: boolean };
 export type VideoFit = "cover" | "contain" | "fill";
 
 type Match = (message: OrbisMessage) => boolean;
@@ -50,6 +56,8 @@ export class LiveSceneController {
   /** A newer page flow ends the older one's waits at once, so their events can't cross. */
   private readonly gate = new GenerationGate((superseded) => this.waiters.rejectAll(superseded));
   private readonly firstFrames = new FirstFrameWatch();
+  /** Which flow's video may show, and whether its first frame came yet. */
+  private readonly reveals = new RevealState();
   private frameLoopActive = false;
   private started = false;
   private hasImage = false;
@@ -90,14 +98,17 @@ export class LiveSceneController {
   prepare(args: PrepareArgs): Promise<PrepareResult> {
     const generation = args.generation ?? this.gate.next();
     // A stale prepare is rejected by claim() and must not disturb the current page's watch.
-    if (generation > this.gate.latest) this.firstFrames.cancel();
+    if (generation > this.gate.latest) {
+      this.firstFrames.cancel();
+      this.reveals.request(generation, args.reveal ?? true);
+    }
     return this.gate.claim(generation, async (guard) => {
       const reactor = this.requireReactor();
       const begin = performance.now();
       const still = await fetchStill(args.imageUrl);
       guard();
       this.video.classList.remove("live");
-      if (this.started || this.hasImage || this.sessionDirty) await this.reset();
+      if (this.started || this.hasImage || this.sessionDirty) await this.resetSession();
       guard();
       this.sessionDirty = true;
       if (args.seed !== undefined) await this.command("set_seed", { seed: args.seed });
@@ -122,6 +133,7 @@ export class LiveSceneController {
   /** Starts page flow `generation` (the newest prepared one); its first frame is reported with it. */
   start(args: StartArgs = {}): Promise<{ startMs: number; generation: number }> {
     const generation = args.generation ?? this.gate.latest;
+    if (args.reveal !== undefined && this.gate.isCurrent(generation)) this.reveals.request(generation, args.reveal);
     return this.gate.follow(generation, async (guard) => {
       const begin = performance.now();
       this.startedAt = begin;
@@ -149,8 +161,25 @@ export class LiveSceneController {
     await this.command("resume");
   }
 
+  /**
+   * Shows page flow `generation`'s video (the parent folded to a page that was running
+   * hidden). Refused unless it is the newest flow. If its first frame came already the video
+   * appears now; otherwise its first frame shows it.
+   */
+  reveal(generation: number): RevealResult {
+    const result = this.reveals.reveal(generation, this.gate.latest);
+    if (result.revealed && result.hasFirstFrame) this.video.classList.add("live");
+    return result;
+  }
+
   /** Clears the image and prompt and stops generation; the next page needs prepare() again. */
   async reset(): Promise<void> {
+    this.reveals.clear();
+    await this.resetSession();
+  }
+
+  /** reset() without forgetting which flow is shown, for prepare's own reset. */
+  private async resetSession(): Promise<void> {
     this.clips.cancel();
     await this.commandThenEvent("reset", {}, isResetDone, COMMAND_EVENT_TIMEOUT_MS, "reset");
     this.started = false;
@@ -160,8 +189,12 @@ export class LiveSceneController {
     this.video.classList.remove("live");
   }
 
-  /** Records the video now playing for up to `maxSeconds`; `stopClip` sends it to Swift. */
-  startClip(maxSeconds: number): void {
+  /**
+   * Records the video now playing for up to `maxSeconds`; `stopClip` sends it to Swift.
+   * With `generation`, throws "superseded: …" instead if a newer page flow has claimed the session.
+   */
+  startClip(maxSeconds: number, generation?: number): void {
+    checkClipGeneration(generation, (candidate) => this.gate.isCurrent(candidate));
     const stream = this.video.srcObject;
     if (!(stream instanceof MediaStream)) throw new Error("no video to record");
     this.clips.start(stream, maxSeconds);
@@ -196,6 +229,7 @@ export class LiveSceneController {
     this.sessionDirty = false;
     this.preparedOnSession = false;
     this.firstFrames.cancel();
+    this.reveals.clear();
     this.video.classList.remove("live");
     this.video.srcObject = null;
     await reactor.disconnect();
@@ -303,7 +337,8 @@ export class LiveSceneController {
 
   /**
    * Reports generation `generation`'s first frame, which is when the still can hand over to
-   * video. Frames shown before its `generation_started` are leftovers and don't count.
+   * video. Frames shown before its `generation_started` are leftovers and don't count. A
+   * hidden flow reports it with `background: true` and leaves the video hidden.
    */
   private watchFirstFrame(generation: number): void {
     this.firstFrames.arm(generation);
@@ -321,13 +356,15 @@ export class LiveSceneController {
         return;
       }
       this.frameLoopActive = false;
-      this.video.classList.add("live");
+      const { background } = this.reveals.firstFrame(shown);
+      if (!background) this.video.classList.add("live");
       post({
         event: "firstFrame",
         generation: shown,
         sinceStartMs: this.startedAt === null ? null : Math.round(performance.now() - this.startedAt),
         width: this.video.videoWidth,
         height: this.video.videoHeight,
+        background,
       });
     };
     this.video.requestVideoFrameCallback(onFrame);

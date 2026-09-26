@@ -51,7 +51,7 @@ async function handlePath(apiKey: string, body: PathRequest) {
     body.bible,
     body.kid.firstName,
     body.brief.language,
-    body.input ? { text: body.input.text, speaker: body.input.speaker } : null,
+    body.input ? { text: body.input.text, speaker: body.input.speaker, kind: body.input.kind } : null,
     {
       callModel: (rewriteReason) => callPathModelFor(apiKey, body, rewriteReason),
       safety: buildSafetyDeps(apiKey),

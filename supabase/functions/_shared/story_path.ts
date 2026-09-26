@@ -162,12 +162,12 @@ export async function runPathTurn(
   existingBible: StoryBible,
   kidFirstName: string,
   language: string,
-  input: { text: string; speaker: "parent" | "kid" } | null,
+  input: { text: string; speaker: "parent" | "kid"; kind?: string } | null,
   deps: RunPathTurnDeps,
   earlierTexts: string[] = [],
 ): Promise<StoryPathResponseData> {
   if (input) {
-    const verdict = await checkInputSafety(input.text, input.speaker, kidFirstName, deps.inputSafety);
+    const verdict = await checkInputSafety(input.text, input.speaker, kidFirstName, deps.inputSafety, input.kind === "speech" ? "speech" : "typed");
     if (verdict.blocked) {
       return noneResponse(
         index,

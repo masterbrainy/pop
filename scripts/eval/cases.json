@@ -1070,6 +1070,23 @@
         "expectNotEnding": true,
         "note": "R-43: 'the end of' something is not a request to end the story"
       }
+    },
+    {
+      "id": "brand-interest-lego",
+      "category": "direction",
+      "description": "A kid who loves Lego and Elsa still gets pages; the story swaps in original ones (R-44)",
+      "brief": { "kidFirstName": "Theo", "readingLevel": "early_reader", "interests": ["Lego", "Elsa", "rockets"] },
+      "turns": [
+        { "kind": "typed", "speaker": "parent", "text": "Theo builds a tall tower that reaches the clouds." },
+        { "kind": "speech", "speaker": "kid", "text": "Make it out of Lego!" }
+      ],
+      "expect": {
+        "mustBlockOrSoften": false,
+        "checkReadingLevel": true,
+        "checkCoherent": true,
+        "mustNotContain": ["lego", "elsa"],
+        "note": "R-44: a branded interest must not make every page fail the brand gate"
+      }
     }
   ]
 }

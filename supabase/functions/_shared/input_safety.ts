@@ -8,7 +8,7 @@ import { gentleParentNote } from "./safety.ts";
 
 export interface InputSafetyDeps {
   moderateText: (text: string) => Promise<ModerationResult>;
-  /** The kid real-harm rubric check (PRD §8.6); only ever called for a kid speaker. */
+  /** The kid real-harm rubric check (PRD §8.6); called for a kid speaker, and for any speech (R-44). */
   checkRealHarm: (text: string) => Promise<RubricResult>;
   /**
    * A second opinion on a parent's own moderation-flagged direction (R-41
@@ -64,10 +64,21 @@ export async function checkInputSafety(
   speaker: "parent" | "kid",
   kidFirstName: string,
   deps: InputSafetyDeps,
+  kind: "speech" | "typed" = "typed",
 ): Promise<InputSafetyVerdict> {
   const trimmed = text.trim();
   if (trimmed === "") {
     return { blocked: false, parentNote: null, refusal: null };
+  }
+
+  // R-44: the speaker toggle defaults to the parent, so spoken words may be the
+  // kid's. Speech always gets the real-harm check; a parent's typed words don't.
+  if (speaker === "parent" && kind === "speech") {
+    const [moderation, rubric] = await Promise.all([deps.moderateText(trimmed), deps.checkRealHarm(trimmed)]);
+    if (!rubric.safe) {
+      return { blocked: true, parentNote: kidRealHarmNote(kidFirstName), refusal: "real_harm" };
+    }
+    return await secondOpinionFor(trimmed, moderation.flagged, deps);
   }
 
   if (speaker === "kid") {
@@ -85,11 +96,13 @@ export async function checkInputSafety(
   }
 
   const moderation = await deps.moderateText(trimmed);
-  if (moderation.flagged) {
-    const secondOpinion = await deps.checkDirectionSafety(trimmed);
-    if (!secondOpinion.safe) {
-      return { blocked: true, parentNote: gentleParentNote(), refusal: "unsafe" };
-    }
+  return await secondOpinionFor(trimmed, moderation.flagged, deps);
+}
+
+/** A parent's direction: blocked only when moderation flagged it and the second opinion agrees. */
+async function secondOpinionFor(text: string, flagged: boolean, deps: InputSafetyDeps): Promise<InputSafetyVerdict> {
+  if (flagged && !(await deps.checkDirectionSafety(text)).safe) {
+    return { blocked: true, parentNote: gentleParentNote(), refusal: "unsafe" };
   }
   return { blocked: false, parentNote: null, refusal: null };
 }

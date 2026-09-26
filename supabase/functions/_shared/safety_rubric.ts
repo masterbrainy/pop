@@ -54,6 +54,8 @@ Read the CHILD'S WORDS and reply with only a JSON object:
 export function directionSafetyCheckPrompt(): string {
   return `You check a parent's own instruction to a children's picture-book story engine for a genuine safety concern.
 Content moderation can over-trigger on ordinary, benign instructions — for example ending the story, asking for a happy or exciting moment, or a plain scene change — treat those as safe.
+Judge it for the youngest reader Pop! serves, a child as young as 3, against this rubric:
+${KID_SAFETY_RUBRIC}
 
 Read the PARENT'S INSTRUCTION and reply with only a JSON object:
 {"safe": boolean, "reason": string}

@@ -139,7 +139,7 @@ Deno.test("checkInputSafety runs the real-harm rubric only for a kid speaker, an
   assertEquals(verdict.refusal, "real_harm");
 });
 
-Deno.test("checkInputSafety never runs the real-harm rubric for a parent speaker", async () => {
+Deno.test("checkInputSafety never runs the real-harm rubric for a parent's typed direction", async () => {
   let rubricCalled = false;
   const deps = fakeDeps({
     checkRealHarm: async () => {
@@ -150,4 +150,32 @@ Deno.test("checkInputSafety never runs the real-harm rubric for a parent speaker
   const verdict = await checkInputSafety("anything", "parent", "Maya", deps);
   assertEquals(verdict.blocked, false);
   assertEquals(rubricCalled, false);
+});
+
+Deno.test("checkInputSafety runs the real-harm rubric on speech under the parent toggle, since a kid may be talking (R-44)", async () => {
+  const deps = fakeDeps({ checkRealHarm: async () => ({ safe: false, reason: "sounds like real harm" }) });
+  const verdict = await checkInputSafety("my uncle hurts me", "parent", "Maya", deps, "speech");
+  assertEquals(verdict, { blocked: true, parentNote: kidRealHarmNote("Maya"), refusal: "real_harm" });
+});
+
+Deno.test("checkInputSafety lets a parent's safe speech through after the real-harm check", async () => {
+  let rubricCalled = false;
+  const deps = fakeDeps({
+    checkRealHarm: async () => {
+      rubricCalled = true;
+      return { safe: true, reason: "" };
+    },
+  });
+  const verdict = await checkInputSafety("wake the dragon up", "parent", "Maya", deps, "speech");
+  assertEquals(verdict.blocked, false);
+  assertEquals(rubricCalled, true);
+});
+
+Deno.test("checkInputSafety still gives a parent's flagged speech the second opinion when it isn't real harm", async () => {
+  const deps = fakeDeps({
+    moderateText: async () => ({ flagged: true, categories: ["violence"] }),
+    checkDirectionSafety: async () => ({ safe: false, reason: "too scary" }),
+  });
+  const verdict = await checkInputSafety("something scary", "parent", "Maya", deps, "speech");
+  assertEquals(verdict, { blocked: true, parentNote: gentleParentNote(), refusal: "unsafe" });
 });

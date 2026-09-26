@@ -238,10 +238,36 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 
 ## 9. Demo run-book
 
-- **Warm-up (T-60 min until 0.3b measures it):** launch and open a New Book to warm Orbis, early enough for the measured start-up time but late enough that the session cap and token lifetime can't end the session on stage. The overlay should show 1 open session, status ready and the credit meter running, with enough Reactor credit left for the demo (PRD §9 credit budget).
-- **T-15 min:** a rehearsal pass; headphones or muted speakers so the animation's sound doesn't reach the mic; a wired connection or a hotspot.
-- **Live:** follow the script. If Reactor fails, the still fallback takes over automatically. If the network fails, show the saved golden book.
-- **After:** KILL, then run the admin-only `reactor-sessions` cleanup; confirm 0 open sessions on the account.
+**Setup (T-60 min)**
+1. Close heavy apps; the load average should be under about 10, or DeviceHub's hinge lags and the simulator stutters (§3).
+2. Open DeviceHub with the Duo booted. If the hinge slider is missing, run `defaults write -g com.apple.dt.coredevicepop.useInternalV68ActionBar -bool YES` and reopen DeviceHub.
+3. Restore the golden book, which is the network-failure fallback: `scripts/golden-book.sh restore`, then `scripts/golden-book.sh show`.
+4. Install the current build (`scripts/sim.sh run`). Check that `scripts/reactor-sessions.sh list` shows 0 open sessions and there's Reactor credit for the demo (PRD §9).
+5. Open the Duo with the slider. If the inner screen stays black, click it once to wake it.
+
+**Rehearsal (T-15 min):** make a two-page book once. Mute the Mac, so Orbis sound can't reach the mic. Use a wired connection or a hotspot.
+
+**Live:**
+1. **Bookshelf.** Tap New book, fill in the brief (first name, interests), and open.
+2. **Tell.** Type or speak page 1. The words land left; about 7 s later the picture lands right and comes alive about 10 s after that.
+3. **Direct.** Type a change ("make the kite purple"). The page is redrawn, and the character keeps its look.
+4. **Turn.** Fold slowly with the slider to about 100°, pause, then open flat. The page turns and the next page is ready for words. The in-app panel (triple tap) turns pages if the hinge lags.
+5. **You continue.** Tap the sparkles: the story writes the next bit itself.
+6. **Pop-up.** Fold to about 90° and hold: the scene tilts back and the characters stand up.
+7. **Finish.** Tap Finish, or close the Duo. The book gets a title and a painted cover and is saved.
+8. **Replay.** Open it from the bookshelf. The same words, pictures and clips play back with no network.
+
+**If something fails**
+
+| Failure | What the audience sees | What to do |
+|---|---|---|
+| Reactor down or slow | Pictures stay still with a slow pan | Carry on; the book still works. KILL in the debug panel if needed |
+| Network down | "Pop! is offline" note | Open the golden book from the bookshelf and demo reading, fold-to-turn and the pop-up |
+| Safety gate refuses a line | A gentle note asks for a friendlier direction | Give a gentler line; the eval set's false-block rate is 7% |
+| Speech fails | A note under the story bar | Type instead |
+| Hinge lags | Folds don't turn | Triple-tap for the hinge panel and use Turn and Pop |
+
+**After:** KILL, then `scripts/reactor-sessions.sh list` (expect 0). If needed, `scripts/reactor-sessions.sh kill`.
 
 ## 10. Decision log
 

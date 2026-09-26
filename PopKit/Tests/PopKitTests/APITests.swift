@@ -12,19 +12,21 @@ struct APITests {
         try JSONSerialization.jsonObject(with: data) as! [String: Any]
     }
 
-    @Test func storyTurnRequestEncodesContractFieldNamesForTurnMode() throws {
-        let request = StoryTurnRequest.turn(
+    @Test func storyTurnRequestEncodesContractFieldNamesForPathMode() throws {
+        let request = StoryTurnRequest(
+            mode: .path,
             bookId: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
             kid: StoryTurnKid(firstName: "Maya", readingLevel: .earlyReader, interests: ["dinosaurs"]),
             brief: StoryBrief(interests: ["dinosaurs"], teach: "sharing"),
             settings: ParentSettings(),
             bible: .empty,
             pages: [StoryTurnPageRef(index: 0, text: "Once upon a time")],
-            current: StoryTurnCurrent(index: 1, text: ""),
-            input: StoryTurnInput(kind: .speech, speaker: .parent, text: "a dragon appears")
+            input: StoryTurnInput(kind: .speech, speaker: .parent, text: "a dragon appears"),
+            index: 1
         )
         let json = try object(from: encoder.encode(request))
-        #expect(json["mode"] as? String == "turn")
+        #expect(json["mode"] as? String == "path")
+        #expect(json["index"] as? Int == 1)
         #expect(json["bookId"] as? String == "00000000-0000-0000-0000-000000000001")
         let kid = json["kid"] as? [String: Any]
         #expect(kid?["firstName"] as? String == "Maya")
@@ -32,18 +34,18 @@ struct APITests {
         let input = json["input"] as? [String: Any]
         #expect(input?["kind"] as? String == "speech")
         #expect(input?["speaker"] as? String == "parent")
-        #expect(json["current"] != nil)
+        #expect(json["current"] == nil)
     }
 
-    @Test func storyTitleRequestOmitsCurrentAndInput() throws {
+    @Test func storyTitleRequestOmitsInputAndIndex() throws {
         let request = StoryTurnRequest.title(
             bookId: UUID(), kid: StoryTurnKid(firstName: "Rex", readingLevel: .reader, interests: []),
             brief: StoryBrief(interests: []), settings: ParentSettings(), bible: .empty, pages: []
         )
         let json = try object(from: encoder.encode(request))
         #expect(json["mode"] as? String == "title")
-        #expect(json["current"] == nil)
         #expect(json["input"] == nil)
+        #expect(json["index"] == nil)
     }
 
     @Test func storyTurnKidAdapterDropsTheIdField() throws {
@@ -62,30 +64,40 @@ struct APITests {
         #expect(ref.text == "The fox ran home")
     }
 
-    @Test func storyTurnResponseDecodesEveryAction() throws {
+    @Test func storyTurnResponseDecodesAPageWithAnEndingFlagAndNoBreakSuggested() throws {
         let json = Data(#"""
         {
-          "action": "new_page",
-          "page": { "index": 1, "text": "The fox found a friend.", "artPrompt": "a fox and a rabbit", "breakSuggested": true },
+          "action": "page",
+          "page": { "index": 1, "text": "The fox found a friend.", "artPrompt": "a fox and a rabbit", "isEnding": true },
           "bible": { "title": null, "setting": "a forest", "characters": [], "directions": ["make it rain"] },
           "parentNote": null,
           "timings": { "modelMs": 812, "safetyMs": 40 }
         }
         """#.utf8)
         let response = try decoder.decode(StoryTurnResponse.self, from: json)
-        #expect(response.action == .newPage)
-        #expect(response.page?.breakSuggested == true)
+        #expect(response.action == .page)
+        #expect(response.page?.isEnding == true)
         #expect(response.bible.directions == ["make it rain"])
         #expect(response.parentNote == nil)
         #expect(response.timings == StoryTurnTimings(modelMs: 812, safetyMs: 40))
+    }
 
-        for action in ["append", "revise_current", "none"] {
-            let variant = Data(#"""
-            { "action": "\#(action)", "page": null, "bible": { "title": null, "setting": "", "characters": [], "directions": [] },
-              "parentNote": "let's try something else", "timings": { "modelMs": 0, "safetyMs": 0 } }
-            """#.utf8)
-            _ = try decoder.decode(StoryTurnResponse.self, from: variant)
-        }
+    @Test func storyTurnResponseDecodesAPageWithNoEndingFlagAndAnActionOfNone() throws {
+        let withoutEnding = Data(#"""
+        { "action": "page", "page": { "index": 0, "text": "Once upon a time.", "artPrompt": "a meadow" },
+          "bible": { "title": null, "setting": "", "characters": [], "directions": [] },
+          "parentNote": null, "timings": { "modelMs": 0, "safetyMs": 0 } }
+        """#.utf8)
+        let page = try decoder.decode(StoryTurnResponse.self, from: withoutEnding)
+        #expect(page.page?.isEnding == nil)
+
+        let refused = Data(#"""
+        { "action": "none", "page": null, "bible": { "title": null, "setting": "", "characters": [], "directions": [] },
+          "parentNote": "let's try something else", "timings": { "modelMs": 0, "safetyMs": 0 } }
+        """#.utf8)
+        let none = try decoder.decode(StoryTurnResponse.self, from: refused)
+        #expect(none.action == .none)
+        #expect(none.parentNote == "let's try something else")
     }
 
     @Test func artRequestAndResponseRoundTrip() throws {

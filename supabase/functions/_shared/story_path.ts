@@ -7,7 +7,7 @@
 import type { ReadingLevel } from "./reading_levels.ts";
 import { withinWordLimit } from "./reading_levels.ts";
 import { gentleParentNote, runSafetyGate, type SafetyDeps } from "./safety.ts";
-import { checkInputSafety, type InputSafetyDeps } from "./input_safety.ts";
+import { checkInputSafety, type InputSafetyDeps, type Refusal } from "./input_safety.ts";
 import { mergeBibleCharacters, stripRepeatedEarlierText, trimToLimit } from "./story_turn.ts";
 import type { StoryBible } from "./schemas.ts";
 import type { StoryPageModelOutput, StoryPathModelOutput } from "./story_path_schema.ts";
@@ -25,6 +25,8 @@ export interface StoryPathResponseData {
   page: PathPageResponse;
   bible: StoryBible;
   parentNote: string | null;
+  /** Why a "none" was refused (R-41): "real_harm", "unsafe", or null (safe, or nothing left to write). */
+  refusal: Refusal;
   timings: { modelMs: number; safetyMs: number };
 }
 
@@ -51,12 +53,14 @@ function noneResponse(
   existingBible: StoryBible,
   timings: { modelMs: number; safetyMs: number },
   parentNote: string = gentleParentNote(),
+  refusal: Refusal = "unsafe",
 ): StoryPathResponseData {
   return {
     action: "none",
     page: { index, text: "", artPrompt: "", question: "", isEnding: false },
     bible: existingBible,
     parentNote,
+    refusal,
     timings,
   };
 }
@@ -116,7 +120,13 @@ export async function runPathTurn(
   if (input) {
     const verdict = await checkInputSafety(input.text, input.speaker, kidFirstName, deps.inputSafety);
     if (verdict.blocked) {
-      return noneResponse(index, existingBible, { modelMs: 0, safetyMs: 0 }, verdict.parentNote ?? gentleParentNote());
+      return noneResponse(
+        index,
+        existingBible,
+        { modelMs: 0, safetyMs: 0 },
+        verdict.parentNote ?? gentleParentNote(),
+        verdict.refusal,
+      );
     }
   }
 
@@ -147,6 +157,7 @@ export async function runPathTurn(
         path,
       },
       parentNote: attempt.output.parentNote,
+      refusal: null,
       timings,
     };
   };
@@ -200,7 +211,7 @@ export async function runPageTurn(
   earlierTexts: string[] = [],
 ): Promise<StoryPathResponseData> {
   if (index >= existingBible.path.length) {
-    return noneResponse(index, existingBible, { modelMs: 0, safetyMs: 0 }, PAST_ENDING_NOTE);
+    return noneResponse(index, existingBible, { modelMs: 0, safetyMs: 0 }, PAST_ENDING_NOTE, null);
   }
   const isEnding = index === existingBible.path.length - 1;
 
@@ -223,6 +234,7 @@ export async function runPageTurn(
     },
     bible: existingBible,
     parentNote: attempt.output.parentNote,
+    refusal: null,
     timings,
   });
 

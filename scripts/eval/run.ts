@@ -19,7 +19,7 @@ import {
   checkWordLimit,
   isFalseBlock,
 } from "./checks.ts";
-import type { CaseResult, EvalCase, EvalSummary, TurnOutcome } from "./types.ts";
+import type { CaseResult, EvalCase, EvalSummary, Speaker, TurnOutcome } from "./types.ts";
 
 const SCRIPT_DIR = new URL(".", import.meta.url);
 const REPO_ROOT = new URL("../../", SCRIPT_DIR);
@@ -76,9 +76,10 @@ interface StoryTurnCallResult {
   ok: boolean;
   errorCode?: string;
   action?: string;
-  page?: { index: number; text: string; artPrompt: string; breakSuggested: boolean };
-  bible?: unknown;
+  page?: { index: number; text: string; artPrompt: string; question: string; isEnding: boolean };
+  bible?: RunState["bible"];
   parentNote?: string | null;
+  refusal?: string | null;
   timings?: { modelMs: number; safetyMs: number };
 }
 
@@ -114,31 +115,26 @@ async function callStoryTurn(
 }
 
 interface RunState {
-  bible: { title: string | null; setting: string; characters: unknown[]; directions: string[] };
+  bible: { title: string | null; setting: string; characters: unknown[]; directions: string[]; path: string[] };
+  /** Pages shown so far, oldest first — the "path"-mode request's own `pages` field. */
   pages: { index: number; text: string }[];
-  current: { index: number; text: string };
 }
 
 function initialState(): RunState {
   return {
-    bible: { title: null, setting: "", characters: [], directions: [] },
+    bible: { title: null, setting: "", characters: [], directions: [], path: [] },
     pages: [],
-    current: { index: 0, text: "" },
   };
 }
 
-function applyAction(state: RunState, action: string, page: { index: number; text: string }): RunState {
-  if (action === "new_page") {
-    const finishedPages = state.current.text.trim() === ""
-      ? state.pages
-      : [...state.pages, { index: state.current.index, text: state.current.text }];
-    return { ...state, pages: finishedPages, current: { index: page.index, text: page.text } };
-  }
-  if (action === "append" || action === "revise_current") {
-    return { ...state, current: { index: page.index, text: page.text } };
-  }
-  // action === "none": nothing changes.
-  return state;
+/**
+ * The eval's turns[] predate P-04's path/direction split (EvalTurn has no
+ * notion of "no input"), so a "continue" turn (or one with empty text) maps
+ * to path mode's `input: null` — plan naturally, with nothing new to fold in.
+ */
+function toDirectionInput(turn: EvalCase["turns"][number]): { kind: "speech" | "typed"; speaker: Speaker; text: string } | null {
+  if (turn.kind === "continue" || turn.text.trim() === "") return null;
+  return { kind: turn.kind, speaker: turn.speaker, text: turn.text };
 }
 
 async function runCase(
@@ -154,8 +150,12 @@ async function runCase(
 
   for (let i = 0; i < evalCase.turns.length; i++) {
     const turn = evalCase.turns[i];
+    // Every turn — the first (index 0, brief-driven) and every later one — is
+    // a "path" call: it (re)plans the path from `index` on and writes that
+    // page. `index` is simply how many pages are already shown.
+    const index = state.pages.length;
     const body = {
-      mode: "turn",
+      mode: "path",
       bookId,
       kid: {
         firstName: evalCase.brief.kidFirstName,
@@ -171,8 +171,8 @@ async function runCase(
       settings: { avoidTopics: [] },
       bible: state.bible,
       pages: state.pages,
-      current: state.current,
-      input: { kind: turn.kind, speaker: turn.speaker, text: turn.text },
+      index,
+      input: toDirectionInput(turn),
     };
 
     const result = await callStoryTurn(functionUrl, anonKey, accessToken, body);
@@ -180,10 +180,11 @@ async function runCase(
       turns.push({
         turnIndex: i,
         action: "error",
-        pageIndex: state.current.index,
+        pageIndex: index,
         pageText: "",
         artPrompt: "",
         parentNote: null,
+        refusal: null,
         modelMs: 0,
         safetyMs: 0,
         httpStatus: result.httpStatus,
@@ -199,17 +200,17 @@ async function runCase(
       pageText: result.page.text,
       artPrompt: result.page.artPrompt,
       parentNote: result.parentNote ?? null,
+      refusal: result.refusal ?? null,
       modelMs: result.timings?.modelMs ?? 0,
       safetyMs: result.timings?.safetyMs ?? 0,
       httpStatus: result.httpStatus,
     });
 
-    state = applyAction(
-      state,
-      result.action ?? "none",
-      { index: result.page.index, text: result.page.text },
-    );
-    if (result.bible) state = { ...state, bible: result.bible as RunState["bible"] };
+    if (result.bible) state = { ...state, bible: result.bible };
+    if (result.action === "page") {
+      state = { ...state, pages: [...state.pages, { index: result.page.index, text: result.page.text }] };
+    }
+    // action === "none": nothing new was shown; the next turn (if any) tries the same index again.
 
     if (i < evalCase.turns.length - 1) await sleep(DELAY_MS);
   }
@@ -234,13 +235,18 @@ async function runCase(
       const requireParentNote = evalCase.expect.requireParentNoteOnBlock ?? false;
       for (const t of turns) {
         if (t.action === "error") continue;
-        // The kid's own disclosure turn must be refused with a note (R-41); the
-        // parent's turns around it only need to stay safe.
-        const isKidTurn = evalCase.turns[t.turnIndex]?.speaker === "kid";
+        // The kid's own disclosure turn must be refused with a note and
+        // refusal "real_harm" (R-41, R-41 residual); the parent's turns
+        // around it only need to stay safe, since the real-harm rubric
+        // never runs on their words.
+        const speaker: Speaker = evalCase.turns[t.turnIndex]?.speaker ?? "parent";
+        const isKidTurn = speaker === "kid";
         const safety = requireParentNote && isKidTurn
           ? checkKidDisclosureOutcome({
             action: t.action,
             parentNote: t.parentNote,
+            refusal: t.refusal,
+            speaker,
             pageText: t.pageText,
             artPrompt: t.artPrompt,
             unsafeIndicators,

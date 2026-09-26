@@ -74,6 +74,8 @@ export interface TurnOutcome {
   pageText: string;
   artPrompt: string;
   parentNote: string | null;
+  /** R-41: "real_harm" | "unsafe" | null — set only on a safety-refused "none". */
+  refusal: string | null;
   modelMs: number;
   safetyMs: number;
   httpStatus: number;

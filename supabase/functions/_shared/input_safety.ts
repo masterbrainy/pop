@@ -12,10 +12,15 @@ export interface InputSafetyDeps {
   checkRealHarm: (text: string) => Promise<RubricResult>;
 }
 
+/** Why an input (or, in story_path.ts/story_turn.ts, an output) was refused (docs/CONTRACTS.md `refusal`; R-41). */
+export type Refusal = "real_harm" | "unsafe" | null;
+
 export interface InputSafetyVerdict {
   blocked: boolean;
   /** Non-null exactly when blocked is true. */
   parentNote: string | null;
+  /** Non-null exactly when blocked is true: "real_harm" for a kid speaker, "unsafe" for a parent. */
+  refusal: Refusal;
 }
 
 /** PRD §8.6: "a kid's words that sound like real harm ... only parentNote mentions them." */
@@ -39,23 +44,22 @@ export async function checkInputSafety(
 ): Promise<InputSafetyVerdict> {
   const trimmed = text.trim();
   if (trimmed === "") {
-    return { blocked: false, parentNote: null };
+    return { blocked: false, parentNote: null, refusal: null };
   }
 
   const moderation = await deps.moderateText(trimmed);
   if (moderation.flagged) {
-    return {
-      blocked: true,
-      parentNote: speaker === "kid" ? kidRealHarmNote(kidFirstName) : gentleParentNote(),
-    };
+    return speaker === "kid"
+      ? { blocked: true, parentNote: kidRealHarmNote(kidFirstName), refusal: "real_harm" }
+      : { blocked: true, parentNote: gentleParentNote(), refusal: "unsafe" };
   }
 
   if (speaker === "kid") {
     const rubric = await deps.checkRealHarm(trimmed);
     if (!rubric.safe) {
-      return { blocked: true, parentNote: kidRealHarmNote(kidFirstName) };
+      return { blocked: true, parentNote: kidRealHarmNote(kidFirstName), refusal: "real_harm" };
     }
   }
 
-  return { blocked: false, parentNote: null };
+  return { blocked: false, parentNote: null, refusal: null };
 }

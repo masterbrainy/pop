@@ -24,7 +24,7 @@ Deno.test("checkInputSafety treats empty input as trivially safe and skips both 
     },
   });
   const verdict = await checkInputSafety("   ", "kid", "Maya", deps);
-  assertEquals(verdict, { blocked: false, parentNote: null });
+  assertEquals(verdict, { blocked: false, parentNote: null, refusal: null });
   assertEquals(moderateCalled, false);
   assertEquals(rubricCalled, false);
 });
@@ -49,21 +49,24 @@ Deno.test("checkInputSafety blocks moderation-flagged input from a kid with the 
   const verdict = await checkInputSafety("something unsafe", "kid", "Maya", deps);
   assertEquals(verdict.blocked, true);
   assertEquals(verdict.parentNote, kidRealHarmNote("Maya"));
+  assertEquals(verdict.refusal, "real_harm");
   assertEquals(rubricCalled, false);
 });
 
-Deno.test("checkInputSafety blocks moderation-flagged input from a parent with the generic gentle redirect note", async () => {
+Deno.test("checkInputSafety blocks moderation-flagged input from a parent with the generic gentle redirect note and refusal 'unsafe'", async () => {
   const deps = fakeDeps({ moderateText: async () => ({ flagged: true, categories: [] }) });
   const verdict = await checkInputSafety("something unsafe", "parent", "Maya", deps);
   assertEquals(verdict.blocked, true);
   assertEquals(verdict.parentNote, gentleParentNote());
+  assertEquals(verdict.refusal, "unsafe");
 });
 
-Deno.test("checkInputSafety runs the real-harm rubric only for a kid speaker, and blocks with the kid note when it fails", async () => {
+Deno.test("checkInputSafety runs the real-harm rubric only for a kid speaker, and blocks with the kid note and refusal 'real_harm' when it fails", async () => {
   const deps = fakeDeps({ checkRealHarm: async () => ({ safe: false, reason: "sounds like real harm" }) });
   const verdict = await checkInputSafety("my uncle hurts me", "kid", "Maya", deps);
   assertEquals(verdict.blocked, true);
   assertEquals(verdict.parentNote, kidRealHarmNote("Maya"));
+  assertEquals(verdict.refusal, "real_harm");
 });
 
 Deno.test("checkInputSafety never runs the real-harm rubric for a parent speaker", async () => {

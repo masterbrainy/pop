@@ -142,9 +142,10 @@ Deno.test("runPathTurn falls back to none with a gentle parentNote after two fai
   assertEquals(result.action, "none");
   assertEquals(result.bible, emptyBible);
   assertEquals(result.parentNote !== null, true);
+  assertEquals(result.refusal, "unsafe");
 });
 
-Deno.test("runPathTurn blocks a flagged direction before any model call, returning none with a calm note", async () => {
+Deno.test("runPathTurn blocks a flagged direction from a kid before any model call, returning none with refusal 'real_harm'", async () => {
   let modelCalled = false;
   const deps: RunPathTurnDeps = {
     callModel: async () => {
@@ -160,6 +161,24 @@ Deno.test("runPathTurn blocks a flagged direction before any model call, returni
   assertEquals(result.bible, bible);
   assertEquals(modelCalled, false);
   assertEquals(result.parentNote !== null, true);
+  assertEquals(result.refusal, "real_harm");
+});
+
+Deno.test("runPathTurn blocks a flagged direction from a parent, returning none with refusal 'unsafe'", async () => {
+  const deps: RunPathTurnDeps = {
+    callModel: async () => ({ output: pathOutput(), modelMs: 10 }),
+    safety: { moderateText: async () => ({ flagged: false, categories: [] }), checkRubric: async () => ({ safe: true, reason: "" }) },
+    inputSafety: { moderateText: async () => ({ flagged: true, categories: ["violence"] }), checkRealHarm: async () => ({ safe: true, reason: "" }) },
+  };
+  const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
+  const result = await runPathTurn("early_reader", 1, bible, "Maya", { text: "unsafe direction", speaker: "parent" }, deps);
+  assertEquals(result.refusal, "unsafe");
+});
+
+Deno.test("runPathTurn returns refusal null on a successful page", async () => {
+  const deps = pathDepsFor([pathOutput()], [true]);
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", null, deps);
+  assertEquals(result.refusal, null);
 });
 
 // --- runPageTurn ---
@@ -172,6 +191,7 @@ Deno.test("runPageTurn writes page index from the existing beat, with no re-plan
   assertEquals(result.page.index, 0);
   assertEquals(result.page.isEnding, false);
   assertEquals(result.bible, bible);
+  assertEquals(result.refusal, null);
 });
 
 Deno.test("runPageTurn reports isEnding true for the path's last index", async () => {
@@ -196,6 +216,7 @@ Deno.test("runPageTurn past the path's end returns none with no model call", asy
   assertEquals(result.parentNote, "The story has reached its ending.");
   assertEquals(modelCalled, false);
   assertEquals(result.bible, bible);
+  assertEquals(result.refusal, null);
 });
 
 Deno.test("runPageTurn rewrites once when the first attempt fails the gate", async () => {
@@ -214,6 +235,7 @@ Deno.test("runPageTurn falls back to none after two failed attempts", async () =
   const result = await runPageTurn("listener", 0, bible, deps);
   assertEquals(result.action, "none");
   assertEquals(result.parentNote !== null, true);
+  assertEquals(result.refusal, "unsafe");
 });
 
 Deno.test("runPageTurn drops a page that retells an earlier shown page", async () => {

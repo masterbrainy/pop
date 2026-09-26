@@ -139,3 +139,70 @@ struct SessionControllerTests {
         #expect(creditsAfterKill == 0)
     }
 }
+
+/// R-30: an Orbis session must never be left running after KILL, and the server must know
+/// every session so its cleanup can end leftovers.
+struct SessionControllerTeardownTests {
+    private let t0 = Date(timeIntervalSince1970: 2_000_000)
+
+    private func readyServer() async -> FakePopServer {
+        let server = FakePopServer()
+        let expiresAt = t0.addingTimeInterval(3600).timeIntervalSince1970
+        await server.onReactorMint { ReactorMintResponse(jwt: "jwt-1", expiresAt: expiresAt) }
+        return server
+    }
+
+    @Test func reportsEachConnectedSessionToTheServer() async {
+        let server = await readyServer()
+        let controller = SessionController(server: server, transport: FakeSceneTransport(), clock: FakeSessionClock(now: t0))
+        await controller.warmUp()
+        #expect(await server.reportCalls == ["session-for-jwt-1"])
+    }
+
+    @Test func killAsksTheServerToEndLeftoverSessions() async {
+        let server = await readyServer()
+        let transport = FakeSceneTransport()
+        let controller = SessionController(server: server, transport: transport, clock: FakeSessionClock(now: t0))
+        await controller.warmUp()
+        await controller.kill()
+        #expect(await server.cleanupCallCount == 1)
+        #expect(await transport.disconnectCallCount == 1)
+    }
+
+    @Test func killDuringAConnectDisconnectsTheConnectionWhenItLands() async throws {
+        let server = await readyServer()
+        let transport = FakeSceneTransport()
+        await transport.onConnect { jwt, _ in
+            try await Task.sleep(for: .milliseconds(150))
+            return "session-for-\(jwt)"
+        }
+        let controller = SessionController(server: server, transport: transport, clock: FakeSessionClock(now: t0))
+        let warming = Task { await controller.warmUp() }
+        try await Task.sleep(for: .milliseconds(40))
+        await controller.kill()
+        await warming.value
+
+        #expect(await controller.state.phase == .killed)
+        #expect(await transport.disconnectCallCount >= 1)
+        #expect(await controller.credits() == 0)
+    }
+
+    @Test func killDuringAReconnectDisconnectsTheLateConnection() async throws {
+        let server = await readyServer()
+        let transport = FakeSceneTransport()
+        await transport.onConnect { jwt, attempt in
+            if attempt > 1 { try await Task.sleep(for: .milliseconds(150)) }
+            return "session-for-\(jwt)"
+        }
+        let controller = SessionController(server: server, transport: transport, clock: FakeSessionClock(now: t0))
+        await controller.warmUp()
+        await controller.reportDisconnected("ICE dropped")
+        try await Task.sleep(for: .milliseconds(40))
+        let disconnectsBeforeKill = await transport.disconnectCallCount
+        await controller.kill()
+        try await Task.sleep(for: .milliseconds(250))
+
+        #expect(await controller.state.phase == .killed)
+        #expect(await transport.disconnectCallCount > disconnectsBeforeKill)
+    }
+}

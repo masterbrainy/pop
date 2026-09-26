@@ -106,6 +106,21 @@ final class StoryMaker {
         log.append("ended")
     }
 
+    /// The app went to the background: end the Orbis session so nothing keeps billing (R-30).
+    func pauseLive() async {
+        scriptLog?.append("app in background: ending the live session")
+        await stopListening()
+        await live.kill()
+    }
+
+    /// Back in the foreground: warm Orbis again and bring the page on screen back to life.
+    func resumeLive() async {
+        scriptLog?.append("app active again: warming the live session")
+        guard let server = services.server, reader.book.status == .draft else { return }
+        await live.warmUp(server: server)
+        pageChanged(to: reader.currentPage)
+    }
+
     func end() async {
         turnTask?.cancel()
         await stopListening()

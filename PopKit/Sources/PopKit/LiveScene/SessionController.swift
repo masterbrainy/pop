@@ -62,11 +62,23 @@ public actor SessionController {
         await apply(.disconnected(reason))
     }
 
-    /// Ends the session for good: cancels any pending reconnect and disconnects.
+    /// Ends the session for good: cancels any pending reconnect, disconnects, and asks the
+    /// server to end any of this user's sessions still open (R-30). A connect still in
+    /// flight is disconnected as soon as it lands (`performConnect`).
     public func kill() async {
         backoffTask?.cancel()
         backoffTask = nil
+        let wasConnecting = isConnecting
         await apply(.killRequested)
+        if wasConnecting { await transport.disconnect() }
+        _ = try? await server.reactorCleanup()
+    }
+
+    private var isConnecting: Bool {
+        switch state.phase {
+        case .connecting, .minting, .reconnecting: true
+        default: false
+        }
     }
 
     /// Dollars accumulated since the session first connected (Stable's rate), or 0
@@ -113,6 +125,12 @@ public actor SessionController {
     private func performConnect(jwt: String) async {
         do {
             let sessionId = try await transport.connect(jwt: jwt)
+            // Killed (or given up) while connecting: this connection must not stay open.
+            guard state.phase != .killed, state.phase != .fallback else {
+                await transport.disconnect()
+                return
+            }
+            try? await server.reactorReport(sessionId: sessionId)
             await apply(.connected(sessionId: sessionId))
         } catch let error as ServerError {
             await apply(.connectFailed(error.message))

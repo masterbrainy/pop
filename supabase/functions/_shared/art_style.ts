@@ -1,7 +1,13 @@
 // One locked art style for every picture in a book (CONTRACTS.md §3 `art`, PRD P2).
 
+// The leading phrase alone, reused by motion-prompt (0.3a probe finding,
+// 2026-09-26): Orbis drifted from the watercolor still toward a photoreal
+// look, so every motion-prompt `scene` must start with these exact words too
+// — not just the `art` function's images.
+export const ART_STYLE_PREFIX = "soft watercolor and colored pencil children's picture-book illustration";
+
 export const ART_STYLE =
-  "soft watercolor and colored pencil children's picture-book illustration, " +
+  `${ART_STYLE_PREFIX}, ` +
   "warm gentle natural light, gentle rounded friendly shapes, textured paper look, " +
   "no text or letters anywhere in the image, no borders or frames, no captions or signatures";
 

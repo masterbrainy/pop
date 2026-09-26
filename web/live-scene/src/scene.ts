@@ -2,6 +2,7 @@ import { Reactor, type ConnectionStats, type ReactorError, type ReactorMessage }
 
 import { log, post } from "./bridge.ts";
 import { ORBIS_MODEL_NAME, ORBIS_TRACKS, chunkIndexOf, describeMessage, unwrapOrbisMessage, type OrbisMessage } from "./orbis.ts";
+import { ClipRecorder, type ClipResult } from "./clip.ts";
 import { MessageWaiters } from "./waiters.ts";
 
 const IMAGE_READY_TIMEOUT_MS = 30_000;
@@ -47,6 +48,7 @@ export class LiveSceneController {
   private hasImage = false;
   private startedAt: number | null = null;
   private watchingForFirstFrame = false;
+  private readonly clips = new ClipRecorder();
 
   constructor(private readonly video: HTMLVideoElement) {}
 
@@ -105,11 +107,27 @@ export class LiveSceneController {
 
   /** Clears the image and prompt and stops generation; the next page needs prepare() again. */
   async reset(): Promise<void> {
+    this.clips.cancel();
     await this.commandThenEvent("reset", {}, isResetDone, COMMAND_EVENT_TIMEOUT_MS, "reset");
     this.started = false;
     this.hasImage = false;
     this.watchingForFirstFrame = false;
     this.video.classList.remove("live");
+  }
+
+  /** Records the video now playing for up to `maxSeconds`; `stopClip` sends it to Swift. */
+  startClip(maxSeconds: number): void {
+    const stream = this.video.srcObject;
+    if (!(stream instanceof MediaStream)) throw new Error("no video to record");
+    this.clips.start(stream, maxSeconds);
+  }
+
+  async stopClip(): Promise<ClipResult> {
+    return this.clips.stop();
+  }
+
+  cancelClip(): void {
+    this.clips.cancel();
   }
 
   setFit(fit: VideoFit): void {
@@ -121,6 +139,7 @@ export class LiveSceneController {
     const reactor = this.reactor;
     if (!reactor) return;
     this.reactor = null;
+    this.clips.cancel();
     this.waiters.rejectAll(new Error("disconnected"));
     this.started = false;
     this.hasImage = false;

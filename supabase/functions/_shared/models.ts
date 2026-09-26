@@ -11,11 +11,15 @@ export const TITLE_MODEL = STORY_MODEL;
 
 export const MODERATION_MODEL = "omni-moderation-latest";
 export const TTS_MODEL = "gpt-4o-mini-tts";
-// Matches the exact model id OpenAI's own realtime transcription-session
-// example uses, and it's in this key's model list.
-export const TRANSCRIBE_MODEL = "gpt-transcribe";
+// Matches the app's Realtime client (ROADMAP §2): checked live against the GA
+// /v1/realtime/client_secrets endpoint on 2026-09-26 (HTTP 200), and it's in
+// this key's model list.
+export const TRANSCRIBE_MODEL = "gpt-4o-transcribe";
 
 export const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
-export const GEMINI_TEXT_MODEL = "gemini-2.5-flash";
+// gemini-2.5-flash returned HTTP 404 live on 2026-09-26 ("no longer available
+// to new users"; Google's error pointed at this replacement), even though it
+// still appears in this key's /v1beta/models listing.
+export const GEMINI_TEXT_MODEL = "gemini-3.8-flash";
 
 export const REACTOR_MODEL = "reactor/visko-orbis-stable";

@@ -22,7 +22,8 @@ public enum SampleBooks {
                 id: UUID(uuidString: String(format: "00000000-0000-4000-8000-%012d", index + 1))!,
                 index: index,
                 text: text,
-                artPrompt: "A little red fox named Pip. \(text)"
+                artPrompt: "A little red fox named Pip. \(text)",
+                stillPath: "asset:sample-fox-\(index)"
             )
         }
         return Book(

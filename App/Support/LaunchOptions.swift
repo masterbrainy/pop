@@ -1,4 +1,5 @@
 import Foundation
+import PopKit
 
 /// Launch arguments used for automation, for example `xcrun simctl launch booted com.masterbrainy.pop -probe hinge`.
 /// Arguments of the form `-key value` land in UserDefaults' argument domain.
@@ -12,5 +13,16 @@ enum LaunchOptions {
     static var probeSeconds: Int {
         let value = UserDefaults.standard.integer(forKey: "probeSeconds")
         return value > 0 ? value : 30
+    }
+
+    /// `-screen book` opens the sample book directly (for automated checks).
+    static var screen: String? { UserDefaults.standard.string(forKey: "screen") }
+
+    /// `-debugHinge YES` hands the hinge to the debug panel from launch.
+    static var debugHinge: Bool { UserDefaults.standard.bool(forKey: "debugHinge") }
+
+    /// `-hingeScript open,turn,pop` plays scripted hinge moves at launch.
+    static var hingeScript: [HingeScript.Move] {
+        HingeScript.parse(UserDefaults.standard.string(forKey: "hingeScript") ?? "")
     }
 }

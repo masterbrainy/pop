@@ -20,6 +20,14 @@ Keep **DeviceHub** open (`Xcode-beta.app/Contents/Applications/DeviceHub.app`); 
 
 Keys stay in `supabase/functions/.env`. The scripts read them into shell variables, pass them to `curl` through a header file, and print only HTTP statuses.
 
+## 2026-09-26
+
+- **Computer control on.** Brian granted full-screen control; DeviceHub's Duo window is driven directly. Restarting DeviceHub shuts the Duo down (it hosts the device); boot it from DeviceHub's Start button, not `simctl`.
+- **The Mac is overloaded** (load average 60–400 on 8 cores, mostly the simulator runtime's disk image and builds), so `simctl` calls, screenshots and page loads can take 10–30× longer. Scripts wrap slow calls in `perl -e 'alarm N; exec @ARGV'`.
+- **0.3a Orbis go/no-go: GO.** WebRTC video plays in the app's WKWebView on the Duo simulator. Numbers in ROADMAP §3. Orbis drifts toward photoreal unless the prompt restates the art style, so `motion-prompt`'s scene starts with the style words.
+- **Phase 1 UI** committed (f33f3c9): bookshelf, spread, curl, cover, debug hinge. **Clip recording** added to the bridge: `startClip / stopClip / cancelClip` record the video with MediaRecorder and stream it to Swift (`popClip` → `ClipAssembler` → `Documents/clips/`).
+- **Tracks in parallel:** a backend agent finishes, tests and deploys all server functions; a PopKit agent builds the logic modules test-first (server client, story engine, page pipeline, session controller, book store, chroma key, read-along ranges); the builder does the app UI.
+
 ## 2026-09-25
 
 - **Go.** Brian opened the build gate: build all phases without further check-ins.

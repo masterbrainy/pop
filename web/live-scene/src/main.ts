@@ -19,6 +19,9 @@ const popScene = {
   resume: () => controller.resume(),
   reset: () => controller.reset(),
   setFit: (args: { fit: VideoFit }) => controller.setFit(args.fit),
+  startClip: (args: { maxSeconds: number }) => controller.startClip(args.maxSeconds),
+  stopClip: () => controller.stopClip(),
+  cancelClip: () => controller.cancelClip(),
   disconnect: () => controller.disconnect(),
 };
 

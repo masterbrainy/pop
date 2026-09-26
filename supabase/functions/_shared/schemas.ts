@@ -49,17 +49,6 @@ export const pageRefSchema = z.object({
   text: z.string().max(2000),
 });
 
-export const currentPageSchema = z.object({
-  index: z.number().int().min(0),
-  text: z.string().max(2000).default(""),
-});
-
-export const storyInputSchema = z.object({
-  kind: z.enum(["speech", "typed", "continue"]),
-  speaker: z.enum(["parent", "kid"]),
-  text: z.string().max(4000).default(""),
-});
-
 // The `path` and `page` modes' input (docs/CONTRACTS.md): a direction only,
 // never "continue" (there's no page to continue — the path always has one).
 export const directionInputSchema = z.object({
@@ -73,7 +62,6 @@ export type StoryBrief = z.infer<typeof storyBriefSchema>;
 export type ParentSettings = z.infer<typeof parentSettingsSchema>;
 export type Character = z.infer<typeof characterSchema>;
 export type StoryBible = z.infer<typeof storyBibleSchema>;
-export type StoryInput = z.infer<typeof storyInputSchema>;
 export type DirectionInput = z.infer<typeof directionInputSchema>;
 
 /** Turns a ZodError into the single bad_request message our envelope wants. */

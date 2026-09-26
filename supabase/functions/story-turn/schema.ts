@@ -1,30 +1,17 @@
-// `story-turn` request schema (docs/CONTRACTS.md §3): mode "turn", "title",
-// "path" or "page". "path" and "page" (P-04) replace "turn", which stays only
-// until the app has moved over.
+// `story-turn` request schema (docs/CONTRACTS.md §3): mode "title", "path" or
+// "page". "path" and "page" (P-04) replace the old "turn" mode
+// (append/new_page/revise_current), which was removed once the app moved
+// over and the full eval passed on the new modes.
 import { z } from "npm:zod@3.23.8";
 import {
-  currentPageSchema,
   directionInputSchema,
   kidSchema,
   pageRefSchema,
   parentSettingsSchema,
   storyBibleSchema,
   storyBriefSchema,
-  storyInputSchema,
   uuidSchema,
 } from "../_shared/schemas.ts";
-
-const turnRequestSchema = z.object({
-  mode: z.literal("turn"),
-  bookId: uuidSchema,
-  kid: kidSchema,
-  brief: storyBriefSchema,
-  settings: parentSettingsSchema,
-  bible: storyBibleSchema,
-  pages: z.array(pageRefSchema).max(500).default([]),
-  current: currentPageSchema,
-  input: storyInputSchema,
-});
 
 const titleRequestSchema = z.object({
   mode: z.literal("title"),
@@ -61,13 +48,11 @@ const pageRequestSchema = z.object({
 });
 
 export const requestSchema = z.discriminatedUnion("mode", [
-  turnRequestSchema,
   titleRequestSchema,
   pathRequestSchema,
   pageRequestSchema,
 ]);
 
-export type TurnRequest = z.infer<typeof turnRequestSchema>;
 export type TitleRequest = z.infer<typeof titleRequestSchema>;
 export type PathRequest = z.infer<typeof pathRequestSchema>;
 export type PageRequest = z.infer<typeof pageRequestSchema>;

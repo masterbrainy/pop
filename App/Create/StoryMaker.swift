@@ -74,6 +74,7 @@ final class StoryMaker {
             guard let self else { return }
             self.pageChanged(to: self.reader.currentPage)
         }
+        if !LaunchOptions.storyTurns.isEmpty { scriptLog = FileLog(name: "story") }
         if let heroDrawing {
             await seedHero(heroDrawing, server: server)
         }
@@ -105,7 +106,7 @@ final class StoryMaker {
     /// Plays `-storyTurns` for automated end-to-end checks, waiting for each turn to finish.
     private func playScriptedTurns() async {
         guard !LaunchOptions.storyTurns.isEmpty else { return }
-        let log = FileLog(name: "story")
+        let log = scriptLog ?? FileLog(name: "story")
         scriptLog = log
         let started = Date()
         for turn in LaunchOptions.storyTurns {

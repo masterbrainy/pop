@@ -21,6 +21,20 @@ public struct StoryTurnOutcome: Sendable, Equatable {
     }
 }
 
+/// The result of one `path` or `page` call (P-04): the book with its (re-)planned path,
+/// the page it wrote, and a gentle note for the parent when nothing was written.
+public struct PathOutcome: Sendable, Equatable {
+    public let book: Book
+    public let page: PageContent?
+    public let parentNote: String?
+
+    public init(book: Book, page: PageContent?, parentNote: String?) {
+        self.book = book
+        self.page = page
+        self.parentNote = parentNote
+    }
+}
+
 /// Pure story-turn reducer and request builder. Talking to the `story-turn` function
 /// itself is `PopServer`'s job; this only turns its response into new state and
 /// turns a book's current state into its next request.
@@ -35,7 +49,7 @@ public enum StoryEngine {
         case (.none, _):
             return StoryTurnOutcome(book: updatedBook, currentDraft: currentDraft, pendingNextDraft: nil, parentNote: response.parentNote)
 
-        case let (.append, .some(page)):
+        case let (.append, .some(page)), let (.page, .some(page)):
             let updated = replacing(currentDraft, text: page.text, artPrompt: page.artPrompt).with(question: page.question)
             return StoryTurnOutcome(book: updatedBook, currentDraft: updated, pendingNextDraft: nil, parentNote: nil)
 
@@ -52,7 +66,7 @@ public enum StoryEngine {
             let pending = PageContent(index: page.index, text: page.text, artPrompt: page.artPrompt).with(question: page.question)
             return StoryTurnOutcome(book: updatedBook, currentDraft: currentDraft, pendingNextDraft: pending, parentNote: nil)
 
-        case (.append, .none), (.reviseCurrent, .none), (.newPage, .none):
+        case (.append, .none), (.reviseCurrent, .none), (.newPage, .none), (.page, .none):
             return StoryTurnOutcome(book: updatedBook, currentDraft: currentDraft, pendingNextDraft: nil, parentNote: nil)
         }
     }
@@ -64,6 +78,41 @@ public enum StoryEngine {
             bookId: book.id, kid: StoryTurnKid(kid), brief: book.brief, settings: settings, bible: book.bible,
             pages: book.pages.map(StoryTurnPageRef.init),
             current: StoryTurnCurrent(index: currentDraft.index, text: currentDraft.text), input: input
+        )
+    }
+
+    /// Applies a `path` or `page` response. The page on screen is never touched: the written
+    /// page is new, for the index the request asked for. A refused turn leaves the book as it was.
+    public static func applyPage(_ response: StoryTurnResponse, to book: Book) -> PathOutcome {
+        guard response.action != .none else {
+            return PathOutcome(book: book, page: nil, parentNote: response.parentNote)
+        }
+        let updatedBook = book.with(bible: response.bible.carryingReferences(from: book.bible))
+        let page = response.page.map {
+            PageContent(index: $0.index, text: $0.text, artPrompt: $0.artPrompt).with(question: $0.question)
+        }
+        return PathOutcome(book: updatedBook, page: page, parentNote: response.parentNote)
+    }
+
+    /// A `mode: "path"` request: plan the story from the brief (index 0, no input), or re-plan
+    /// it from `index` following a direction. `shownPages` are the pages the reader has seen.
+    public static func pathRequest(
+        book: Book, kid: KidProfile, settings: ParentSettings, shownPages: [PageContent], index: Int, input: StoryTurnInput?
+    ) -> StoryTurnRequest {
+        request(.path, book: book, kid: kid, settings: settings, shownPages: shownPages, index: index, input: input)
+    }
+
+    /// A `mode: "page"` request: write page `index` along the existing path.
+    public static func pageRequest(book: Book, kid: KidProfile, settings: ParentSettings, shownPages: [PageContent], index: Int) -> StoryTurnRequest {
+        request(.page, book: book, kid: kid, settings: settings, shownPages: shownPages, index: index, input: nil)
+    }
+
+    private static func request(
+        _ mode: StoryTurnMode, book: Book, kid: KidProfile, settings: ParentSettings, shownPages: [PageContent], index: Int, input: StoryTurnInput?
+    ) -> StoryTurnRequest {
+        StoryTurnRequest(
+            mode: mode, bookId: book.id, kid: StoryTurnKid(kid), brief: book.brief, settings: settings, bible: book.bible,
+            pages: shownPages.map(StoryTurnPageRef.init), input: input, index: index
         )
     }
 

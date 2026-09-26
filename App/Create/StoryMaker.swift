@@ -403,8 +403,6 @@ final class StoryMaker {
             let lines = message.split(separator: "\n", maxSplits: 1).map(String.init)
             if lines.count > 1 { scriptLog?.append("failure detail: \(lines[1])") }
             note(lines.first ?? message)
-        case .textReady:
-            break
         }
     }
 

@@ -142,7 +142,7 @@ public actor PagePipeline {
         } catch is CancellationError {
             // superseded by a newer run for the same page; stay quiet.
         } catch let error as ServerError {
-            continuation.yield(.failed(error.message))
+            continuation.yield(.failed(error.message + "\n" + error.serverDetail))
         } catch {
             continuation.yield(.failed("\(error)"))
         }
@@ -159,7 +159,7 @@ public actor PagePipeline {
             try await runArtAndMotion(page: page, book: book, continuation: continuation)
         } catch is CancellationError {
         } catch let error as ServerError {
-            continuation.yield(.failed(error.message))
+            continuation.yield(.failed(error.message + "\n" + error.serverDetail))
         } catch {
             continuation.yield(.failed("\(error)"))
         }
@@ -169,7 +169,8 @@ public actor PagePipeline {
         switch action {
         case .reviseCurrent: true
         case .append: currentDraft.stillPath == nil
-        case .newPage, .none: false
+        case .newPage: currentDraft.stillPath == nil && !currentDraft.text.isEmpty
+        case .none: false
         }
     }
 

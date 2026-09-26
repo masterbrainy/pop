@@ -118,3 +118,24 @@ Deno.test("mergeBibleCharacters returns null referencePath for a brand-new bible
   const result = mergeBibleCharacters([], [{ id: "c1", name: "Rex", description: "a dinosaur" }]);
   assertEquals(result, [{ id: "c1", name: "Rex", description: "a dinosaur", referencePath: null }]);
 });
+
+Deno.test("an append that drops the page's existing words gets them back in front", async () => {
+  const deps = depsFor([output({ pageText: "He waved the leaf." })], [true]);
+  const result = await runStoryTurn("reader", 0, "Pip found a glowing leaf.", emptyBible, deps);
+  assertEquals(result.action, "append");
+  assertEquals(result.page.text, "Pip found a glowing leaf. He waved the leaf.");
+});
+
+Deno.test("an append that already starts with the page's words is left alone", async () => {
+  const deps = depsFor([output({ pageText: "Pip found a glowing leaf. He waved it." })], [true]);
+  const result = await runStoryTurn("reader", 0, "Pip found a glowing leaf.", emptyBible, deps);
+  assertEquals(result.page.text, "Pip found a glowing leaf. He waved it.");
+});
+
+Deno.test("a new_page draft is for the next page index", async () => {
+  const deps = depsFor([output({ action: "new_page", pageText: "The next morning, Pip woke up." })], [true]);
+  const result = await runStoryTurn("reader", 2, "Pip slept under the stars.", emptyBible, deps);
+  assertEquals(result.action, "new_page");
+  assertEquals(result.page.index, 3);
+  assertEquals(result.page.text, "The next morning, Pip woke up.");
+});

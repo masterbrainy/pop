@@ -37,6 +37,23 @@ final class HingeModel {
             ingest(posture: .fullyOpen, degrees: 180, from: .debug)
         }
         if !script.isEmpty { play(script) }
+        if let angle = LaunchOptions.hingeAngle { sweep(to: angle) }
+    }
+
+    /// Sweeps the debug hinge from where it is to `angle` and holds it there.
+    func sweep(to angle: Double, interval: Duration = .milliseconds(60)) {
+        setOverride(true)
+        scriptTask?.cancel()
+        let from = state.angle > 0 ? state.angle : 180
+        let angles = HingeScript.sweep(from: from, to: angle)
+        scriptTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            for value in angles {
+                guard !Task.isCancelled, let self else { return }
+                self.ingest(posture: Self.posture(for: value), degrees: value, from: .debug)
+                do { try await Task.sleep(for: interval) } catch { return }
+            }
+        }
     }
 
     func ingest(posture: HingePosture, degrees: Double, from source: Source) {

@@ -25,4 +25,18 @@ enum LaunchOptions {
     static var hingeScript: [HingeScript.Move] {
         HingeScript.parse(UserDefaults.standard.string(forKey: "hingeScript") ?? "")
     }
+
+    /// `-screen create -storyTurns "a fox finds a leaf|You continue|fold"` makes a new book and
+    /// plays these turns, one after each page settles: text is typed input, "You continue"
+    /// taps continue, and "fold" turns to the next page (for end-to-end checks).
+    static var storyTurns: [String] {
+        (UserDefaults.standard.string(forKey: "storyTurns") ?? "")
+            .split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// `-hingeAngle 95` sweeps the debug hinge from flat to this angle at launch and holds it
+    /// (for screenshots of the curl and pop-up).
+    static var hingeAngle: Double? {
+        UserDefaults.standard.object(forKey: "hingeAngle") == nil ? nil : UserDefaults.standard.double(forKey: "hingeAngle")
+    }
 }

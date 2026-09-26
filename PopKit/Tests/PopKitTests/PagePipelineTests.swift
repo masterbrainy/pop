@@ -72,6 +72,30 @@ struct PagePipelineTests {
         #expect(artCalls.map(\.pageIndex) == [1]) // page 0 was never asked for art again
     }
 
+    @Test func aNewPageAnswerOnAnEmptyFirstPageFillsAndIllustratesThatPage() async throws {
+        let server = FakePopServer()
+        await server.onStoryTurn { _ in
+            StoryTurnResponse(
+                action: .newPage, page: StoryTurnPageResult(index: 1, text: "A fox finds a leaf.", artPrompt: "a fox and a leaf", breakSuggested: false),
+                bible: .empty, parentNote: nil, timings: StoryTurnTimings(modelMs: 1, safetyMs: 1)
+            )
+        }
+        await server.onArt { _ in ArtResponse(path: "u/b/p0.png", url: "https://x/p0.png", width: 1344, height: 768, placeholder: false, ms: 1) }
+        await server.onMotionPrompt { _ in MotionParts(scene: "a fox", motion: "the leaf glows") }
+
+        let pipeline = PagePipeline(server: server)
+        let draft = PageContent(index: 0, text: "")
+        let input = StoryTurnInput(kind: .typed, speaker: .parent, text: "a fox finds a leaf")
+        let events = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: input))
+
+        guard case let .textReady(outcome) = events.first else { Issue.record("expected textReady first"); return }
+        #expect(outcome.currentDraft.text == "A fox finds a leaf.")
+        #expect(outcome.pendingNextDraft == nil)
+        #expect(events.contains(.stillReady(pageIndex: 0, path: "u/b/p0.png", url: "https://x/p0.png")))
+        let artCalls = await server.artCalls
+        #expect(artCalls.map(\.pageIndex) == [0])
+    }
+
     @Test func appendOntoAPageThatAlreadyHasAStillSkipsRegeneratingItsArtAndMotion() async throws {
         let server = FakePopServer()
         await server.onStoryTurn { _ in self.appendResponse(text: "A fox ran into a meadow and stopped.", artPrompt: "a fox in a meadow") }
@@ -138,7 +162,7 @@ struct PagePipelineTests {
 
         #expect(events.count == 2)
         guard case .failed(let message) = events[1] else { Issue.record("expected a failed event, got \(events[1])"); return }
-        #expect(message == ServerError.upstream("x").message)
+        #expect(message == ServerError.upstream("x").message + "\nGemini timed out")
     }
 
     @Test func aNewerRunForTheSamePageCancelsTheOlderOneAndItYieldsNothing() async throws {

@@ -36,10 +36,11 @@ function describeBible(bible: StoryBible): string[] {
 
 const ACTION_GUIDE = [
   "Decide the right action for this turn:",
-  '- "append": the input continues the current page\'s words.',
-  '- "new_page": the current page is full or done, so write the next page\'s draft.',
-  '- "revise_current": the input changes something already on the current page.',
+  '- "append": the input continues the current page. page.text must be the WHOLE current page: every word already on it, unchanged and in order, followed by the new words. If the current page is empty, always use "append".',
+  '- "new_page": adding the new words would go over this reading level\'s words-per-page limit, or the current page is clearly finished. page.text is ONLY the next page\'s words and page.index is the current index + 1. Never repeat the current page\'s words.',
+  '- "revise_current": the input changes something already on the current page. page.text is the whole rewritten page.',
   '- "none": there is nothing safe or sensible to add right now.',
+  'For a "continue" input, write the next small beat of the story yourself, using the same rules.',
 ].join("\n");
 
 export function buildStoryTurnSystemPrompt(input: StoryTurnPromptInput): string {

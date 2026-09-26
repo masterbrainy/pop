@@ -124,6 +124,15 @@ final class LiveSceneBridge: NSObject {
         _ = try? await call("cancelClip")
     }
 
+    /// The frame now showing as a small JPEG (base64), for the moderation tripwire.
+    func sampleFrame(maxSide: Int) async throws -> (base64: String, mimeType: String) {
+        let result = try await call("sampleFrame", ["maxSide": maxSide]) as? [String: Any] ?? [:]
+        guard let base64 = result["base64"] as? String, let mimeType = result["mimeType"] as? String else {
+            throw BridgeError.script(function: "sampleFrame", message: "no frame returned")
+        }
+        return (base64, mimeType)
+    }
+
     /// Ends the Orbis session (the SDK's disconnect always ends it on the server).
     func disconnect() async throws {
         _ = try await call("disconnect")
@@ -171,6 +180,19 @@ extension LiveSceneBridge: WKScriptMessageHandler {
 }
 
 extension LiveSceneBridge: WKNavigationDelegate {
+    /// Only the bundled live-scene page (`popscene://app/...`) and `about:blank`
+    /// may load in this web view; everything else — a link the scene's own
+    /// script tried to open, a redirect, anything else — is cancelled (R-34).
+    private func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+        let isAllowedScene = url.scheme == SceneSchemeHandler.scheme && url.host == "app"
+        let isAboutBlank = url.scheme == "about" && url.path == "blank"
+        decisionHandler(isAllowedScene || isAboutBlank ? .allow : .cancel)
+    }
+
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
         receive(.error(code: "navigation", message: error.localizedDescription, recoverable: false))
     }

@@ -43,6 +43,11 @@ public enum StoryEngine {
             let revised = currentDraft.revised(text: page.text, artPrompt: page.artPrompt)
             return StoryTurnOutcome(book: updatedBook, currentDraft: revised, pendingNextDraft: nil, parentNote: nil)
 
+        case let (.newPage, .some(page)) where currentDraft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty:
+            // Nothing to turn away from yet: the words belong on this page.
+            let filled = replacing(currentDraft, text: page.text, artPrompt: page.artPrompt)
+            return StoryTurnOutcome(book: updatedBook, currentDraft: filled, pendingNextDraft: nil, parentNote: nil)
+
         case let (.newPage, .some(page)):
             let pending = PageContent(index: page.index, text: page.text, artPrompt: page.artPrompt)
             return StoryTurnOutcome(book: updatedBook, currentDraft: currentDraft, pendingNextDraft: pending, parentNote: nil)

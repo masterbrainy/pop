@@ -16,23 +16,26 @@ struct TextPageView: View {
     var body: some View {
         GeometryReader { proxy in
             let insets = ReservedRegionInsets.insets(for: proxy)
+            // The closed Duo's outer screen gives each page half of 466×678 pt; there the
+            // text shrinks further and the margins tighten so the whole page still fits.
+            let compact = proxy.size.height < 420
             ZStack(alignment: .bottom) {
                 Theme.paper
                 Text(text.isEmpty ? AttributedString(placeholder) : HighlightedText.attributed(text, highlight: highlight))
-                    .font(Theme.storyFont(size: fontSize))
+                    .font(Theme.storyFont(size: compact ? fontSize * 0.8 : fontSize))
                     .foregroundStyle(text.isEmpty ? Theme.softInk : Theme.ink)
-                    .lineSpacing(fontSize * 0.25)
-                    // P1: never smaller than the level's minimum size.
-                    .minimumScaleFactor(level.minimumTextSize / fontSize)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    .padding(.top, 48 + insets.top)
-                    .padding(.leading, 40 + insets.leading)
-                    .padding(.trailing, 40 + insets.trailing)
-                    .padding(.bottom, 64 + insets.bottom)
+                    .lineSpacing(fontSize * (compact ? 0.12 : 0.25))
+                    // P1: never smaller than the level's minimum size on the open book.
+                    .minimumScaleFactor(compact ? 0.5 : level.minimumTextSize / fontSize)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: compact ? .topLeading : .leading)
+                    .padding(.top, (compact ? 64 : 48) + insets.top)
+                    .padding(.leading, (compact ? 24 : 40) + insets.leading)
+                    .padding(.trailing, (compact ? 24 : 40) + insets.trailing)
+                    .padding(.bottom, (compact ? 36 : 64) + insets.bottom)
                 Text("\(pageNumber)")
-                    .font(Theme.storyFont(size: 15))
+                    .font(Theme.storyFont(size: compact ? 12 : 15))
                     .foregroundStyle(Theme.softInk)
-                    .padding(.bottom, 24 + insets.bottom)
+                    .padding(.bottom, (compact ? 10 : 24) + insets.bottom)
             }
         }
     }

@@ -11,17 +11,26 @@ export const ART_STYLE =
   "warm gentle natural light, gentle rounded friendly shapes, textured paper look, " +
   "no text or letters anywhere in the image, no borders or frames, no captions or signatures";
 
-export const CHROMA_GREEN_HEX = "#00FF00";
+/** Characters rarely use this colour, so the device can cut them out cleanly. */
+export const CUTOUT_BACKDROP_HEX = "#FF00FF";
 
 export const CUTOUT_BACKGROUND_INSTRUCTION =
-  `a single character, centered, full body visible, on a flat solid pure chroma-key green background (${CHROMA_GREEN_HEX}), ` +
-  "no shadow cast on the background, even studio lighting on the character only";
+  `a single character, centered, full body visible, with a clear dark outline, on a completely flat, untextured, solid magenta background (${CUTOUT_BACKDROP_HEX}) ` +
+  "that reaches every edge of the picture; no paper texture, no ground, no plants, no sparkles, no props other than what the character holds, no shadow on the background";
 
 export const PLATE_INSTRUCTION =
   "the same scene and setting with no characters present, as if they had stepped out of frame; " +
   "keep the background, props and lighting identical to the page illustration";
 
-export type ArtKind = "page" | "cover" | "character" | "plate" | "cutout";
+/** `drawing` kind (Phase 8 "kid's drawing as the hero"): redraws a kid's own
+ * finger drawing into a character reference image. Reuses the exact cutout
+ * backdrop treatment so the result is interchangeable with a `cutout` picture. */
+export const DRAWING_INSTRUCTION =
+  "The attached image is a child's own drawing. Redraw it as " +
+  CUTOUT_BACKGROUND_INSTRUCTION +
+  "; keep the drawing's shapes, colours and distinguishing features recognisable as the same character.";
+
+export type ArtKind = "page" | "cover" | "character" | "plate" | "cutout" | "drawing";
 
 /** Aspect ratio per CONTRACTS.md §3: page/plate/cutout 16:9, cover 2:3, character 1:1. */
 export function aspectRatioFor(kind: ArtKind): "16:9" | "2:3" | "1:1" {

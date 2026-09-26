@@ -1,10 +1,15 @@
 import PopKit
 import SwiftUI
 
-/// The bookshelf: every book as a cover, plus "New book".
+/// The bookshelf: every book as a cover, plus "New book". Finished books open to read (with
+/// their recorded clips); drafts open to keep telling. Parent settings sit behind a gate.
 struct BookshelfView: View {
     @State private var model = AppModel()
     @State private var openBook: OpenBook?
+    @State private var askingBrief = false
+    @State private var gate: GateTarget?
+    @State private var showsSettings = false
+    @State private var sharing: SharedPDF?
 
     private struct OpenBook: Identifiable {
         let book: Book
@@ -12,30 +17,98 @@ struct BookshelfView: View {
         var id: Book.ID { book.id }
     }
 
+    private enum GateTarget: Identifiable {
+        case settings
+        case share(Book)
+        case delete(Book)
+        var id: String {
+            switch self {
+            case .settings: "settings"
+            case let .share(book): "share-\(book.id)"
+            case let .delete(book): "delete-\(book.id)"
+            }
+        }
+    }
+
+    private struct SharedPDF: Identifiable {
+        let url: URL
+        var id: URL { url }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
+                if let error = model.loadError {
+                    Text(error).font(.footnote).foregroundStyle(Theme.accent).padding(.top, 8)
+                }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 24)], spacing: 28) {
                     newBookTile
                     ForEach(model.books) { book in
-                        Button { openBook = OpenBook(book: book, mode: book.pages.isEmpty ? .creating : .reading) } label: {
-                            BookTile(book: book)
-                        }
-                        .buttonStyle(.plain)
+                        Button { open(book) } label: { BookTile(book: book) }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Share as PDF", systemImage: "square.and.arrow.up") { gate = .share(book) }
+                                if book.id != SampleBooks.fox.id {
+                                    Button("Delete", systemImage: "trash", role: .destructive) { gate = .delete(book) }
+                                }
+                            }
                     }
                 }
                 .padding(24)
             }
             .background(Theme.paper)
             .navigationTitle("\(model.kid.firstName)'s books")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { gate = .settings } label: { Image(systemName: "gearshape") }
+                        .accessibilityLabel("Parent settings")
+                }
+            }
+        }
+        .task { await model.load() }
+        .sheet(isPresented: $askingBrief) {
+            BriefSheet(kid: model.kid, onStart: { brief in
+                askingBrief = false
+                openBook = OpenBook(book: model.newBook(brief: brief), mode: .creating)
+            }, onCancel: { askingBrief = false })
+        }
+        .fullScreenCover(item: $gate) { target in
+            ParentGate(onPass: { pass(target) }, onCancel: { gate = nil })
+        }
+        .sheet(isPresented: $showsSettings) {
+            ParentSettingsView(kid: model.kid, settings: model.settings, readAlong: ParentPreferences.readAlong,
+                               onSave: { model.update(kid: $0, settings: $1) }, onDone: { showsSettings = false })
+        }
+        .sheet(item: $sharing) { pdf in
+            ShareLink(item: pdf.url) { Label("Share the PDF", systemImage: "square.and.arrow.up") }
+                .padding(40)
+                .presentationDetents([.height(160)])
         }
         .fullScreenCover(item: $openBook) { open in
-            BookView(book: open.book, kid: model.kid, mode: open.mode) { openBook = nil }
+            BookView(book: open.book, kid: model.kid, settings: model.settings, mode: open.mode,
+                     onClose: { openBook = nil },
+                     onFinish: { book in Task { await model.save(book) } })
+        }
+    }
+
+    private func open(_ book: Book) {
+        openBook = OpenBook(book: book, mode: book.status == .finished || book.id == SampleBooks.fox.id ? .reading : .creating)
+    }
+
+    private func pass(_ target: GateTarget) {
+        gate = nil
+        switch target {
+        case .settings:
+            showsSettings = true
+        case let .share(book):
+            if let url = try? PDFExporter.export(book, kid: model.kid) { sharing = SharedPDF(url: url) }
+        case let .delete(book):
+            Task { await model.delete(book) }
         }
     }
 
     private var newBookTile: some View {
-        Button { openBook = OpenBook(book: model.newBook(), mode: .creating) } label: {
+        Button { askingBrief = true } label: {
             VStack(spacing: 12) {
                 Image(systemName: "plus").font(.system(size: 40, weight: .semibold))
                 Text("New book").font(Theme.titleFont(size: 20))
@@ -46,6 +119,7 @@ struct BookshelfView: View {
             .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(Theme.accent.opacity(0.5), style: StrokeStyle(lineWidth: 2, dash: [8, 6])))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Make a new book")
     }
 }
 
@@ -67,7 +141,7 @@ private struct BookTile: View {
                 .font(Theme.titleFont(size: 17))
                 .foregroundStyle(Theme.ink)
                 .lineLimit(2)
-            Text("\(book.pages.count) pages")
+            Text(book.status == .finished ? "\(book.pages.count) pages" : "Still being told · \(book.pages.count) pages")
                 .font(.caption)
                 .foregroundStyle(Theme.softInk)
         }

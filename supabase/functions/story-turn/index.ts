@@ -34,7 +34,7 @@ async function callModelFor(apiKey: string, body: TurnRequest, rewriteReason: st
     jsonSchema: STORY_TURN_JSON_SCHEMA,
   });
   const output = parseModelJSON(raw, storyModelOutputSchema);
-  return { output, modelMs: performance.now() - start };
+  return { output, modelMs: Math.round(performance.now() - start) };
 }
 
 async function handleTurn(apiKey: string, body: TurnRequest) {

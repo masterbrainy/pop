@@ -98,15 +98,15 @@ Pop! lets a parent make a picture book for their child in minutes, about whateve
 
 ## 8. For Apple engineers
 
-1. **The hinge drives effects, never layout.** `onHingeChange(isEnabled:_:)` → `hinge.angle` feeds a pure, unit-tested `PostureMachine` (curl progress, turn committed or cancelled, pop depth). Layout follows only `hinge.status` and user toggles. Apple's header says the angle update rate is system policy, so the tests include sparse and irregular sequences, and to "prefer `status` over the angle" when that's enough (TN-003). A nil `hinge` means the swipe reader. `DeviceHinge.Status` is a struct, so our `switch` has a `default` (TN-002).
+1. **The hinge drives effects, never layout.** `onHingeChange(isEnabled:_:)` → `hinge.angle` feeds a pure, unit-tested `PostureMachine` (curl progress, turn committed or cancelled, pop depth). Layout follows only `hinge.status` and user toggles. Apple's header says the angle update rate is system policy, so the tests include sparse and irregular sequences, and to "prefer `status` over the angle" when that's enough (TN-003). A nil `hinge` (no hinge, or a view outside a hierarchy that provides hinge updates) is handled without a hinge: the swipe reader. `DeviceHinge.Status` is a struct, so our `switch` has a `default` (TN-002).
 2. **`ArrangementView` for the spread:** `ArrangementView { TextPage() } secondary: { ArtPage() }` with `.arrangementViewStyle(.split)` (TN-004).
-3. **`reservedRegions`** (`.division` = fold, `.occlusion` = camera; the meanings are inferred and confirmed in Phase 0.2) pad the text and keep faces out of the fold and camera (TN-005).
+3. **`reservedRegions`** (`.division` = a region an element should divide around, the fold; `.occlusion` = a region occluded by an element, the camera; both from Apple's UIKit header comments) pad the text and keep faces out of the fold and camera (TN-005).
 4. **Closing is a verb.** `.closed` saves the book and shows its cover. The SDK has no cover-display API (TN-007).
 5. **Live video in a native app, recorded for exact replay.** Reactor has no Swift SDK, so its JS SDK is bundled into a `WKWebView` behind a Swift `LiveScene` protocol, with three implementations: `ReactorWebScene` (live, and records clips), `StillPanScene` (fallback) and `ClipReplayScene` (TN-009, TN-024).
 6. **Pop-up without the Neural Engine.** Vision's foreground mask reportedly doesn't run in the Simulator, so the layers are generated and keyed out with Core Image (TN-014). The target is layers rising within 300 ms (TBD, Phase 4).
 7. **Read-along timing** comes from `AVSpeechSynthesizer`'s `willSpeakRangeOfSpeechString`, because OpenAI's text-to-speech has no word timings (TN-015).
 
-**Privacy by design:** audio is streamed for transcription and never stored. The only personal data is the kid's first name and interests. Keys stay on the server, and the app only receives short-lived tokens (TN-011, TN-016, TN-017). Timing logs stay local, with no third-party analytics or crash service.
+**Privacy by design:** Pop! never stores audio; it's streamed to OpenAI only to transcribe it. The only personal data is the kid's first name and interests. Keys stay on the server, and the app only receives short-lived tokens (TN-011, TN-016, TN-017). Timing logs stay local, with no third-party analytics or crash service.
 
 **Simulator only:** Xcode 27.1 beta (27A9269) and the iPhone Duo simulator (TN-001). No physical Duo, camera, haptics or motion sensors. Whether the simulator delivers a continuous hinge angle is TBD (Phase 0.1), and the fallback is an in-app slider (TN-008).
 
@@ -120,7 +120,7 @@ Pop! lets a parent make a picture book for their child in minutes, about whateve
 | **"Isn't this just more screen time?"** | It's made by the parent, for their child, and read together. |
 | **"Isn't the parent doing all the work?"** | As much or as little as they want: narrate every page, give a direction, or tap "You continue". |
 | **"Is it safe for a four-year-old?"** | Every page passes a kid-safe check before a child sees it, sampled frames act as a tripwire back to the still, and the parent previews books made ahead. |
-| **"Are you recording kids' voices?"** | No. Audio is transcribed and discarded. We keep a first name and interests, nothing else. |
+| **"Are you recording kids' voices?"** | Pop! never stores audio; it's streamed to OpenAI only to transcribe it. What we save is the book (text and pictures, including anything a kid says that becomes story text), a first name and interests. |
 | **"Have you tested with parents and kids?"** | Not yet. Parent interviews and observed sessions come next. |
 | **"Why live video instead of pre-rendered clips?"** | Pages change with every direction while the book is being made. Once it's saved, each page *is* a recorded clip. |
 | **"What if the video service goes down?"** | The still picture with a slow pan-and-zoom takes over automatically. Saved books don't need the service at all. |

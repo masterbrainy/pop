@@ -54,7 +54,7 @@ This index is not part of the append-only log. Update it freely, and link each a
 **Confidence:** Verified.
 **So what for Pop!:** Everything is built and demoed in the simulator. Beta Xcode builds can't be submitted to the App Store.
 
-### TN-002 · 2026-09-25 · Hinge API in SwiftUI
+### TN-002 · 2026-09-25 · Hinge API in SwiftUI → nil meaning corrected by TN-027
 **Fact:** The iOS 27.1 SDK declares:
 
 ```swift
@@ -102,7 +102,7 @@ func splitArrangementLayoutRatio(minHorizontal: CGFloat? = nil, idealHorizontal:
 **Confidence:** Verified.
 **So what for Pop!:** The spread is `ArrangementView` with `.split`. Primary is the text page and secondary is the art page. The system owns the split.
 
-### TN-005 · 2026-09-25 · Reserved regions (fold and camera)
+### TN-005 · 2026-09-25 · Reserved regions (fold and camera) → meanings verified, TN-027
 **Fact:** The SDK declares:
 
 ```swift
@@ -175,7 +175,7 @@ It's **unclear** whether billing starts at connection or at generation.
 **Confidence:** Vendor docs.
 **So what for Pop!:** D3 recommends Stable: higher resolution at under half the price. A 15-minute book costs 15 × $0.582 = **$8.73** in Orbis time on Stable (the PRD's "~$9") and $18.81 on Dynamic. If billing starts at connection, each warm-up minute adds $0.582. Real cost per book: TBD (measured in Phase 0.3 and Phase 5).
 
-### TN-013 · 2026-09-25 · Orbis input images should be 16:9
+### TN-013 · 2026-09-25 · Orbis input images should be 16:9 → crop math in TN-027
 **Fact:** Orbis works best with 16:9 input images; other shapes get squashed.
 **Evidence:** Reactor's docs (ROADMAP §3).
 **Confidence:** Vendor docs.
@@ -224,7 +224,7 @@ It's **unclear** whether billing starts at connection or at generation.
 **Confidence:** Decision. Gemini covering images only is **assumed** (D7, to confirm now).
 **So what for Pop!:** Keys for all three AI vendors sit behind Supabase functions (TN-017).
 
-### TN-021 · 2026-09-25 · Snapshot of open decisions (PRD §13, ROADMAP §10) → D4 row superseded by TN-024; D5 row by TN-025
+### TN-021 · 2026-09-25 · Snapshot of open decisions (PRD §13, ROADMAP §10) → D4 row superseded by TN-024; D5 row by TN-025; D6 row by TN-026
 **Decision:** The status of each decision on 2026-09-25. Each one gets its own entry when it's made.
 
 | # | Decision | Recommendation | Status | Decide by |
@@ -242,7 +242,7 @@ It's **unclear** whether billing starts at connection or at generation.
 **Confidence:** Decision (D1–D7 proposed or open; D8 resolved).
 **So what for Pop!:** D1, D3 and D4 shape the demo script and the unit economics in PITCH.md. D5 is the biggest open business question.
 
-### TN-022 · 2026-09-25 · The Duo simulator reports 466×678 pt at first boot
+### TN-022 · 2026-09-25 · The Duo simulator reports 466×678 pt at first boot → this is the outer screen, TN-027
 **Fact:** The first time it booted, the iPhone Duo simulator reported a screen of 466×678 points. We don't yet know which posture or screen (open spread or outer cover) that size belongs to.
 **Evidence:** ROADMAP §1, updated by the builder in commit `80f3c2f` (Claude Code's simulator panel attached to the Duo).
 **Confidence:** Verified (builder, simulator panel) for the size. The posture is unconfirmed.
@@ -271,3 +271,14 @@ It's **unclear** whether billing starts at connection or at generation.
 **Evidence:** Commits `8e4453d` and `331bcf4`, and the top of PRD v3 and ROADMAP v3.
 **Confidence:** Decision (accepted, Brian).
 **So what for Pop!:** The vendors are now Reactor, Gemini, OpenAI and Supabase. PITCH.md matches: no pricing, no third-party analytics, and lessons appear only as an example.
+
+### TN-027 · 2026-09-25 · QA corrections: region meanings, screen sizes, nil hinge, crop, privacy wording
+**Fact:**
+- **Region meanings are verified (R-13).** In `UIKit.framework/Headers/UIViewReservedRegion.h`, `occlusion` is "a region that is occluded by an element" and `division` is "a region where an element should divide into two separate regions". `frame` includes the `margins`, which are for interactive content. This replaces the "Inferred" tag in TN-005.
+- **466×678 pt is the outer screen (R-14).** The Duo simulator profile defines "LCD" (1398×2034 px at 3x, which is 466×678 pt, the outer screen) and "LCD-1" (2007×2853 px at 3x, native rotation 270, which is 951×669 pt landscape, the inner screen). So the device booted closed, and the simulator has a real outer screen, which supports TN-007. This corrects TN-022.
+- **`hinge == nil` is broader than "no hinge" (R-10).** `UIHingeInteraction.h` says the update's `hinge` is nil when the interaction leaves a hierarchy that provides hinge updates. So nil doesn't always mean a non-Duo device.
+- **Each page is about 475×669 pt, aspect 0.71 (R-04).** A 16:9 Orbis frame cropped to that keeps about 40% of its width, about 332 of 832 native px. This matters for TN-013's "crop to the right page".
+- **Privacy wording (R-11).** "Audio never stored" holds for Pop!'s own storage only. OpenAI's API may keep inputs for abuse monitoring (default up to 30 days unless zero data retention), and Gemini's unpaid tier may use prompts. A kid's-turn words become saved story text.
+**Evidence:** Review & QA findings R-04, R-10, R-11, R-13 and R-14 in `docs/REVIEW.md` @ `bdf8200`. This session re-read the two headers and confirmed the "LCD" and "LCD-1" entries (native rotations 0 and 270) in the Duo profile. The crop figure and the vendor retention terms are QA's, not re-checked here. QA also re-verified on 2026-09-25 that all three keys return HTTP 200 (401 with no key), 0 Reactor sessions are open, and the Reactor JS SDK is 3.0.2 (Apache-2.0).
+**Confidence:** Verified (headers, profile); QA-reported (crop math, vendor terms).
+**So what for Pop!:** Layout should treat the outer and inner screens as different sizes. Art must be composed for a narrow crop of the 16:9 frame. The pitch says "Pop! never stores audio; it's streamed to OpenAI only to transcribe it", never "audio is discarded" without that context.

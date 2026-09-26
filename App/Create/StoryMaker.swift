@@ -32,6 +32,8 @@ final class StoryMaker {
     @ObservationIgnored private var noteTask: Task<Void, Never>?
     @ObservationIgnored private var scriptLog: FileLog?
     @ObservationIgnored private var layerTasks: [UUID: Task<Void, Never>] = [:]
+    /// Characters whose reference sheet is being made (or was tried).
+    @ObservationIgnored private var referencesRequested: Set<String> = []
     /// Set by the book view: a scripted "finish" step ends and saves the book.
     @ObservationIgnored var onScriptedFinish: @MainActor () async -> Void = {}
     /// Set by the book view: a scripted "pop" step folds to about 90° and back.
@@ -126,6 +128,7 @@ final class StoryMaker {
     /// none is in flight, else queues it to be merged in when the current one
     /// returns. `isWorking` stays true until the queue fully drains.
     private func enqueue(_ input: StoryTurnInput) {
+        isWorking = true
         Task { [weak self] in
             guard let self, let toRun = await self.turnQueue.submit(input) else { return }
             self.runTurn(toRun)
@@ -213,11 +216,13 @@ final class StoryMaker {
     private func apply(_ event: PagePipelineEvent) async {
         switch event {
         case let .textReady(outcome):
-            reader.update(book: outcome.book)
+            // A reference sheet can land while a turn is in flight; keep it.
+            reader.update(book: outcome.book.with(bible: outcome.book.bible.carryingReferences(from: reader.book.bible)))
             reader.replace(outcome.currentDraft)
             if let pending = outcome.pendingNextDraft { reader.pendingNext = pending }
             if let message = outcome.parentNote { note(message) }
-        case let .stillReady(pageIndex, _, url):
+        case let .stillReady(pageIndex, path, url):
+            makeReferences(fromStill: path)
             await storeStill(url: url, pageIndex: pageIndex)
         case let .motionReady(pageIndex, prompt):
             if let page = pageWith(index: pageIndex) {
@@ -228,6 +233,28 @@ final class StoryMaker {
             let lines = message.split(separator: "\n", maxSplits: 1).map(String.init)
             if lines.count > 1 { scriptLog?.append("failure detail: \(lines[1])") }
             note(lines.first ?? message)
+        }
+    }
+
+    /// Makes a reference sheet, from this page's picture, for each character that has none,
+    /// so later pages draw them the same way (PRD S6).
+    private func makeReferences(fromStill stillPath: String) {
+        guard let server = services.server else { return }
+        let bookId = reader.book.id
+        for character in CharacterReferences.missing(in: reader.book.bible, alreadyRequested: referencesRequested) {
+            referencesRequested.insert(character.id)
+            let request = CharacterReferences.request(for: character, bookId: bookId, fromStill: stillPath)
+            Task { [weak self] in
+                do {
+                    let art = try await server.art(request)
+                    guard let self, !art.placeholder else { return }
+                    self.reader.update(book: self.reader.book.with(bible: self.reader.book.bible.settingReference(art.path, for: character.id)))
+                    self.scriptLog?.append("reference ready for \(character.id) in \(art.ms) ms")
+                } catch {
+                    self?.scriptLog?.append("reference failed for \(character.id): \(error.localizedDescription)")
+                    self?.referencesRequested.remove(character.id)
+                }
+            }
         }
     }
 

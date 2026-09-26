@@ -29,7 +29,7 @@ public enum StoryEngine {
     /// if a `page`-requiring action arrives without one, the draft is left unchanged
     /// rather than guessed at.
     public static func apply(_ response: StoryTurnResponse, to book: Book, currentDraft: PageContent) -> StoryTurnOutcome {
-        let updatedBook = book.with(bible: response.bible)
+        let updatedBook = book.with(bible: response.bible.carryingReferences(from: book.bible))
 
         switch (response.action, response.page) {
         case (.none, _):

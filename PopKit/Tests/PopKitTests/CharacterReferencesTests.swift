@@ -3,73 +3,73 @@ import Testing
 @testable import PopKit
 
 @Suite struct CharacterReferencesTests {
-    private let maya = Character(id: "maya", name: "Maya", description: "a small blue dragon")
+    private let sara = Character(id: "sara", name: "Sara", description: "a small blue dragon")
     private let fox = Character(id: "fox", name: "Fox", description: "a friendly orange fox")
 
     @Test func aNewBibleKeepsTheReferencesAlreadyMade() {
-        let old = StoryBible(characters: [maya.with(referencePath: "u/b/character-maya-v1.png"), fox])
-        let fresh = StoryBible(title: "T", characters: [maya, fox, Character(id: "owl", name: "Owl", description: "wise")])
+        let old = StoryBible(characters: [sara.with(referencePath: "u/b/character-sara-v1.png"), fox])
+        let fresh = StoryBible(title: "T", characters: [sara, fox, Character(id: "owl", name: "Owl", description: "wise")])
         let merged = fresh.keepingCharacters(from: old)
-        #expect(merged.characters.map(\.referencePath) == ["u/b/character-maya-v1.png", nil, nil])
+        #expect(merged.characters.map(\.referencePath) == ["u/b/character-sara-v1.png", nil, nil])
         #expect(merged.title == "T")
     }
 
     @Test func theAppsCurrentReferenceWinsOverTheServersEcho() {
         // The server echoes the reference the app sent; a sheet may have replaced it since.
-        let old = StoryBible(characters: [maya.with(referencePath: "sheet.png")])
-        let fresh = StoryBible(characters: [maya.with(referencePath: "page-still.png")])
+        let old = StoryBible(characters: [sara.with(referencePath: "sheet.png")])
+        let fresh = StoryBible(characters: [sara.with(referencePath: "page-still.png")])
         #expect(fresh.keepingCharacters(from: old).characters.first?.referencePath == "sheet.png")
     }
 
     @Test func aServerReferenceFillsAnEmptySlot() {
-        let old = StoryBible(characters: [maya])
-        let fresh = StoryBible(characters: [maya.with(referencePath: "new.png")])
+        let old = StoryBible(characters: [sara])
+        let fresh = StoryBible(characters: [sara.with(referencePath: "new.png")])
         #expect(fresh.keepingCharacters(from: old).characters.first?.referencePath == "new.png")
     }
 
     @Test func aKnownCharacterKeepsItsLookWhenTheEngineRedescribesIt() {
-        let old = StoryBible(characters: [maya.with(referencePath: "m.png")])
-        let fresh = StoryBible(characters: [Character(id: "maya", name: "Maya", description: "a big red dragon")])
-        #expect(fresh.keepingCharacters(from: old).characters == [maya.with(referencePath: "m.png")])
+        let old = StoryBible(characters: [sara.with(referencePath: "m.png")])
+        let fresh = StoryBible(characters: [Character(id: "sara", name: "Sara", description: "a big red dragon")])
+        #expect(fresh.keepingCharacters(from: old).characters == [sara.with(referencePath: "m.png")])
     }
 
     @Test func aKnownCharacterIsMatchedByNameWhenItsIdChanges() {
-        let old = StoryBible(characters: [maya.with(referencePath: "m.png")])
-        let fresh = StoryBible(characters: [Character(id: "maya_dragon", name: "maya", description: "a dragon")])
-        #expect(fresh.keepingCharacters(from: old).characters == [maya.with(referencePath: "m.png")])
+        let old = StoryBible(characters: [sara.with(referencePath: "m.png")])
+        let fresh = StoryBible(characters: [Character(id: "sara_dragon", name: "sara", description: "a dragon")])
+        #expect(fresh.keepingCharacters(from: old).characters == [sara.with(referencePath: "m.png")])
     }
 
     @Test func aCharacterTheEngineLeftOutStays() {
-        let old = StoryBible(characters: [maya.with(referencePath: "m.png"), fox])
+        let old = StoryBible(characters: [sara.with(referencePath: "m.png"), fox])
         let fresh = StoryBible(characters: [fox])
-        #expect(fresh.keepingCharacters(from: old).characters.map(\.id) == ["fox", "maya"])
+        #expect(fresh.keepingCharacters(from: old).characters.map(\.id) == ["fox", "sara"])
     }
 
     @Test func leftOutCharactersNeverPassTheCap() {
         let crowd = (0..<10).map { Character(id: "c\($0)", name: "C\($0)", description: "d") }
-        let merged = StoryBible(characters: crowd).keepingCharacters(from: StoryBible(characters: [maya]))
+        let merged = StoryBible(characters: crowd).keepingCharacters(from: StoryBible(characters: [sara]))
         #expect(merged.characters.count == 10)
-        #expect(!merged.characters.contains { $0.id == "maya" })
+        #expect(!merged.characters.contains { $0.id == "sara" })
     }
 
     @Test func onlyCharactersNamedInThePictureGetItAsTheirReference() {
-        let bible = StoryBible(characters: [maya, fox])
-        let named = CharacterReferences.missing(in: bible, onPageWith: "maya flies over the pond at dusk", alreadyRequested: [])
-        #expect(named.map(\.id) == ["maya"])
-        #expect(CharacterReferences.missing(in: bible, onPageWith: "Mayapple fields", alreadyRequested: []).isEmpty)
-        #expect(CharacterReferences.missing(in: bible, onPageWith: "Maya and Fox", alreadyRequested: ["fox"]).map(\.id) == ["maya"])
+        let bible = StoryBible(characters: [sara, fox])
+        let named = CharacterReferences.missing(in: bible, onPageWith: "sara flies over the pond at dusk", alreadyRequested: [])
+        #expect(named.map(\.id) == ["sara"])
+        #expect(CharacterReferences.missing(in: bible, onPageWith: "Sarapple fields", alreadyRequested: []).isEmpty)
+        #expect(CharacterReferences.missing(in: bible, onPageWith: "Sara and Fox", alreadyRequested: ["fox"]).map(\.id) == ["sara"])
     }
 
     @Test func theFinishedSheetReplacesOnlyTheStandInPicture() {
-        let bible = StoryBible(characters: [maya.with(referencePath: "page-0.png"), fox.with(referencePath: "drawing.png")])
+        let bible = StoryBible(characters: [sara.with(referencePath: "page-0.png"), fox.with(referencePath: "drawing.png")])
         let updated = bible
-            .replacingReference("page-0.png", with: "sheet-maya.png", for: "maya")
+            .replacingReference("page-0.png", with: "sheet-sara.png", for: "sara")
             .replacingReference("page-0.png", with: "sheet-fox.png", for: "fox")
-        #expect(updated.characters.map(\.referencePath) == ["sheet-maya.png", "drawing.png"])
+        #expect(updated.characters.map(\.referencePath) == ["sheet-sara.png", "drawing.png"])
     }
 
     @Test func missingListsOnlyCharactersWithoutAReference() {
-        let bible = StoryBible(characters: [maya.with(referencePath: "m.png"), fox])
+        let bible = StoryBible(characters: [sara.with(referencePath: "m.png"), fox])
         #expect(CharacterReferences.missing(in: bible, alreadyRequested: []).map(\.id) == ["fox"])
         #expect(CharacterReferences.missing(in: bible, alreadyRequested: ["fox"]).isEmpty)
     }
@@ -86,8 +86,8 @@ import Testing
     }
 
     @Test func applyingAReferenceOnlyFillsAnEmptySlot() {
-        let bible = StoryBible(characters: [maya.with(referencePath: "keep.png"), fox])
-        let updated = bible.settingReference("fox.png", for: "fox").settingReference("other.png", for: "maya")
+        let bible = StoryBible(characters: [sara.with(referencePath: "keep.png"), fox])
+        let updated = bible.settingReference("fox.png", for: "fox").settingReference("other.png", for: "sara")
         #expect(updated.characters.map(\.referencePath) == ["keep.png", "fox.png"])
     }
 }

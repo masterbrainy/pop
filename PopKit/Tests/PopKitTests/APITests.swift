@@ -16,7 +16,7 @@ struct APITests {
         let request = StoryTurnRequest(
             mode: .path,
             bookId: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-            kid: StoryTurnKid(firstName: "Maya", readingLevel: .earlyReader, interests: ["dinosaurs"]),
+            kid: StoryTurnKid(firstName: "Sara", readingLevel: .earlyReader, interests: ["dinosaurs"]),
             brief: StoryBrief(interests: ["dinosaurs"], teach: "sharing"),
             settings: ParentSettings(),
             bible: .empty,
@@ -29,7 +29,7 @@ struct APITests {
         #expect(json["index"] as? Int == 1)
         #expect(json["bookId"] as? String == "00000000-0000-0000-0000-000000000001")
         let kid = json["kid"] as? [String: Any]
-        #expect(kid?["firstName"] as? String == "Maya")
+        #expect(kid?["firstName"] as? String == "Sara")
         #expect(kid?["readingLevel"] as? String == "early_reader")
         let input = json["input"] as? [String: Any]
         #expect(input?["kind"] as? String == "speech")
@@ -49,11 +49,11 @@ struct APITests {
     }
 
     @Test func storyTurnKidAdapterDropsTheIdField() throws {
-        let kid = KidProfile(firstName: "Maya", readingLevel: .listener, interests: ["stars"])
+        let kid = KidProfile(firstName: "Sara", readingLevel: .listener, interests: ["stars"])
         let wire = StoryTurnKid(kid)
         let json = try object(from: encoder.encode(wire))
         #expect(json["id"] == nil)
-        #expect(json["firstName"] as? String == "Maya")
+        #expect(json["firstName"] as? String == "Sara")
         #expect(json["readingLevel"] as? String == "listener")
     }
 

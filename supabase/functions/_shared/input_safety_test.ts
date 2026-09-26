@@ -24,7 +24,7 @@ Deno.test("checkInputSafety treats empty input as trivially safe and skips both 
       return { safe: true, reason: "" };
     },
   });
-  const verdict = await checkInputSafety("   ", "kid", "Maya", deps);
+  const verdict = await checkInputSafety("   ", "kid", "Sara", deps);
   assertEquals(verdict, { blocked: false, parentNote: null, refusal: null });
   assertEquals(moderateCalled, false);
   assertEquals(rubricCalled, false);
@@ -32,8 +32,8 @@ Deno.test("checkInputSafety treats empty input as trivially safe and skips both 
 
 Deno.test("checkInputSafety passes safe text from either speaker", async () => {
   const deps = fakeDeps();
-  const parentVerdict = await checkInputSafety("wake the dragon up", "parent", "Maya", deps);
-  const kidVerdict = await checkInputSafety("add a puppy", "kid", "Maya", deps);
+  const parentVerdict = await checkInputSafety("wake the dragon up", "parent", "Sara", deps);
+  const kidVerdict = await checkInputSafety("add a puppy", "kid", "Sara", deps);
   assertEquals(parentVerdict.blocked, false);
   assertEquals(kidVerdict.blocked, false);
 });
@@ -44,9 +44,9 @@ Deno.test("checkInputSafety blocks moderation-flagged input from a kid with the 
     moderateText: async () => ({ flagged: true, categories: ["violence"] }),
     checkRealHarm: async () => ({ safe: false, reason: "sounds like real harm" }),
   });
-  const verdict = await checkInputSafety("something unsafe", "kid", "Maya", deps);
+  const verdict = await checkInputSafety("something unsafe", "kid", "Sara", deps);
   assertEquals(verdict.blocked, true);
-  assertEquals(verdict.parentNote, kidRealHarmNote("Maya"));
+  assertEquals(verdict.parentNote, kidRealHarmNote("Sara"));
   assertEquals(verdict.refusal, "real_harm");
 });
 
@@ -59,7 +59,7 @@ Deno.test("checkInputSafety blocks moderation-flagged playful pretend content fr
     moderateText: async () => ({ flagged: true, categories: ["violence"] }),
     checkRealHarm: async () => ({ safe: true, reason: "" }),
   });
-  const verdict = await checkInputSafety("the dragon fights the knight", "kid", "Maya", deps);
+  const verdict = await checkInputSafety("the dragon fights the knight", "kid", "Sara", deps);
   assertEquals(verdict.blocked, true);
   assertEquals(verdict.parentNote, gentleParentNote());
   assertEquals(verdict.refusal, "unsafe");
@@ -74,7 +74,7 @@ Deno.test("checkInputSafety runs the real-harm rubric for a kid speaker even whe
       return { safe: true, reason: "" };
     },
   });
-  const verdict = await checkInputSafety("add a puppy", "kid", "Maya", deps);
+  const verdict = await checkInputSafety("add a puppy", "kid", "Sara", deps);
   assertEquals(verdict.blocked, false);
   assertEquals(rubricCalled, true);
 });
@@ -84,7 +84,7 @@ Deno.test("checkInputSafety blocks moderation-flagged input from a parent when t
     moderateText: async () => ({ flagged: true, categories: [] }),
     checkDirectionSafety: async () => ({ safe: false, reason: "genuinely unsafe" }),
   });
-  const verdict = await checkInputSafety("something unsafe", "parent", "Maya", deps);
+  const verdict = await checkInputSafety("something unsafe", "parent", "Sara", deps);
   assertEquals(verdict.blocked, true);
   assertEquals(verdict.parentNote, gentleParentNote());
   assertEquals(verdict.refusal, "unsafe");
@@ -99,7 +99,7 @@ Deno.test("checkInputSafety allows a parent's moderation-flagged-but-benign dire
     moderateText: async () => ({ flagged: true, categories: ["violence"] }),
     checkDirectionSafety: async () => ({ safe: true, reason: "" }),
   });
-  const verdict = await checkInputSafety("Let's finish the story here with a proper ending.", "parent", "Maya", deps);
+  const verdict = await checkInputSafety("Let's finish the story here with a proper ending.", "parent", "Sara", deps);
   assertEquals(verdict, { blocked: false, parentNote: null, refusal: null });
 });
 
@@ -111,7 +111,7 @@ Deno.test("checkInputSafety never calls the direction-safety second opinion when
       return { safe: true, reason: "" };
     },
   });
-  const verdict = await checkInputSafety("wake the dragon up", "parent", "Maya", deps);
+  const verdict = await checkInputSafety("wake the dragon up", "parent", "Sara", deps);
   assertEquals(verdict.blocked, false);
   assertEquals(secondOpinionCalled, false);
 });
@@ -126,16 +126,16 @@ Deno.test("checkInputSafety never calls the direction-safety second opinion for 
       return { safe: true, reason: "" };
     },
   });
-  const verdict = await checkInputSafety("the dragon fights the knight", "kid", "Maya", deps);
+  const verdict = await checkInputSafety("the dragon fights the knight", "kid", "Sara", deps);
   assertEquals(verdict.blocked, true);
   assertEquals(secondOpinionCalled, false);
 });
 
 Deno.test("checkInputSafety runs the real-harm rubric only for a kid speaker, and blocks with the kid note and refusal 'real_harm' when it fails", async () => {
   const deps = fakeDeps({ checkRealHarm: async () => ({ safe: false, reason: "sounds like real harm" }) });
-  const verdict = await checkInputSafety("my uncle hurts me", "kid", "Maya", deps);
+  const verdict = await checkInputSafety("my uncle hurts me", "kid", "Sara", deps);
   assertEquals(verdict.blocked, true);
-  assertEquals(verdict.parentNote, kidRealHarmNote("Maya"));
+  assertEquals(verdict.parentNote, kidRealHarmNote("Sara"));
   assertEquals(verdict.refusal, "real_harm");
 });
 
@@ -147,15 +147,15 @@ Deno.test("checkInputSafety never runs the real-harm rubric for a parent's typed
       return { safe: false, reason: "should never be called" };
     },
   });
-  const verdict = await checkInputSafety("anything", "parent", "Maya", deps);
+  const verdict = await checkInputSafety("anything", "parent", "Sara", deps);
   assertEquals(verdict.blocked, false);
   assertEquals(rubricCalled, false);
 });
 
 Deno.test("checkInputSafety runs the real-harm rubric on speech under the parent toggle, since a kid may be talking (R-44)", async () => {
   const deps = fakeDeps({ checkRealHarm: async () => ({ safe: false, reason: "sounds like real harm" }) });
-  const verdict = await checkInputSafety("my uncle hurts me", "parent", "Maya", deps, "speech");
-  assertEquals(verdict, { blocked: true, parentNote: kidRealHarmNote("Maya"), refusal: "real_harm" });
+  const verdict = await checkInputSafety("my uncle hurts me", "parent", "Sara", deps, "speech");
+  assertEquals(verdict, { blocked: true, parentNote: kidRealHarmNote("Sara"), refusal: "real_harm" });
 });
 
 Deno.test("checkInputSafety lets a parent's safe speech through after the real-harm check", async () => {
@@ -166,7 +166,7 @@ Deno.test("checkInputSafety lets a parent's safe speech through after the real-h
       return { safe: true, reason: "" };
     },
   });
-  const verdict = await checkInputSafety("wake the dragon up", "parent", "Maya", deps, "speech");
+  const verdict = await checkInputSafety("wake the dragon up", "parent", "Sara", deps, "speech");
   assertEquals(verdict.blocked, false);
   assertEquals(rubricCalled, true);
 });
@@ -176,7 +176,7 @@ Deno.test("checkInputSafety still gives a parent's flagged speech the second opi
     moderateText: async () => ({ flagged: true, categories: ["violence"] }),
     checkDirectionSafety: async () => ({ safe: false, reason: "too scary" }),
   });
-  const verdict = await checkInputSafety("something scary", "parent", "Maya", deps, "speech");
+  const verdict = await checkInputSafety("something scary", "parent", "Sara", deps, "speech");
   assertEquals(verdict, { blocked: true, parentNote: gentleParentNote(), refusal: "unsafe" });
 });
 

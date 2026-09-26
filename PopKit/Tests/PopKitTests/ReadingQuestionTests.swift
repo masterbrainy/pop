@@ -15,18 +15,18 @@ import Testing
     private let book = Book(kidId: UUID(), brief: StoryBrief(interests: []), createdAt: Date(timeIntervalSince1970: 0))
 
     @Test func aWrittenPageTakesItsQuestionFromTheResponse() {
-        let outcome = StoryEngine.applyPage(response(text: "Maya flies. She sees a kite.", question: "What does Maya see?"), to: book)
-        #expect(outcome.page?.question == "What does Maya see?")
+        let outcome = StoryEngine.applyPage(response(text: "Sara flies. She sees a kite.", question: "What does Sara see?"), to: book)
+        #expect(outcome.page?.question == "What does Sara see?")
     }
 
     @Test func anEmptyQuestionIsStoredAsNone() {
-        let outcome = StoryEngine.applyPage(response(text: "Maya flies.", question: "  "), to: book)
+        let outcome = StoryEngine.applyPage(response(text: "Sara flies.", question: "  "), to: book)
         #expect(outcome.page?.question == nil)
     }
 
     @Test func mediaUpdatesKeepTheQuestion() {
-        let page = PageContent(index: 0, text: "Maya flies.").with(question: "Who flies?")
-        #expect(page.with(stillPath: "s.png").with(clipPath: "c.mp4").with(text: "Maya flies high.").question == "Who flies?")
+        let page = PageContent(index: 0, text: "Sara flies.").with(question: "Who flies?")
+        #expect(page.with(stillPath: "s.png").with(clipPath: "c.mp4").with(text: "Sara flies high.").question == "Who flies?")
     }
 
     @Test func booksSavedBeforeQuestionsStillLoad() throws {

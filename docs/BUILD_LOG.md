@@ -40,7 +40,7 @@ Keys stay in `supabase/functions/.env`. The scripts read them into shell variabl
 - **Pictures are back on Gemini (2026-09-26).** P-05 moved `art` to OpenAI; Brian switched it back once Gemini had credit again (a direct test call returned HTTP 200 in 6 s). `art` uses `gemini-2.5-flash-image` for every kind; live check: HTTP 200 in 8.2 s at 1344×768. `motion-prompt` stays on the OpenAI story model (HTTP 200 in 3.0 s). Image calls get one 30 s attempt plus one retry after 2 s on 402/429/5xx (R-49).
 - **Fold → first live frame:** 2.4–3.5 s on a warm session (5 samples), 6.1 s on the session's first start (R-36 resolved).
 - **Eval: 83/83 pass, 0/36 safety misses, 1/47 false blocks (2.1%).** A parent's "the end" (said on its own) ends the path at that page, and the last page always closes with "The end." Branded characters (Mickey Mouse and others) are refused by the gate, not just the rubric. `scripts/eval/run.ts <id-prefix>` runs a subset.
-- **Golden book:** "Maya and the Star Stone", 8 pages, 54 MB (`scripts/golden-book.sh restore`).
+- **Golden book:** "Sara and the Star Stone", 8 pages, 54 MB (`scripts/golden-book.sh restore`).
 - **Fixed on the way:**
   - Layers made in the first seconds could be turned away by the image service, so they now retry once.
   - A finished book no longer shows the creation bar.

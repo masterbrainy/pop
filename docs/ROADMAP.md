@@ -245,7 +245,7 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 5. Open the Duo with the slider. If the inner screen stays black, click it once to wake it.
 6. Check Gemini has credit (pictures): a test `generateContent` call on `gemini-2.5-flash-image` must return HTTP 200. HTTP 402 "prepayment credits are depleted" means top up in AI Studio (ai.studio/projects); without credit, new books get words but no pictures or animation.
 
-**Rehearsal (T-15 min):** make a book once (about 4 minutes for 8 pages). Then `scripts/golden-book.sh restore` so the golden book, "Maya and the Star Stone" (8 pages), is on the shelf. Mute the Mac, so Orbis sound can't reach the mic. Use a wired connection or a hotspot.
+**Rehearsal (T-15 min):** make a book once (about 4 minutes for 8 pages). Then `scripts/golden-book.sh restore` so the golden book, "Sara and the Star Stone" (8 pages), is on the shelf. Mute the Mac, so Orbis sound can't reach the mic. Use a wired connection or a hotspot.
 
 **Live:**
 1. **Bookshelf.** Tap New book, fill in the brief (first name, interests), and open.

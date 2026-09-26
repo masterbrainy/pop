@@ -4,21 +4,21 @@ import { buildArtPrompt, drawingInlineImage, referencePathsFor, STANDARD_DIMENSI
 import type { Character } from "./schemas.ts";
 
 const rex: Character = { id: "rex", name: "Rex", description: "a friendly green dinosaur", referencePath: "u/b/character-rex-v1.png" };
-const maya: Character = { id: "maya", name: "Maya", description: "a curious kid", referencePath: null };
+const sara: Character = { id: "sara", name: "Sara", description: "a curious kid", referencePath: null };
 
 Deno.test("referencePathsFor: page/cover include every character with a saved reference", () => {
-  assertEquals(referencePathsFor("page", [rex, maya]), ["u/b/character-rex-v1.png"]);
-  assertEquals(referencePathsFor("cover", [rex, maya]), ["u/b/character-rex-v1.png"]);
+  assertEquals(referencePathsFor("page", [rex, sara]), ["u/b/character-rex-v1.png"]);
+  assertEquals(referencePathsFor("cover", [rex, sara]), ["u/b/character-rex-v1.png"]);
 });
 
 Deno.test("referencePathsFor: cutout/character include only the matching characterId", () => {
-  assertEquals(referencePathsFor("cutout", [rex, maya], "rex"), ["u/b/character-rex-v1.png"]);
-  assertEquals(referencePathsFor("character", [rex, maya], "maya"), []); // maya has no referencePath yet
-  assertEquals(referencePathsFor("cutout", [rex, maya], "nobody"), []);
+  assertEquals(referencePathsFor("cutout", [rex, sara], "rex"), ["u/b/character-rex-v1.png"]);
+  assertEquals(referencePathsFor("character", [rex, sara], "sara"), []); // sara has no referencePath yet
+  assertEquals(referencePathsFor("cutout", [rex, sara], "nobody"), []);
 });
 
 Deno.test("referencePathsFor: plate never includes any character", () => {
-  assertEquals(referencePathsFor("plate", [rex, maya]), []);
+  assertEquals(referencePathsFor("plate", [rex, sara]), []);
 });
 
 Deno.test("buildArtPrompt always starts with the locked art style", () => {
@@ -38,16 +38,16 @@ Deno.test("buildArtPrompt adds the no-characters instruction only for plate", ()
 });
 
 Deno.test("buildArtPrompt names the single character for cutout/character kinds", () => {
-  const prompt = buildArtPrompt("cutout", "waving hello", [rex, maya], "rex");
+  const prompt = buildArtPrompt("cutout", "waving hello", [rex, sara], "rex");
   assertEquals(prompt.includes("Rex"), true);
   assertEquals(prompt.includes("a friendly green dinosaur"), true);
-  assertEquals(prompt.includes("Maya"), false);
+  assertEquals(prompt.includes("Sara"), false);
 });
 
 Deno.test("buildArtPrompt lists every character for page/cover kinds", () => {
-  const prompt = buildArtPrompt("page", "playing together", [rex, maya]);
+  const prompt = buildArtPrompt("page", "playing together", [rex, sara]);
   assertEquals(prompt.includes("Rex"), true);
-  assertEquals(prompt.includes("Maya"), true);
+  assertEquals(prompt.includes("Sara"), true);
 });
 
 Deno.test("buildArtPrompt always ends with the caller's own prompt", () => {
@@ -60,7 +60,7 @@ Deno.test("STANDARD_DIMENSIONS matches CONTRACTS.md's example for 16:9", () => {
 });
 
 Deno.test("referencePathsFor: drawing never includes any existing character reference", () => {
-  assertEquals(referencePathsFor("drawing", [rex, maya], "rex"), []);
+  assertEquals(referencePathsFor("drawing", [rex, sara], "rex"), []);
 });
 
 Deno.test("buildArtPrompt redraws a drawing onto the same magenta backdrop as cutout", () => {

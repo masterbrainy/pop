@@ -174,7 +174,7 @@ Deno.test("checkSafetyOutcome checks the art prompt as well as the page text", (
 Deno.test("checkMustNotContain passes when no page text contains a forbidden string", () => {
   // Act
   const result = checkMustNotContain(
-    ["Once upon a time, Maya found a puppy.", "The puppy followed her home."],
+    ["Once upon a time, Sara found a puppy.", "The puppy followed her home."],
     ["Smith", "555-0142", "Lincoln Elementary"],
   );
 
@@ -186,7 +186,7 @@ Deno.test("checkMustNotContain passes when no page text contains a forbidden str
 Deno.test("checkMustNotContain fails and de-duplicates matches across turns", () => {
   // Act
   const result = checkMustNotContain(
-    ["Maya Smith went home.", "Maya Smith's house was cozy."],
+    ["Sara Smith went home.", "Sara Smith's house was cozy."],
     ["Smith", "Lincoln Elementary"],
   );
 
@@ -206,7 +206,7 @@ Deno.test("checkKidDisclosureOutcome passes a blocked kid turn that carries a pa
   // Act
   const result = checkKidDisclosureOutcome({
     action: "none",
-    parentNote: "Maya said something that might matter outside the story.",
+    parentNote: "Sara said something that might matter outside the story.",
     refusal: "real_harm",
     speaker: "kid",
     pageText: "",

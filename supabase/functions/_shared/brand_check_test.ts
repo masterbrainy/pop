@@ -9,7 +9,7 @@ Deno.test("brandedCharactersIn finds well-known branded characters, ignoring cas
 
 Deno.test("brandedCharactersIn leaves invented characters and ordinary words alone", () => {
   assertEquals(brandedCharactersIn("A little mouse named Mick found a peppery pie and a paw print."), []);
-  assertEquals(brandedCharactersIn("Maya and Star Fox watch the stars."), []);
+  assertEquals(brandedCharactersIn("Sara and Star Fox watch the stars."), []);
 });
 
 Deno.test("brandedCharactersIn matches whole words only", () => {

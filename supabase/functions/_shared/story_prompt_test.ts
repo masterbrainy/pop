@@ -13,18 +13,18 @@ Deno.test("buildTitlePrompt orders pages by index and includes the setting and f
   const prompt = buildTitlePrompt(
     { title: null, setting: "a quiet meadow", characters: [], directions: [], path: [] },
     [{ index: 1, text: "Page two text" }, { index: 0, text: "Page one text" }],
-    "Maya",
+    "Sara",
   );
   const indexOfPageOne = prompt.indexOf("Page one text");
   const indexOfPageTwo = prompt.indexOf("Page two text");
   assert(indexOfPageOne < indexOfPageTwo);
-  assert(prompt.includes("Maya"));
+  assert(prompt.includes("Sara"));
   assert(prompt.includes("a quiet meadow"));
 });
 
 function basePathInput(overrides: Partial<StoryPathPromptInput> = {}): StoryPathPromptInput {
   return {
-    kid: { firstName: "Maya", readingLevel: "early_reader", interests: ["dinosaurs"] },
+    kid: { firstName: "Sara", readingLevel: "early_reader", interests: ["dinosaurs"] },
     brief: { interests: ["dinosaurs"], realMoment: null, teach: null, language: "en" },
     settings: { avoidTopics: [] },
     bible: { title: null, setting: "", characters: [], directions: [], path: [] },
@@ -156,7 +156,7 @@ Deno.test("buildStoryPathSystemPrompt gives the prescriptive ending-close instru
   const withEndRequest = buildStoryPathSystemPrompt(
     basePathInput({
       index: 1,
-      kid: { firstName: "Maya", readingLevel: "reader", interests: ["dinosaurs"] },
+      kid: { firstName: "Sara", readingLevel: "reader", interests: ["dinosaurs"] },
       bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0"] },
       input: { kind: "typed", speaker: "parent", text: "Let's finish the story here with a proper ending." },
     }),
@@ -174,10 +174,10 @@ Deno.test("buildStoryPathSystemPrompt tells the model to write only in the brief
 
 function basePageInput(overrides: Partial<StoryPagePromptInput> = {}): StoryPagePromptInput {
   return {
-    kid: { firstName: "Maya", readingLevel: "early_reader", interests: ["dinosaurs"] },
+    kid: { firstName: "Sara", readingLevel: "early_reader", interests: ["dinosaurs"] },
     brief: { interests: ["dinosaurs"], realMoment: null, teach: null, language: "en" },
     settings: { avoidTopics: [] },
-    bible: { title: null, setting: "", characters: [], directions: [], path: ["Maya finds a red kite in the meadow."] },
+    bible: { title: null, setting: "", characters: [], directions: [], path: ["Sara finds a red kite in the meadow."] },
     pages: [],
     index: 0,
     ...overrides,
@@ -186,7 +186,7 @@ function basePageInput(overrides: Partial<StoryPagePromptInput> = {}): StoryPage
 
 Deno.test("buildStoryPageSystemPrompt writes from the existing beat at bible.path[index]", () => {
   const prompt = buildStoryPageSystemPrompt(basePageInput());
-  assert(prompt.includes("Maya finds a red kite in the meadow."));
+  assert(prompt.includes("Sara finds a red kite in the meadow."));
   assert(prompt.includes("do not invent a different moment"));
 });
 
@@ -219,7 +219,7 @@ Deno.test("buildStoryPageSystemPrompt tells the model to write a clear ending on
 Deno.test("buildStoryPageSystemPrompt asks for one of the eval's exact closing phrases at the reader level", () => {
   const lastPage = buildStoryPageSystemPrompt(
     basePageInput({
-      kid: { firstName: "Maya", readingLevel: "reader", interests: ["dinosaurs"] },
+      kid: { firstName: "Sara", readingLevel: "reader", interests: ["dinosaurs"] },
       bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0", "Beat 1"] },
       index: 1,
     }),

@@ -5,7 +5,7 @@ import Testing
 /// Covers `StoryEngine`'s parts not already covered by `StoryPathTests`: the `title`
 /// request builder and the reading-level word-count check (PRD §8.7).
 struct StoryEngineTests {
-    private let kid = KidProfile(firstName: "Maya", readingLevel: .earlyReader, interests: ["dinosaurs"])
+    private let kid = KidProfile(firstName: "Sara", readingLevel: .earlyReader, interests: ["dinosaurs"])
     private let settings = ParentSettings(avoidTopics: ["monsters"])
 
     private func book(pages: [PageContent] = [], bible: StoryBible = .empty) -> Book {

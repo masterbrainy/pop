@@ -4,7 +4,7 @@ import Foundation
 public enum SampleBooks {
     public static let kid = KidProfile(
         id: UUID(uuidString: "6F0C2E1A-6A51-4D5B-9B8E-0A1B2C3D4E5F")!,
-        firstName: "Maya",
+        firstName: "Sara",
         readingLevel: .earlyReader,
         interests: ["foxes", "stars"]
     )

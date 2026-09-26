@@ -18,14 +18,14 @@ const question = {
 
 function pathOutput(overrides: Record<string, unknown> = {}) {
   return {
-    path: ["Maya finds a red kite in the meadow.", "Maya falls asleep holding the kite. The end."],
+    path: ["Sara finds a red kite in the meadow.", "Sara falls asleep holding the kite. The end."],
     isEnding: false,
-    pageText: "Maya finds a red kite in the meadow.",
+    pageText: "Sara finds a red kite in the meadow.",
     artPrompt: "A young girl finding a red kite in a sunny meadow.",
     question,
     bibleTitle: null,
     bibleSetting: "A sunny meadow",
-    bibleCharacters: [{ id: "maya", name: "Maya", description: "a curious kid" }],
+    bibleCharacters: [{ id: "sara", name: "Sara", description: "a curious kid" }],
     bibleDirections: [],
     parentNote: null,
     ...overrides,
@@ -34,7 +34,7 @@ function pathOutput(overrides: Record<string, unknown> = {}) {
 
 function pageOutput(overrides: Record<string, unknown> = {}) {
   return {
-    pageText: "Maya finds a red kite in the meadow.",
+    pageText: "Sara finds a red kite in the meadow.",
     artPrompt: "A young girl finding a red kite in a sunny meadow.",
     question,
     parentNote: null,

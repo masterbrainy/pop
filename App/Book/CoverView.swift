@@ -2,7 +2,7 @@ import PopKit
 import SwiftUI
 
 /// What the closed phone's outer screen shows: the book's cover with its title line
-/// ("Title, a story for Maya", PRD H3). A finished book's painted cover fills the screen with
+/// ("Title, a story for Sara", PRD H3). A finished book's painted cover fills the screen with
 /// the title over its sky; a draft shows its first picture on the plain cover.
 struct CoverView: View {
     let book: Book

@@ -327,10 +327,13 @@ public struct ModerateResponse: Codable, Sendable, Equatable {
 public struct TTSRequest: Codable, Sendable, Equatable {
     public let text: String
     public let voice: String
+    /// How to speak it (tone, pace); omitted when nil. A server that predates it ignores it.
+    public let instructions: String?
 
-    public init(text: String, voice: String) {
+    public init(text: String, voice: String, instructions: String? = nil) {
         self.text = text
         self.voice = voice
+        self.instructions = instructions
     }
 }
 

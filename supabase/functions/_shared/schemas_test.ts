@@ -25,10 +25,10 @@ Deno.test("uuidSchema rejects non-uuid strings", () => {
 
 Deno.test("kidSchema defaults interests to an empty array and trims the name", () => {
   const result = kidSchema.parse({
-    firstName: "  Maya  ",
+    firstName: "  Sara  ",
     readingLevel: "early_reader",
   });
-  assertEquals(result.firstName, "Maya");
+  assertEquals(result.firstName, "Sara");
   assertEquals(result.interests, []);
 });
 

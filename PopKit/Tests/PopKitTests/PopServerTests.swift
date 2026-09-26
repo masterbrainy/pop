@@ -31,7 +31,7 @@ struct PopServerTests {
         }
         let server = HTTPPopServer(supabaseURL: baseURL, publishableKey: "pub-key", transport: transport, auth: auth())
         let request = StoryTurnRequest(
-            mode: .path, bookId: UUID(), kid: StoryTurnKid(firstName: "Maya", readingLevel: .listener, interests: []),
+            mode: .path, bookId: UUID(), kid: StoryTurnKid(firstName: "Sara", readingLevel: .listener, interests: []),
             brief: StoryBrief(interests: []), settings: ParentSettings(), bible: .empty, pages: [],
             input: StoryTurnInput(kind: .typed, speaker: .parent, text: "begin"), index: 0
         )
@@ -46,7 +46,7 @@ struct PopServerTests {
         }
         let server = HTTPPopServer(supabaseURL: baseURL, publishableKey: "pub-key", transport: transport, auth: auth())
         let response = try await server.storyTitle(.title(
-            bookId: UUID(), kid: StoryTurnKid(firstName: "Maya", readingLevel: .listener, interests: []),
+            bookId: UUID(), kid: StoryTurnKid(firstName: "Sara", readingLevel: .listener, interests: []),
             brief: StoryBrief(interests: []), settings: ParentSettings(), bible: .empty, pages: []
         ))
         #expect(response.title == "Rex Learns to Share")
@@ -146,7 +146,7 @@ struct PopServerTests {
             return (Data(body.utf8), .fake(status: 200, url: request.url!))
         }
         let server = HTTPPopServer(supabaseURL: baseURL, publishableKey: "pub-key", transport: transport, auth: auth())
-        let kid = StoryTurnKid(firstName: "Maya", readingLevel: .listener, interests: [])
+        let kid = StoryTurnKid(firstName: "Sara", readingLevel: .listener, interests: [])
         _ = try await server.storyTitle(.title(bookId: UUID(), kid: kid, brief: StoryBrief(interests: []), settings: ParentSettings(), bible: .empty, pages: []))
         _ = try await server.art(ArtRequest(bookId: UUID(), kind: .page, pageIndex: 0, version: 1, prompt: "a fox"))
         _ = try await server.motionPrompt(MotionPromptRequest(bookId: UUID(), pageIndex: 0, text: "t", stillPath: "s.png"))

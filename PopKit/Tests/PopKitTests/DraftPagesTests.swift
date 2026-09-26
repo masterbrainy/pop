@@ -5,7 +5,7 @@ import Testing
 /// `DraftPages`: where a freshly written page goes (P-04), and results routed by page id and
 /// version rather than by index, so a late picture can't land on the page that replaced it.
 struct DraftPagesTests {
-    private let shown = PageContent(index: 0, text: "Maya finds a kite.", artPrompt: "a kite", stillPath: "/p0.png", clipPath: "/p0.mov")
+    private let shown = PageContent(index: 0, text: "Sara finds a kite.", artPrompt: "a kite", stillPath: "/p0.png", clipPath: "/p0.mov")
 
     private func written(_ index: Int, _ text: String = "The kite pulls her up.") -> PageContent {
         PageContent(index: index, text: text, artPrompt: "art \(index)")
@@ -14,7 +14,7 @@ struct DraftPagesTests {
     @Test func aPageWrittenForTheEmptyPageOnScreenFillsItWithANewerVersion() {
         let empty = PageContent(index: 0, text: "")
         let draft = DraftPages(pages: [empty], pendingNext: nil)
-        let page = written(0, "Maya finds a kite.")
+        let page = written(0, "Sara finds a kite.")
 
         let (next, placement) = draft.placing(page, currentIndex: 0)
 

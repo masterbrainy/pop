@@ -1,7 +1,7 @@
 import { assert, assertFalse } from "jsr:@std/assert@1";
 import { requestSchema } from "./schema.ts";
 
-const kid = { firstName: "Maya", readingLevel: "early_reader", interests: ["dinosaurs"] };
+const kid = { firstName: "Sara", readingLevel: "early_reader", interests: ["dinosaurs"] };
 const bible = { title: null, setting: "", characters: [], directions: [], path: [] };
 
 Deno.test("requestSchema accepts a well-formed title request without current/input", () => {

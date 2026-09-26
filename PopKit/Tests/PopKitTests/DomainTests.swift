@@ -50,7 +50,7 @@ struct DomainTests {
     }
 
     @Test func coverLineAddsTheKidsName() {
-        #expect(Book.coverLine(title: "Rex Learns to Share", firstName: "Maya") == "Rex Learns to Share, a story for Maya")
+        #expect(Book.coverLine(title: "Rex Learns to Share", firstName: "Sara") == "Rex Learns to Share, a story for Sara")
     }
 
     @Test func sampleBookHasFivePagesInOrder() {

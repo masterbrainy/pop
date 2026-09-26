@@ -5,8 +5,8 @@ import Testing
 /// P-04: the story path. `path` plans (or re-plans from an index) and writes that page;
 /// `page` writes the next page along the path; the page on screen never changes.
 @Suite struct StoryPathTests {
-    private let kid = KidProfile(firstName: "Maya", readingLevel: .earlyReader, interests: ["dragons"])
-    private let path = ["Maya finds a kite.", "The kite pulls her up.", "She lands softly and sleeps. The end."]
+    private let kid = KidProfile(firstName: "Sara", readingLevel: .earlyReader, interests: ["dragons"])
+    private let path = ["Sara finds a kite.", "The kite pulls her up.", "She lands softly and sleeps. The end."]
 
     private func book(path: [String] = [], pages: [PageContent] = []) -> Book {
         Book(kidId: kid.id, brief: StoryBrief(interests: ["dragons"]), bible: StoryBible(characters: [], path: path),
@@ -18,7 +18,7 @@ import Testing
             action: action,
             page: action == .none ? nil : StoryTurnPageResult(index: index, text: text, artPrompt: "art \(index)",
                                                               question: "Q\(index)?", isEnding: index == path.count - 1),
-            bible: StoryBible(title: "T", characters: [Character(id: "maya", name: "Maya", description: "blue dragon")], path: path),
+            bible: StoryBible(title: "T", characters: [Character(id: "sara", name: "Sara", description: "blue dragon")], path: path),
             parentNote: note, timings: StoryTurnTimings(modelMs: 1, safetyMs: 1)
         )
     }
@@ -40,14 +40,14 @@ import Testing
     }
 
     @Test func aDirectionReplansFromThePageBehindWithOnlyTheShownPages() {
-        let shown = [PageContent(index: 0, text: "Maya finds a kite.")]
+        let shown = [PageContent(index: 0, text: "Sara finds a kite.")]
         let direction = StoryTurnInput(kind: .typed, speaker: .parent, text: "make the kite purple")
         let request = StoryEngine.pathRequest(book: book(path: path, pages: shown), kid: kid, settings: ParentSettings(),
                                               shownPages: shown, index: 1, input: direction)
         #expect(request.mode == .path)
         #expect(request.index == 1)
         #expect(request.input == direction)
-        #expect(request.pages == [StoryTurnPageRef(index: 0, text: "Maya finds a kite.")])
+        #expect(request.pages == [StoryTurnPageRef(index: 0, text: "Sara finds a kite.")])
         #expect(request.bible.path == path)
     }
 
@@ -59,11 +59,11 @@ import Testing
     }
 
     @Test func applyingAPageGivesTheBookItsPathAndANewPageAtThatIndex() {
-        let reference = Character(id: "maya", name: "Maya", description: "blue dragon", referencePath: "u/b/character-maya-v1.png")
+        let reference = Character(id: "sara", name: "Sara", description: "blue dragon", referencePath: "u/b/character-sara-v1.png")
         let before = book().with(bible: StoryBible(characters: [reference]))
         let outcome = StoryEngine.applyPage(pageResponse(index: 1, text: "The kite pulls her up.", path: path), to: before)
         #expect(outcome.book.bible.path == path)
-        #expect(outcome.book.bible.characters.first?.referencePath == "u/b/character-maya-v1.png")
+        #expect(outcome.book.bible.characters.first?.referencePath == "u/b/character-sara-v1.png")
         #expect(outcome.page?.index == 1)
         #expect(outcome.page?.text == "The kite pulls her up.")
         #expect(outcome.page?.artPrompt == "art 1")
@@ -90,7 +90,7 @@ import Testing
 }
 
 @Suite struct PagePipelineBuildPageTests {
-    private let kid = KidProfile(firstName: "Maya", readingLevel: .earlyReader, interests: [])
+    private let kid = KidProfile(firstName: "Sara", readingLevel: .earlyReader, interests: [])
 
     private func collect(_ stream: AsyncStream<PagePipelineEvent>) async -> [PagePipelineEvent] {
         var events: [PagePipelineEvent] = []

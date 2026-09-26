@@ -234,7 +234,7 @@ public struct Book: Codable, Equatable, Identifiable, Sendable {
         self.finishedAt = finishedAt
     }
 
-    /// "Rex Learns to Share, a story for Maya" (PRD H3).
+    /// "Rex Learns to Share, a story for Sara" (PRD H3).
     public static func coverLine(title: String, firstName: String) -> String {
         "\(title), a story for \(firstName)"
     }

@@ -49,7 +49,7 @@ Request: `mode`, the bible (which now carries the path) and the pages **already 
   "mode": "path | page | title",
   "bookId": "uuid", "kid": { … }, "brief": { … }, "settings": { … },
   "bible": { "title": null, "setting": "…", "characters": [ … ], "directions": [ … ],
-             "path": [ "Maya finds a red kite in the meadow.", "…", "Maya falls asleep holding the kite. The end." ] },
+             "path": [ "Sara finds a red kite in the meadow.", "…", "Sara falls asleep holding the kite. The end." ] },
   "pages": [ { "index": 0, "text": "…" } ],
   "index": 1,
   "input": { "kind": "speech | typed | choice", "speaker": "parent | kid", "text": "wake the dragon up" }

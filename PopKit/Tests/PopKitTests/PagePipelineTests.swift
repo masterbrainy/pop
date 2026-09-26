@@ -6,7 +6,7 @@ import Testing
 /// `PagePipelineBuildPageTests`: the art lane (painting a page by id and version, apart from
 /// the words), failure propagation, and the per-stage latency table (ROADMAP §2 `PagePipeline`).
 struct PagePipelineTests {
-    private let kid = KidProfile(firstName: "Maya", readingLevel: .earlyReader, interests: ["dinosaurs"])
+    private let kid = KidProfile(firstName: "Sara", readingLevel: .earlyReader, interests: ["dinosaurs"])
     private let settings = ParentSettings()
 
     private func book() -> Book {

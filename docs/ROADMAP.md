@@ -20,7 +20,7 @@
 | Private GitHub repo `masterbrainy/pop` | ✅ |
 | Claude Code ↔ Xcode tools (`xcrun mcpbridge`) | ✅ |
 | Claude Code ↔ iOS Simulator panel attached to the **iPhone Duo** (466×678 pt reported at first boot; posture to be confirmed in Phase 0.1) | ✅ |
-| Sibling sessions: Review & QA, Pitch & Tech Log, Pivots & Ideas (roles in `CLAUDE.md`) | ⏳ waiting for Brian to start them |
+| Sibling sessions running: Review & QA and Pivots & Ideas (roles in `CLAUDE.md`) | ✅ |
 | **Build gate:** Brian verifies the setup and says to start | ⏳ |
 
 ## 2. Architecture at a glance

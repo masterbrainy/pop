@@ -88,4 +88,8 @@ actor FakePopServer: PopServer {
     func onMotionPrompt(_ handler: @escaping @Sendable (MotionPromptRequest) async throws -> MotionParts) {
         motionPromptHandler = handler
     }
+
+    func onReactorMint(_ handler: @escaping @Sendable () async throws -> ReactorMintResponse) {
+        reactorMintHandler = handler
+    }
 }

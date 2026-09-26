@@ -55,7 +55,8 @@ final class StoryMaker {
     /// The kid's drawing of the hero, if the parent made one, seeded into the bible
     /// the moment the book starts (ROADMAP Phase 8.2).
     @ObservationIgnored private var heroDrawing: HeroDrawing?
-    @ObservationIgnored private var motionPrompts: [UUID: String] = [:]
+    /// Motion prompts by page version, so a rewritten page never animates with its old prompt.
+    @ObservationIgnored private var motionPrompts: [PageKey: String] = [:]
     @ObservationIgnored private var speech: (any SpeechInput)?
     @ObservationIgnored private var speechTask: Task<Void, Never>?
     /// Speech secrets minted ahead of the mic tap, so listening starts without a server wait.
@@ -120,16 +121,19 @@ final class StoryMaker {
         self.services = services
         self.heroDrawing = heroDrawing
         sttSecrets = services.server.map(Self.speechSecrets)
-        live.onClip = { [weak self] pageId, url in self?.attachClip(url, to: pageId) }
-        live.onFrameFlagged = { [weak self] pageId in
+        live.onClip = { [weak self] key, url in self?.attachClip(url, to: key) }
+        live.onFrameFlagged = { [weak self] key in
             guard let self else { return }
             // A clip saved before the flag must not replay in the finished book (R-38).
-            if self.reader.page(id: pageId)?.clipPath != nil {
-                self.reader.updatePage(id: pageId) { $0.with(clipPath: nil) }
+            if let clip = self.reader.page(id: key.id)?.clipPath,
+               self.reader.updatePage(id: key.id, version: key.version, { $0.with(clipPath: nil) }) != nil {
+                try? FileManager.default.removeItem(atPath: clip)
             }
+            self.refreshLive()
             self.note("The moving picture drifted off, so this page keeps its still picture.")
         }
         live.onFirstFrame = { [weak self] index, ms in self?.scriptLog?.append("first frame page \(index + 1) in \(ms) ms") }
+        live.onLog = { [weak self] line in self?.scriptLog?.append("live: \(line)") }
         reader.onPageChange = { [weak self] page in self?.pageChanged(to: page) }
         reader.onTurnBlocked = { [weak self] in self?.turnBlocked() }
         reader.canOpenPending = { [weak self] pending in self?.canOpen(pending) ?? false }
@@ -292,7 +296,7 @@ final class StoryMaker {
         endOpening()
         refreshWorking()
         ensureBuilds()
-        animate(page)
+        refreshLive()
     }
 
     /// Turns the kid's drawing into the story's hero before the first page is told
@@ -359,7 +363,7 @@ final class StoryMaker {
             while isWorking { try? await Task.sleep(for: .milliseconds(250)) }
             AppLog.scene.info("scripted turn done · page \(self.reader.pageNumber)")
             let page = reader.currentPage
-            log.append("turn '\(turn)' → page \(reader.pageNumber)/\(reader.book.bible.path.count) still=\(page?.stillPath != nil) motion=\(page.map { motionPrompts[$0.id] != nil } ?? false) behind=\(reader.pendingNext.map { "p\($0.index + 1) still=\($0.stillPath != nil)" } ?? "none") ending=\(isOnLastPage): \(page?.text ?? "")")
+            log.append("turn '\(turn)' → page \(reader.pageNumber)/\(reader.book.bible.path.count) still=\(page?.stillPath != nil) motion=\(page.map { motionPrompts[$0.key] != nil } ?? false) behind=\(reader.pendingNext.map { "p\($0.index + 1) still=\($0.stillPath != nil)" } ?? "none") ending=\(isOnLastPage): \(page?.text ?? "")")
         }
         log.append("done in \(Int(Date().timeIntervalSince(started))) s · pages \(reader.book.pages.count) · live \(live.status) · latency \(String(describing: latency))")
         if let note = parentNote { log.append("note: \(note)") }
@@ -408,7 +412,10 @@ final class StoryMaker {
         paintTasks.values.forEach { $0.task.cancel() }
         paintTasks = [:]
         await stopListening(waitingForWords: false)
+        scriptLog?.append("pre-roll: \(live.metrics.summary)")
         await live.kill()
+        // The page behind is never saved, so its pre-recorded loop goes.
+        if let clip = reader.pendingNext?.clipPath { try? FileManager.default.removeItem(atPath: clip) }
     }
 
     // MARK: - Input
@@ -460,8 +467,7 @@ final class StoryMaker {
         hasPrompted = true
         Task { [weak self] in
             await self?.live.warmUp(server: server)
-            guard let self, let page = self.shownPage else { return }
-            self.animate(page)
+            self?.refreshLive()
         }
     }
 
@@ -726,10 +732,13 @@ final class StoryMaker {
         paintTasks[page.id] = nil
         layerTasks[page.id]?.cancel()
         layerTasks[page.id] = nil
-        motionPrompts[page.id] = nil
+        motionPrompts = motionPrompts.filter { $0.key.id != page.id }
+        // A loop pre-recorded for the replaced page is never shown.
+        if let clip = page.clipPath { try? FileManager.default.removeItem(atPath: clip) }
         if let pipeline = services.pipeline {
             _ = callPipeline { await pipeline.cancelPaint(pageId: page.id) }
         }
+        refreshLive()
     }
 
     /// Runs a pipeline call after the ones before it, so a newer call for a page always
@@ -811,9 +820,10 @@ final class StoryMaker {
             await storeStill(url: url, for: key)
         case let .motionReady(key, prompt):
             guard let page = reader.page(id: key.id), page.version == key.version else { return }
-            motionPrompts[page.id] = prompt
+            motionPrompts[key] = prompt
             motionStates[key] = .ready
-            if page.id == reader.currentPage?.id, isShown(page) { animate(page) }
+            // The page on screen animates, or the page behind is pre-animated once it's ready.
+            refreshLive()
             refreshReadiness()
         case let .motionFailed(key):
             guard let page = reader.page(id: key.id), page.version == key.version else { return }
@@ -924,6 +934,7 @@ final class StoryMaker {
                 if build.direction != nil { rewrittenPageId = placed.id }
                 // It paints once the page on screen shows (`ensureBuilds` then).
                 if isShown(reader.currentPage) { paint(placed) }
+                refreshLive()
             case .dropped:
                 scriptLog?.append("page \(page.index + 1) written but no longer needed")
             }
@@ -1003,8 +1014,10 @@ final class StoryMaker {
 
     private func pageChanged(to page: PageContent?) {
         // An empty book has nothing to change: page 1 waits for the opening prompt.
-        guard let page, !page.text.isEmpty else { return }
-        Task { await live.pageWillChange() }
+        guard let page, !page.text.isEmpty else {
+            refreshLive()
+            return
+        }
         // Folded while a direction was re-building this page: the old page behind shows as it
         // was, and the direction applies to the new page behind instead.
         // Once its words have landed, the rebuilt page is what just showed, so the build only
@@ -1019,14 +1032,24 @@ final class StoryMaker {
         refreshWorking()
         ensureBuilds()
         // A page turned to was ready, so it shows now; page 1 shows once it's painted.
-        if isShown(page) { animate(page) } else { refreshReadiness() }
+        if !isShown(page) { refreshReadiness() }
+        refreshLive()
     }
 
-    private func animate(_ page: PageContent) {
-        guard page.clipPath == nil, let prompt = motionPrompts[page.id],
-              let path = page.stillPath, let data = StillImageLoader.data(for: path)
-        else { return }
-        Task { await live.show(page, still: data, prompt: prompt) }
+    /// Tells the living page which page is on screen and which one the next fold opens, with
+    /// their motion prompts; it animates, loops and pre-animates from there (`PreRollPlanner`).
+    private func refreshLive() {
+        // Only a page the parent may see comes alive ("no page until painted").
+        let current = shownPage
+        let next = current.flatMap { current in
+            reader.book.pages.first { $0.index == current.index + 1 }
+                ?? reader.pendingNext.flatMap { $0.index == current.index + 1 ? $0 : nil }
+        }
+        live.update(current: current.map(livePage), behind: next.map(livePage))
+    }
+
+    private func livePage(_ page: PageContent) -> LivePageController.LivePage {
+        LivePageController.LivePage(page: page, prompt: motionPrompts[page.key])
     }
 
     /// Before saving: animate and record any page whose clip isn't complete yet (ROADMAP
@@ -1036,20 +1059,30 @@ final class StoryMaker {
     func completeClips(perPage: Duration = .seconds(45), until deadline: ContinuousClock.Instant? = nil) async -> (recorded: Int, missing: Int) {
         var recorded = 0
         var missing = 0
-        for page in reader.book.pages where page.clipPath == nil && !page.text.isEmpty && !live.isHeld(page) {
+        // A loop already being recorded or baked for the page on screen finishes first, rather
+        // than being superseded by another page's recording.
+        if let current = reader.currentPage {
+            let waitUntil = min(ContinuousClock.now.advanced(by: perPage), deadline ?? .now.advanced(by: perPage))
+            while ContinuousClock.now < waitUntil, live.isMakingLoop(for: current.key), reader.page(id: current.id)?.clipPath == nil {
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
+        for page in reader.book.pages where reader.page(id: page.id)?.clipPath == nil && !page.text.isEmpty && !live.isHeld(page) {
             let hasTime = deadline.map { ContinuousClock.now < $0 } ?? true
-            guard hasTime, live.canAnimate, let prompt = motionPrompts[page.id], let data = StillImageLoader.data(for: page.stillPath) else {
+            guard hasTime, live.canAnimate, let prompt = motionPrompts[page.key], page.stillPath != nil else {
                 missing += 1
                 continue
             }
-            await live.pageWillChange()
-            await live.show(page, still: data, prompt: prompt)
+            // Recorded hidden (a clip nobody saw live must pass its frame checks to be kept).
+            live.complete(LivePageController.LivePage(page: page, prompt: prompt))
             let pageDeadline = min(ContinuousClock.now.advanced(by: perPage), deadline ?? .now.advanced(by: perPage))
-            while ContinuousClock.now < pageDeadline, reader.page(id: page.id)?.clipPath == nil {
+            while ContinuousClock.now < pageDeadline, reader.page(id: page.id)?.clipPath == nil,
+                  !live.isSpent(page), !live.isHeld(page) {
                 try? await Task.sleep(for: .milliseconds(500))
             }
             if reader.page(id: page.id)?.clipPath != nil { recorded += 1 } else { missing += 1 }
         }
+        live.complete(nil)
         scriptLog?.append("completed clips: recorded \(recorded), still missing \(missing)")
         return (recorded, missing)
     }
@@ -1059,8 +1092,16 @@ final class StoryMaker {
         scriptLog?.append(line)
     }
 
-    private func attachClip(_ url: URL, to pageId: UUID) {
-        reader.updatePage(id: pageId) { $0.with(clipPath: url.path(percentEncoded: false)) }
+    /// Attaches a page's baked loop only to the page version it was recorded from; a loop for
+    /// a page rewritten (or dropped) meanwhile is deleted.
+    private func attachClip(_ url: URL, to key: PageKey) {
+        // A loop that lands after the book ended (and saved) would never be kept.
+        let attached = hasEnded ? nil : reader.updatePage(id: key.id, version: key.version) { $0.with(clipPath: url.path(percentEncoded: false)) }
+        if attached == nil {
+            try? FileManager.default.removeItem(at: url)
+            scriptLog?.append("loop for a replaced page dropped")
+        }
+        refreshLive()
     }
 
     private func note(_ message: String) {

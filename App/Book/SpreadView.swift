@@ -11,7 +11,6 @@ struct SpreadView<Controls: View>: View {
     let curl: Double
     var popDepth: Double = 0
     var live: LivePageController? = nil
-    var replaysClips = false
     var highlight: NSRange? = nil
     var pictureUnavailable = false
     /// What the left page says while there's no page to show (before page 1 is painted).
@@ -32,7 +31,7 @@ struct SpreadView<Controls: View>: View {
                     .padding(.bottom, 20)
             }
         } secondary: {
-            ArtPageView(page: page, live: live, popDepth: popDepth, replaysClips: replaysClips, pictureUnavailable: pictureUnavailable)
+            ArtPageView(page: page, live: live, popDepth: popDepth, pictureUnavailable: pictureUnavailable)
                 .pageCurl(progress: curl)
                 .id(page?.id)
                 // Page 1 arrives with its words in one crossfade; later pages flip in.
@@ -56,10 +55,10 @@ struct SpreadView<Controls: View>: View {
 
 extension SpreadView where Controls == EmptyView {
     init(page: PageContent?, pageNumber: Int, level: ReadingLevel, curl: Double, popDepth: Double = 0,
-         live: LivePageController? = nil, replaysClips: Bool = false, highlight: NSRange? = nil, pictureUnavailable: Bool = false,
+         live: LivePageController? = nil, highlight: NSRange? = nil, pictureUnavailable: Bool = false,
          emptyText: String? = nil) {
         self.init(page: page, pageNumber: pageNumber, level: level, curl: curl, popDepth: popDepth,
-                  live: live, replaysClips: replaysClips, highlight: highlight, pictureUnavailable: pictureUnavailable,
+                  live: live, highlight: highlight, pictureUnavailable: pictureUnavailable,
                   emptyText: emptyText) { EmptyView() }
     }
 }

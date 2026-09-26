@@ -28,8 +28,8 @@ struct SceneDebugOverlay: View {
                 .tint(.red)
                 .disabled(killing || live.status == .off)
             }
-            Text(String(format: "credits %.1f · frames checked %d · flagged %d",
-                        live.credits, live.framesChecked, live.framesFlagged))
+            Text(String(format: "credits %.1f · frames checked %d · flagged %d · first frame p50 %@",
+                        live.credits, live.framesChecked, live.framesFlagged, firstFrameText))
             Text(latencyText)
         }
         .font(.caption.monospacedDigit())
@@ -47,6 +47,12 @@ struct SceneDebugOverlay: View {
         case let .held(page): "Held on still · page \(page + 1)"
         case let .fallback(message): "Fallback · \(message)"
         }
+    }
+
+    private var firstFrameText: String {
+        let sorted = live.firstFrameMs.sorted()
+        guard !sorted.isEmpty else { return "–" }
+        return String(format: "%.1f s", Double(sorted[sorted.count / 2]) / 1000)
     }
 
     private var latencyText: String {

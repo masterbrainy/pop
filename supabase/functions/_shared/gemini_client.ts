@@ -3,6 +3,8 @@
 // generationConfig shape exactly; this wraps both in one small client.
 import { PopError } from "./errors.ts";
 import { GEMINI_IMAGE_MODEL, GEMINI_TEXT_MODEL } from "./models.ts";
+import { fetchWithRetry } from "./retry.ts";
+import { describeGeminiError, geminiErrorCode } from "./gemini_error.ts";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -48,7 +50,8 @@ export async function generateImage(
     parts.push({ inlineData: { mimeType: image.mimeType, data: image.data } });
   }
 
-  const res = await fetch(`${GEMINI_BASE}/${GEMINI_IMAGE_MODEL}:generateContent`, {
+  // The image service sometimes turns a burst of calls away (402/429); retry briefly.
+  const res = await fetchWithRetry(() => fetch(`${GEMINI_BASE}/${GEMINI_IMAGE_MODEL}:generateContent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -61,9 +64,12 @@ export async function generateImage(
         imageConfig: { aspectRatio: opts.aspectRatio },
       },
     }),
-  });
+  }));
   if (!res.ok) {
-    throw new PopError("upstream", `Image generation failed (${res.status})`);
+    const body = await res.text();
+    // The full reason stays in the server log; it can name the Cloud project.
+    console.error(`gemini image failed: ${describeGeminiError(res.status, body)}`);
+    throw new PopError("upstream", `Image generation failed (${geminiErrorCode(res.status, body)})`);
   }
   const body = await res.json() as GeminiResponse;
   const imagePart = findImagePart(body);

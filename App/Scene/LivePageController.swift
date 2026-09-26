@@ -28,12 +28,17 @@ final class LivePageController {
     private(set) var credits: Double = 0
     private(set) var framesChecked = 0
     private(set) var framesFlagged = 0
+    /// Page shown → first live frame, in ms, for every page so far (R-36).
+    private(set) var firstFrameMs: [Int] = []
     let bridge = LiveSceneBridge()
 
     /// Called with (page id, clip file) when a page's clip is recorded.
     @ObservationIgnored var onClip: @MainActor (UUID, URL) -> Void = { _, _ in }
     /// Called with the page id when a sampled frame on that page is flagged.
     @ObservationIgnored var onFrameFlagged: @MainActor (UUID) -> Void = { _ in }
+    /// Called with (page index, ms from show to its first live frame).
+    @ObservationIgnored var onFirstFrame: @MainActor (Int, Int) -> Void = { _, _ in }
+    @ObservationIgnored private var shownAt: ContinuousClock.Instant?
     @ObservationIgnored private var tripwire: FrameTripwire?
     @ObservationIgnored private var tripwireTask: Task<Void, Never>?
     /// Page versions ("id#version") that stay on their still after a flagged frame.
@@ -87,6 +92,7 @@ final class LivePageController {
         await stopClip()
         currentPage = page
         status = .preparing(page: page.index)
+        shownAt = .now
         await session.animate(page: page.index, still: still, prompt: prompt)
     }
 
@@ -137,6 +143,12 @@ final class LivePageController {
         case .firstFrame:
             guard let page = currentPage else { return }
             status = .live(page: page.index)
+            if let shownAt {
+                let ms = Int((ContinuousClock.now - shownAt) / .milliseconds(1))
+                self.shownAt = nil
+                firstFrameMs.append(ms)
+                onFirstFrame(page.index, ms)
+            }
             recordClip(for: page)
             watchFrames(on: page)
         case let .error(code, message, recoverable):

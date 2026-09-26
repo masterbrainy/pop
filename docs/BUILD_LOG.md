@@ -30,7 +30,7 @@ Keys stay in `supabase/functions/.env`. The scripts read them into shell variabl
 
 - **The story now writes itself along a path to an ending.** From the brief, `story-turn` `path` plans 6–8 beats and writes page 1. The next page is always built behind the one on screen: its words, picture, pop-up layers and motion prompt. Folding shows it at once, and the one after starts building.
 - **Directions steer the page behind.** A direction re-plans the path from the page behind and rebuilds it. The page on screen never changes. If the parent folds before the rebuild's words land, the old page behind shows and the direction moves to the next page (R-35, R-40). A direction on the last page gets a note to close the book.
-- **Removed:** "You continue", revise-current, speech page breaks and PopKit's `mode: "turn"` code (the server drops it once the eval passes on the new modes). Directions from a parent and a kid are never merged (R-37).
+- **Removed:** "You continue", revise-current, speech page breaks and `mode: "turn"` (server and PopKit). Directions from a parent and a kid are never merged (R-37).
 - **Verified in the simulator (two scripted runs):**
   - 8-page books from brief to saved book, 4 minutes each.
   - p50/p90: story-turn 2.5/4.4 s, art 10.4/10.9 s, motion prompt 6.0/6.4 s.
@@ -38,6 +38,8 @@ Keys stay in `supabase/functions/.env`. The scripts read them into shell variabl
   - A direction rebuilt the page behind in 3.5–4.4 s.
   - Fold mid-rebuild, a fold past the ending and a direction on the ending all behaved as specified.
   - All clips recorded, 0 frames flagged, 0 Reactor sessions left open.
+- **Gemini prepaid credit ran out** (HTTP 402 "prepayment credits are depleted", checked directly 2026-09-26). Pictures, layers, reference sheets, covers and motion prompts need Gemini. Story text is OpenAI. Image calls now retry 402/429/5xx for about 17 s and report Google's reason. Brian needs to top up before the demo.
+- **Fold → first live frame:** 2.4–3.5 s on a warm session (5 samples), 6.1 s on the session's first start (R-36 resolved).
 - **Golden book:** "Maya and the Star Stone", 8 pages, 54 MB (`scripts/golden-book.sh restore`).
 - **Fixed on the way:**
   - Layers made in the first seconds could be turned away by the image service, so they now retry once.

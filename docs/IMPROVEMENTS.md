@@ -6,15 +6,16 @@
 
 ---
 
-## Start here: five things, in order
+## Start here: six things, in order
 
 | # | Item | Why now | Effort |
 |---|---|---|---|
-| 1 | [IMP-01](#imp-01) Results are applied by page index onto an old copy of the book | Clips and pop-up layers get silently wiped; folding mid-turn strands the parent on a blank page. Both paths are P-04's core flow | ~6 h |
-| 2 | [IMP-02](#imp-02) The R-31 fix makes the next input wait for art | A direction spoken during a turn waits ~10–15 s before its text even starts | ~3 h |
-| 3 | [IMP-03](#imp-03) Measure before optimising | No PRD §5 latency target can pass or fail on evidence today; the order of everything below depends on it | ~3 h |
-| 4 | [IMP-04](#imp-04) Animate the page behind before the fold (record, then loop) | The only way to meet "fold → animation ≤ 5 s" with one session, and it is exactly P-04's "gentle, repeating motion" | ~12–16 h |
-| 5 | [IMP-05](#imp-05) Make the fold reliable on stage | Hinge readings are sparse, so a quick fold can miss the turn; script the folds | ~2–3 h |
+| 1 | [IMP-23](#imp-23) Re-saving a reopened book deletes its pictures | Data loss that already happens when a parent reopens a draft and closes it; every collections feature would re-save more often | ~1 h |
+| 2 | [IMP-01](#imp-01) Results are applied by page index onto an old copy of the book | Clips and pop-up layers get silently wiped; folding mid-turn strands the parent on a blank page. Both paths are P-04's core flow | ~6 h |
+| 3 | [IMP-02](#imp-02) The R-31 fix makes the next input wait for art | A direction spoken during a turn waits ~10–15 s before its text even starts | ~3 h |
+| 4 | [IMP-03](#imp-03) Measure before optimising | No PRD §5 latency target can pass or fail on evidence today; the order of everything below depends on it | ~3 h |
+| 5 | [IMP-04](#imp-04) Animate the page behind before the fold (record, then loop) | The only way to meet "fold → animation ≤ 5 s" with one session, and it is exactly P-04's "gentle, repeating motion" | ~12–16 h |
+| 6 | [IMP-05](#imp-05) Make the fold reliable on stage | Hinge readings are sparse, so a quick fold can miss the turn; script the folds | ~2–3 h |
 
 ---
 
@@ -84,6 +85,17 @@
   3. Put `load average < 10` in the preflight check (IMP-15), and don't build during the demo.
   4. Optionally mirror serve-sim's 3D Duo view (EvanBacon/serve-sim PR #156) to the projector if DeviceHub's own window is too small to read.
 - **Confidence.** Checked: ROADMAP §3 as of `eba14be`, and that both tools exist (via `gh`). The CLI hasn't been tested on this Mac.
+
+<a id="imp-23"></a>
+### IMP-23 · Re-saving a reopened book deletes its pictures · HIGH · ~1 h
+- **What.**
+  - When a book is loaded, `AppModel.resolvingPaths` (`App/Shell/AppModel.swift:70-86`) points every page's still, layers, clip and cover at the store's own files in `…/<bookId>/media/`.
+  - On save, `FileBookStore.copyMedia` (`PopKit/Sources/PopKit/Store/BookStore.swift:120-131`) deletes the destination and then copies the source over it. For a reopened book, the source *is* the destination: the file is deleted and then `copyItem` fails.
+  - `BookView.close()` (`:169-173`) re-saves any reopened draft that has text, so this already happens when a parent reopens a draft and closes it. `AppModel.save` reports only a text error.
+- **Fix.**
+  1. Skip the copy when the source and destination are the same file, and add a PopKit regression test: save, load, save again, and all media still exists.
+  2. Keep shelf metadata (favourite, last opened, series) in a small separate file, so marking a favourite never re-copies about 48 MB of media (IMP-26).
+- **Confidence.** Checked: by reading the code (both paths). A scratch copy of PopKit reproduced it: *"RESAVE threw=true fileStillExists=false"* (NSCocoaError 260).
 
 ---
 
@@ -187,7 +199,7 @@
   2. Mint with `max_session_duration_seconds` of about 1800.
   3. After connect, send `set_resolution('1080p')` and `set_audio_enabled(false)`. Both survive `reset`.
   4. Record clips from a page-sized canvas at about 1.5 Mbit/s.
-  5. Confirm the price with Reactor.
+  5. Confirm the price with Reactor. Its billing page says billing is **per session-minute** from `ready`, and that connecting is free, so PRD §9's "billed per second" needs correcting.
   6. **Don't** disconnect between pages to save money: each reconnect spends a token session and adds on-stage risk.
 - **Confidence.** Checked: the Reactor billing, sessions, authentication and schema docs, and grep. Bandwidth savings are estimates.
 
@@ -260,16 +272,16 @@
 - **Confidence.** Checked: the code. The mismatch is inferred from the missing image input, not rendered.
 
 <a id="imp-18"></a>
-### IMP-18 · Character consistency rests on text alone · MEDIUM · ~3 h
+### IMP-18 · Character consistency: every page lists the whole cast, and references can be lost · MEDIUM · ~2 h · updated for `f1aedd3`
 - **What.**
-  - No code ever requests art of kind `.character` or `.drawing`, and nothing sets `Character.referencePath`, so every page sends zero reference images, against S6.
-  - `buildArtPrompt` labels **every** bible character "Characters appearing in this picture" on **every** page (`art_request.ts:80-84`), which tells the model to paint the whole cast whatever the text says. That also makes the IMP-16 crop worse.
-  - The kid's-drawing feature (`1764ef0`) has no caller.
+  - Since `f1aedd3`, a 1:1 reference sheet is drawn from a character's first picture and attached to later pages, cutouts and the cover (`CharacterReferences.swift`, `StoryMaker.makeReferences`). That fixes the biggest gap.
+  - Two problems remain.
+    - `buildArtPrompt` still labels **every** bible character "Characters appearing in this picture" on **every** page and cover (`art_request.ts:79-83`). That tells the model to paint the whole cast whatever the text says, and it makes the IMP-16 crop worse.
+    - References are carried by the character id the *model* writes (`carryingReferences`, `CharacterReferences.swift:31`), and ids are never shown to the model (IMP-06). A renamed id silently drops the reference.
 - **Fix.**
-  1. List only characters named in the page text or art prompt (reuse `charactersOnPage`), under the heading "Character notes (draw only those this scene includes)".
-  2. After IMP-06 makes ids stable, make one background `.character` reference sheet when a character first enters the bible.
-  3. Mark the drawing feature "not in the demo".
-- **Confidence.** Checked: by grep. The drift itself is expected, not observed.
+  1. Filter the list to characters named in the page text or art prompt (reuse `charactersOnPage`), under the heading "Character notes (draw only those this scene includes)".
+  2. Make ids server-owned and immutable (IMP-06's `bibleDelta`), or add a stable `libraryId` that the app assigns (IMP-26).
+- **Confidence.** Checked: the code at `eba14be`. Drift is expected, not observed.
 
 <a id="imp-19"></a>
 ### IMP-19 · Cutout keying leaves magenta holes and fringes · MEDIUM · ~3 h
@@ -316,6 +328,168 @@ There's no rehearsal log or latency table in `docs/`, and Phase 9 comes last by 
 
 ---
 
+## Part 2 · Guided story making, collections and a second Orbis session (proposed pivots)
+
+*Added 2026-09-26 at the teammate's request. They asked for four things:*
+1. *A guided setup that gathers what a good story needs.*
+2. *Better questions during the story instead of everything being free-form.*
+3. *Collections so the family can revisit stories.*
+4. *A second Orbis session so the next page can be animated while the current one plays.*
+
+*Five researchers (kids' storytelling evidence, prior apps, code fit, Orbis, collections), one designer and one critic worked on these. The critic's corrections are folded in.*
+
+*All four change PRD scope, so they're **proposed pivots for Brian**. The Pivots session assigns the P-numbers.*
+
+**The idea that ties them together.** P-04's story path gets a fixed shape: 3 beats for ages 3–4 (beginning, middle, end) and 5 beats for 5–8 (setup, problem, tries, turning point, ending). This is Toontastic's structure (https://www.commonsensemedia.org/app-reviews/toontastic-3d).
+- The guided setup fills in the beats.
+- Each page asks one question that fits its beat.
+- The saved path and cast let a shelf group and continue stories.
+- The time a parent and kid spend answering is when the next page gets built and animated.
+
+Beats are labels on the pages of the path, not a new structure, so PRD S14 still stands.
+
+**Rules for all four.**
+- The parent leads, and whoever holds the phone can answer. The flow is the same when a parent makes a book alone.
+- Answers use voice or picture tiles, so no reading is needed.
+- Tiles use SF Symbols and bundled art. There's never an image call for a tile.
+- Every generated question and choice passes the safety gate.
+- No dark patterns: no pleading characters, no timers, no stickers, streaks or book counts, no autoplay into the next book. 80% of apps used by 3–5 year olds have manipulative design (Radesky et al. 2022, https://faculty.washington.edu/alexisr/childrenManipulativeDesign.pdf).
+
+<a id="imp-24"></a>
+### IMP-24 · Guided setup: four picture cards instead of three text boxes · proposed pivot · ~8–10 h
+- **Today.** Three free-text fields: interests, a real moment, and "teach" (`App/Create/BriefSheet.swift:23-63`).
+- **Proposal.** Four cards that anyone can answer by tapping or speaking, with "Surprise me" on each and "Just start" always available. Cards are read aloud with the on-device voice when the child is present (a toggle, off when a parent makes the book alone):
+  1. **Who's the hero?** The child · a favourite from their interests · a saved character (IMP-26) · Surprise me.
+  2. **Where?** 2 tiles for Listeners (3–4), 3 for older kids, chosen from interests with a small keyword-to-tile map.
+  3. **What goes wrong?** Picture tiles for Listeners and Early readers; voice for Readers.
+  4. **How should it feel?** Silly · cosy · brave (two faces for Listeners).
+
+  Optionally, a first chip for "what's it for": fun · bedtime · a real moment… · teach something…. The last two open today's text fields, which stay optional.
+- **Why this shape.**
+  - Amazon's *Create with Alexa* used four spoken multiple-choice questions and counts pre-approved choices as one of its safety layers (https://www.amazon.science/blog/the-science-behind-alexas-new-interactive-story-creation-experience).
+  - Children under about 3 tend to answer "yes" to any yes/no question (Fritzley & Lee 2003), so use either/or questions.
+  - Working memory holds about 2–3 items around age 5 (Cowan 2016). So: 2 options for Listeners, 3 plus "something else" for older kids.
+- **How it works.**
+  - `StoryBrief` (CONTRACTS §1, `Models.swift:20-34`) gains `hero`, `place`, `problem`, `mood` and an optional `purpose`. Mirror them in the server's brief schema and `story_prompt.ts`.
+  - P-04's new `plan` call replaces today's first turn, so the setup adds no model calls.
+- **Latency.**
+  - Fire `plan` as soon as the last card is answered, speculatively after card 3.
+  - Start page 1's art the moment its art prompt comes back, and connect Orbis then too.
+  - Don't connect when the setup opens. Reactor bills per session-minute from `ready` including idle time, and connecting is free (https://docs.reactor.inc/resources/billing). Connect takes about 3.5 s (probe 0.3a), which fits inside `plan`.
+  - Honest timeline from the last card: plan (≥ 2.3 s) + gate (~1 s) + art (5.0 s) + Orbis prepare (1.6 s) + first frame (4.8 s) ≈ 14–15 s to a moving page 1. Page 1's **text** meets PRD §5's ≤ 5 s; its motion comes later, with the still showing first.
+- **Before any typed text is used.** Typed brief text reaches the model unmoderated today (R-37). Add input moderation first.
+- **Exit test.** On 5 real runs (paid, needs Brian's OK): setup to "Go" in ≤ 45 s with no typing, page 1 text ≤ 5 s after the last card, and every plan ends on an `ending` beat.
+
+<a id="imp-25"></a>
+### IMP-25 · One question per page, said aloud by the parent · proposed pivot · ~8–10 h · depends on IMP-02
+- **Evidence.** Dialogic reading means the adult asks and the child answers. Its steps are PEER (prompt, evaluate, expand, repeat), with five prompt types, CROWD (completion, recall, open-ended, wh-, distancing).
+  - The What Works Clearinghouse found it improves oral language by about 19 percentile points on average (https://ies.ed.gov/ncee/wwc/Docs/InterventionReports/WWC_Dialogic_Reading_020807.pdf).
+  - A meta-analysis found d = .42 overall, and d = .59 on the words children say (Mol et al. 2008, https://eric.ed.gov/?id=EJ787378).
+  - Two limits shape the design:
+    - Enhanced e-books cut parent–child story talk, and parents talked about the device instead (Munzer, Radesky et al. 2019, https://pubmed.ncbi.nlm.nih.gov/30910918/). So the **parent** says the question aloud; the child's page never flashes or asks for a tap.
+    - AI choice scaffolds raised weak storytellers but capped strong ones (https://arxiv.org/abs/2606.27067). So there's always a "something else / say it" option, most prominent for Readers.
+- **What they see.** A strip under the text page that replaces the input bar while a question shows. It has:
+  - one line to read aloud, for example *"Uh-oh, did Rex lose his ball or his hat?"*;
+  - 2 tiles (Listener) or 3 plus "something else" (older);
+  - Skip.
+
+  A parent tip ("praise it, then ask why") shows only below the Reader level, where the child won't read it. Tapping a tile is a kid's-turn input, and the mic and typing still work.
+- **Question mix.**
+  - Listener: about 2 choice questions per book, with talk-only prompts ("Can you roar like Rex?") elsewhere.
+  - Early reader: one per page, mostly choices.
+  - Reader: open "what's the plan?" questions, with choices as a floor.
+  - Distancing prompts ("Have you ever lost something?") are talk-only and never sent anywhere.
+- **How it works.**
+  - The question for a page is written by the same call that writes that page. Add a `question` field to `story_schema.ts`, nullable but required so OpenAI's strict mode accepts it: `{ask, kind: choice|open|talkOnly, choices: [{label, symbol, direction}]}`. `symbol` comes from an allow-list of about 40 SF Symbols.
+  - Gate the question **separately and in parallel**. `runSafetyGate` is all-or-nothing (`safety.ts:33-69`), so one flagged choice must drop only the question, not the page.
+  - Re-moderate a choice's text when it's tapped, because the app can send any text as a "choice".
+  - Pass the chosen direction, or the default one, **explicitly** into the build of the next page. Hide the question after any re-plan that makes it stale.
+  - Add `input.kind: "choice"` (`storyInputSchema`, `API.swift`).
+  - `TurnQueue` must never merge a kid's words into a parent's input (R-37).
+- **Latency.** No extra calls; about 150 more output tokens per page.
+  - A choice that matches the default path costs nothing. A different choice rebuilds the page behind on P-04's re-plan path: about 2.3 s of text + the gate + 5 s of art, inside the 15 s budget and hidden by the talk that follows the answer.
+  - This needs IMP-02 first. Today a tap made while art is running waits for art plus the motion prompt before its text even starts.
+  - Pre-building art for every choice would triple Gemini calls and hit the 20/min art limit (IMP-14), so don't.
+- **Scope.** This takes over PRD C3, the "reading together" strip, which is P2 on the cut list. Promoting it is Brian's call.
+- **Exit test.** On the 30-session eval set: 0 K1 misses on questions and choices. A choice produces a rebuilt page behind at p50 ≤ 15 s (IMP-03 spans). A scripted Listener book shows at most one question per page and exactly 2 tiles.
+
+<a id="imp-26"></a>
+### IMP-26 · Collections: a shelf to revisit, series, and "another adventure" · proposed pivot · ~10–12 h for the demo
+- **Today.**
+  - The shelf is a flat grid (`BookshelfView.swift:44-56`), and books are saved only on the device (`FileBookStore`).
+  - Reopening and closing a draft deletes its pictures (IMP-23).
+  - One corrupt `book.json` makes `loadAll` throw, so only the sample book shows.
+  - `page.motion` is never saved (`with(motion:)` has no callers), so a reopened draft's pages without clips can't animate.
+  - `AppModel.delete` swallows errors, and every media file is stored twice on the device.
+- **Demo subset.**
+  1. **Make revisiting reliable** (~4 h): fix IMP-23, skip a corrupt book instead of failing, save the assembled motion prompt with the page, and make delete remove media and report errors.
+  2. **Series and sequels** (~5 h):
+     - `Book` gains an optional `seriesId`.
+     - The shelf groups covers into rows by series ("Rex's adventures"), plus *New*. Covers are at least 180×240 pt, and tapping one speaks its title.
+     - **"Another adventure with Rex"** lives in the **parent's** cover menu, not on the last page, so the child isn't nudged into the next book. It opens the guided setup with the hero pre-selected and seeds the new bible with the saved characters and their reference sheets (which exist since `f1aedd3`), plus `"Previously: …"` as the first direction. `story-turn` already accepts a bible, so no server change is needed.
+     - Give characters a stable `libraryId` assigned by the app, because references are matched by model-chosen ids today (IMP-18).
+  3. **Keep shelf metadata** (favourite, last opened) in a small separate file, not in `book.json`, so a heart tap never re-copies media.
+- **Later.**
+  - Supabase sync of book rows and clips (the tables and the private `pop-books` bucket exist), only while no book is being made.
+  - A `.popbook` export and import behind the parental gate. It also protects the golden book from a simulator erase (R-21).
+  - Saving stills as JPEG: about 48 MB per book drops to about 21 MB (estimate).
+  - Anonymous sign-in means a lost Keychain entry makes cloud copies unreachable. Account linking and several kids' shelves are out of PRD §10 scope.
+- **Privacy.** First names only. Keep cleaned page text only, with no audio and no transcripts. Add a gated "Forget this character".
+- **Exit test.** A PopKit test that saves, loads and saves again keeps all media. A corrupt `book.json` beside 3 good books still shows 3 covers. Pages with clips replay with the network off; pages without one re-animate once Reactor is back. "Another adventure" produces a page-1 art request carrying at least one reference from the earlier book, and both books sit in one series row.
+
+<a id="imp-27"></a>
+### IMP-27 · A second Orbis session: not needed for the demo; build it only if the logs say so · proposed pivot · 0 h now, +8–12 h if triggered
+- **Checked fact.** A second session doesn't need a second API key. Reactor allows **5 concurrent sessions per account**, pooled across all keys, with a burst of 3 creations and then about one every 6 s. A token's `max_sessions` defaults to 5, up to 500 (https://docs.reactor.inc/resources/rate-limits).
+- **What actually limits Pop! to one session today:**
+  - the web page hosts one Reactor client (`scene.ts:57`);
+  - `SessionController` holds one page;
+  - tokens are minted with `max_sessions: 2`, which counts every session a token ever opens, so a reconnect uses one up;
+  - minting a token first ends the user's other sessions (`reactor-token/index.ts:70-72`), so a second mint would kill the first session;
+  - the server returns `expiresAt` in milliseconds and the app reads seconds (`index.ts:74` against `SessionController.swift:105`).
+- **Why one session is enough first.** P-04 wants each page's animation to be "a gentle, repeating motion", which is a loop.
+  - Record the live page's clip server-side (`requestClip`, IMP-04) and loop it on screen. The single session is then free to animate the page behind and record it.
+  - At the fold, if the session is **already streaming** the page behind, show that live stream at once. It's the right page, and recording carries on.
+  - So the fold shows motion immediately whenever the page behind's still was ready about 6.4 s before the fold, or its clip is already recorded. That's most folds in a paced demo.
+- **When a second session pays off.** Only when the page behind becomes ready while the single session is **busy** recording the current page. Log that per fold. If it's common in rehearsals, build a two-slot relay:
+  - one web view with two Reactor clients, each with its own video element, and a `slot` argument on `window.popScene`;
+  - two `SessionController`s that swap roles at each fold;
+  - both streams at `set_resolution('1080p')`, since two 1440p decodes on a loaded Mac will drop frames.
+
+  Cost roughly doubles while both run (per session-minute, idle included). At the project's unconfirmed $0.582/min, that's about $2.91 for a 5-minute book with one session and about $5.82 with two.
+- **Needed either way.** Mint with `max_sessions` ≥ 4 and `max_session_duration_seconds` ≈ 1800; stop the mint ending sibling sessions; fix the ms/s unit bug.
+- **Also needed.** Decide how clips loop (crossfade or ping-pong; R-05(4)): `AVPlayerLooper` jumps at the seam, and a looping page makes that seam visible.
+- **Paid probe first** (~10 Orbis-minutes, about $6, needs Brian's OK):
+  - Is `requestClip` enabled for Orbis, and what are its ready delay and resolution?
+  - Warm `reset → first frame` over at least 10 runs (settles R-36).
+  - Does `set_resolution` survive `reset`?
+- **Exit test.** In a scripted 5-page book: fold to first moving frame p50 ≤ 0.3 s on folds made with the page behind ready. Every saved clip's (id, version) matches its page. The "busy when ready" share is logged on each of 3 runs.
+
+### Build order for Part 2
+
+| Phase | Work | Exit test |
+|---|---|---|
+| A | P-04's `story-turn` rework (`plan`/`replan`, outline-only path, bible delta) + IMP-01, IMP-02, IMP-03, IMP-23 + R-37 input moderation + R-30 | Every plan ends on `ending`; a re-plan never changes the page on screen; a clip landing mid-turn survives; save → load → save keeps media |
+| B | IMP-24 guided setup | ≤ 45 s to "Go" with no typing; page 1 text ≤ 5 s after the last card, over 5 real runs |
+| C | IMP-25 questions | 0 K1 misses on questions and choices; choice → page behind rebuilt p50 ≤ 15 s |
+| D | IMP-26 demo subset | Replay-exact after reopening; a series row after "Another adventure" |
+| E | IMP-04 loop + IMP-27 single-session fixes, after the paid probe | Fold → motion p50 ≤ 0.3 s when the page behind is ready; "busy when ready" share logged |
+| F | 5 rehearsals; decide the second session from the log | 5 clean runs; the decision written in PIVOTS |
+
+About 30–40 h of new work on top of P-04's rework. Every hour figure is an estimate.
+
+**90-second demo script** (with at least 20 s between each choice and the next fold):
+
+| Time | What happens |
+|---|---|
+| 0–12 s | Four cards: Rex · the pond · "lost his ball" · silly. Go. |
+| 12–27 s | Page 1 text is up; the parent reads it while the picture paints, then comes alive. |
+| 27–35 s | The parent asks from the strip: *"Should Rex jump in or ask the bird?"* The kid taps *the bird*. The parent: "great idea, why the bird?" |
+| 35–55 s | Talk; the strip shows "painting… ready". |
+| 55–65 s | Fold: page 2 is already moving. Hold at 90° and the bird pops out of the spine. |
+| 65–75 s | Close: the cover with its title. On the shelf it sits in *Rex's adventures* next to last week's book. |
+| 75–90 s | Tap last week's cover with Wi-Fi off: it replays exactly. |
+
+
 ## Moot or changed after P-04
 
 These were found against the code as it is, which still uses `append / new_page / revise_current`. P-04 reworks that code, so each item below is carried forward as a requirement for the rework rather than a fix to the current code.
@@ -345,6 +519,8 @@ The skeptic pass corrected these, so they aren't in this doc as originally state
 2. **Is Orbis mandatory** (a sponsor or hackathon requirement)? It decides IMP-21.
 3. **Is the demo on the inner spread** now that the hinge works? That makes D9 the portrait-page decision again (IMP-16).
 4. **Can Reactor confirm Orbis Stable's price** (its docs say "TBD") and whether its recorder (`requestClip`) is enabled for Orbis (IMP-04)?
+5. **Accept Part 2 as pivots?** Guided setup (IMP-24), one question per page (IMP-25, which promotes PRD C3 from the cut list), collections (IMP-26), and the one-session plan with a logged trigger for a second session (IMP-27).
+6. **OK to spend about $6 on the Orbis probe** in IMP-27, and a few dollars on 5 real setup runs (IMP-24)?
 
 ## How this was done
 
@@ -356,4 +532,5 @@ The skeptic pass corrected these, so they aren't in this doc as originally state
   - The app itself: this Mac has Xcode 27.0 and no iPhone Duo simulator.
   - Any paid API call (Reactor, Gemini, OpenAI).
   - Any latency beyond the Phase 0 probes, so every other number here is an estimate, labelled as one.
+- **Part 2.** Five researchers (Opus), one designer (Fable) and one critic (Opus). The critic re-checked file:line claims, found IMP-23 (reproduced in a scratch copy) and the stale reference claim in IMP-18, and corrected the latency plan, the demo timing and the second-session trigger. All 7 returned.
 - **Ownership.** This file is new and owned by nobody yet. The builder and QA can fold items into REVIEW.md, and product questions can go to Pivots.

@@ -71,17 +71,21 @@
 
 ### P-05 · Use OpenAI for images and remove Gemini · 2026-09-26 · Status: proposed
 - **Idea (Brian's words):** "Should I use the OpenAI key for image generation and then completely remove Gemini?"
-- **Measured today:** one portrait page picture (1024×1536, medium quality), prompt "a green dragon dazed under an oak tree, watercolor":
+- **Measured today** (prompt "a green dragon dazed under an oak tree, watercolor"; times are the full API round trip):
 
-  | Model | HTTP | Time | Look |
-  |---|---|---|---|
-  | `gpt-image-2.5-flare` | 200 | 14.4 s | Detailed, warm picture-book style |
-  | `gpt-image-1-mini` | 200 | 15.5 s | Softer, simpler, also good |
-  | `gpt-image-2` | 200 | 35.2 s | Too slow |
-  | `gemini-2.5-flash-image` | **402** | — | "Prepayment credits are depleted": Gemini art is down right now. Earlier probe: about 5 s |
+  | Model | Size, quality | HTTP | Time | Price per picture |
+  |---|---|---|---|---|
+  | `gpt-image-2.5-flare` | **1536×1024, medium** (the page size; cropped to 1536×864 = 16:9, subject stays centred) | 200 ×3 | **12.8 s, 13.0 s, 11.9 s** | **≈ $0.011** (343 image tokens × $30/1M + 49 text tokens × $5/1M) |
+  | `gpt-image-2.5-flare` | 1536×1024, low | 200 | 10.4 s | ≈ $0.005 (158 image tokens) |
+  | `gpt-image-2.5-flare` | 1024×1536 portrait, medium | 200 | 14.4 s | — |
+  | `gpt-image-1-mini` | 1024×1536 portrait, medium | 200 | 15.5 s | cheaper ($8/1M image tokens) |
+  | `gpt-image-2` | 1024×1536 portrait, medium | 200 | 35.2 s | too slow |
+  | `gemini-2.5-flash-image` | 16:9 | **402** | — | "Prepayment credits are depleted", so Gemini art is down right now. Earlier probe: 1344×768 in about 5 s. Price $0.04–0.13 per picture (ROADMAP §3) |
 
-- **Changes:** PRD §11 vendors and D7, and the §5 "art ≤ 10 s after text" row (it becomes about 15 s). Roadmap: the `Art` unit, `motion-prompt` (the OpenAI story model reads the page text and still instead of Gemini), Phase 4 layer generation, Phase 8 drawing restyle, run-book step 6. Code: `_shared/gemini_client.ts` is replaced by an OpenAI images client; the `art` and `motion-prompt` functions are rewired.
-- **Cost:** about 3 h (rewire the two functions, then re-run probe 0.4 on OpenAI: character reference edits, cutouts and the portrait framing). About the same price per picture. One fewer key, one fewer bill, and no more running-out-of-credit outages on a second vendor.
-- **Risks:** pictures take about 3× as long (14 s vs 5 s). The page behind (P-04) hides this on every page except page 1 and right after a direction. `gpt-image-2.5-flare` is two weeks old, so check that edits with reference images and transparent backgrounds (which would remove the chroma-key step for pop-up cutouts) work before relying on them.
-- **Recommendation:** Do it, with `gpt-image-2.5-flare`. Simpler, one vendor for everything but Orbis, and the extra 9 s is mostly hidden. To speed up page 1, try `quality: "low"` just for it. If you'd rather keep Gemini's speed, top up its credits instead; but then you're paying and watching two vendors.
+  Token counts come from each response's `usage` field. Per-token prices are from OpenAI's pricing page (developers.openai.com/api/docs/pricing, checked 2026-09-26). OpenAI has no native 16:9 size, so `art` would ask for 1536×1024 and crop to 16:9, as in the row above (REVIEW.md R-47).
+
+- **Changes:** PRD §11 vendors and D7, and the §5 "art ≤ 10 s after text" row (it becomes about 13 s). Roadmap: the `Art` unit (1536×1024, then crop to 16:9), `motion-prompt` (the OpenAI story model reads the page text and still instead of Gemini), Phase 4 layer generation, Phase 8 drawing restyle, run-book step 6. Code: `_shared/gemini_client.ts` is replaced by an OpenAI images client, and the `art` and `motion-prompt` functions are rewired.
+- **Cost:** about 3 h (rewire the two functions, then re-run probe 0.4 on OpenAI: character reference edits, cutouts and the 16:9 crop). Pictures get **cheaper**, about $0.011 against Gemini's $0.04–0.13. One fewer key, one fewer bill, and no more out-of-credit outages on a second vendor.
+- **Risks:** a picture takes about 2.5× as long (about 13 s against 5 s). The page behind (P-04) hides this on every page except page 1 and right after a direction. `gpt-image-2.5-flare` is two weeks old, so check that edits with reference images and transparent backgrounds (which would remove the chroma-key step for pop-up cutouts) work before relying on them. Each timing is one sample per setting (three at the page size).
+- **Recommendation:** Do it, with `gpt-image-2.5-flare`. Simpler, one vendor for everything but Orbis, and the extra 9 s is mostly hidden. To speed up page 1, use `quality: "low"` just for it (about 10 s). If you'd rather keep Gemini's speed, top up its credits instead; but then you're paying and watching two vendors.
 - **Decision:** —

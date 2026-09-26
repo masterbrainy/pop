@@ -1,6 +1,6 @@
 # Pop! — Execution Roadmap
 
-*Status: DRAFT v3 · 2026-09-26 · P-01 (parents drive creation; saved books replay exactly; lessons optional) · P-02 superseded (everything is free) · Implements: [PRD.md](PRD.md)*
+*Status: DRAFT v3 · 2026-09-26 · P-01 (parents drive creation; saved books replay exactly; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · Implements: [PRD.md](PRD.md)*
 
 **Planning assumptions.** Two engineers (Brian plus a teammate) building with Claude Code. Estimates are in **focused hours** and include tests. **There's no deadline (D8, resolved), so we build the full scope in phase order.** The cut lines in §7 are kept only as a fallback. Everything is built and demoed **only on the iPhone Duo simulator in Xcode 27.1 beta**.
 
@@ -45,7 +45,7 @@
 
 | Unit | Responsibility | Depends on |
 |---|---|---|
-| `HingeSource` | Emits posture updates `(status, angle)`. Three versions: Duo (`onHingeChange`), a debug slider, and none (swipe) | — |
+| `HingeSource` | Emits posture updates `(status, angle)`. Two versions: Duo (`onHingeChange`) and a debug slider. iPhone Duo only (P-03) | — |
 | `PostureMachine` | Pure function from a stream of angles to effects: curl progress, turn committed or cancelled, pop depth, closed | `HingeSource` values |
 | `PagePipeline` | Per page: input → text → art → layers → animation prompt. Prepares the next page early; cancels work when a direction changes the page | StoryEngine, Art, Moderation |
 | `StoryEngine` | One LLM call per turn. Input: the story brief (interests, optional real moment, optional "teach something" note), the bible, and the parent's or kid's words (spoken or typed) or a "You continue" tap. Structured output: `append / new_page / revise_current`, text, art prompt, bible and direction updates, parent question | `story-turn` function |
@@ -118,14 +118,13 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 **Gate G0:** decide D1 (gesture model) and D3 (Stable or Dynamic); settle how clips are recorded and how long each page's clip is (D4); fix the latency budget; freeze the `PageContent` and `LiveScene` contracts.
 
-### Phase 1: Book shell and hinge (≈ 10 h · A) · must-have: curl
+### Phase 1: Book shell and hinge (≈ 8 h · A) · must-have: curl
 
 - App skeleton and navigation: Bookshelf → New Book → Book.
 - Domain models (`Book`, `Page`, `Character`, `StoryBible`, `KidProfile`, `StoryBrief`) and mock data.
 - `HingeSource` (Duo, slider, none) and **`PostureMachine` built test-first**, driven by scripted angle sequences. These include **sparse, irregular and jumpy updates** (the update rate is system policy), and the curl smooths between samples.
 - `SpreadView`: left text page, right art page (still only for now), padded for reserved regions.
 - Page curl v1: 3D rotation plus shading driven by curl progress; springs back if released early, commits past the threshold.
-- Non-Duo single-page reader with swipe.
 
 **Exit:** a 5-page mock book turns by folding in the Duo simulator, and the `PostureMachine` tests pass.
 
@@ -169,7 +168,7 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 **Exit:** a saved 5-page book shows the identical text, pictures and clips with Reactor switched off and the network disconnected.
 
-> **═══ MVP / demo line: all must-haves done, ≈ 75 h (about 38 h per engineer) ═══**
+> **═══ MVP / demo line: all must-haves done, ≈ 73 h (about 37 h per engineer) ═══**
 
 ### Phase 6: Parent controls and sharing (≈ 7 h)
 Real-moment tone (calm-tone presets and safety rules). Parent settings and parental gate. PDF export.
@@ -186,7 +185,7 @@ Confirm no audio is ever saved and that only the first name and interests are st
 ### Phase 9: Demo hardening (≈ 8 h · start at least 2 days before the demo)
 Golden-path script and book; a saved golden book (exact replay, stored on the device) as the fallback if the network fails; failure drills (no network, Reactor down, moderation blocks something, speech fails); performance pass; 5 rehearsals in a row.
 
-**Total ≈ 109 h.** *(v2 was 118 h. The 2026-09-26 decisions removed lesson packs and fact-checking (3 h), lesson extras (2 h), and the paywall and crash-reporting work (4 h).)*
+**Total ≈ 107 h.** *(v2 was 118 h. The 2026-09-26 decisions removed lesson packs and fact-checking (3 h), lesson extras (2 h), the paywall and crash-reporting work (4 h), and the non-Duo reader (2 h, P-03).)*
 
 ## 6. Critical path
 
@@ -209,7 +208,7 @@ The Orbis probe (0.3) is the riskiest unknown. Start it first.
 - **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, directions and "You continue" (a direction carries into later pages), reading-level limits, `PagePipeline` cancellation, the moderation gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
 - **Server function tests:** each function tested in Deno against recorded fixtures.
 - **Eval set:** 30 sessions (parent narration and directions, "You continue", kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something, checked for safety, reading level and coherence. Run before every demo.
-- **UI:** XCUITest on a standard iPhone simulator for navigation and the fallback reader. A Duo posture checklist run through Claude's simulator tool, with a screenshot per posture.
+- **UI:** XCUITest on the iPhone Duo simulator for navigation. A Duo posture checklist run through Claude's simulator tool, with a screenshot per posture.
 - **Latency:** a timing span per stage, with a p50 table in the debug overlay.
 
 ## 9. Demo run-book

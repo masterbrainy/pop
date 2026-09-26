@@ -1,8 +1,8 @@
 # Pop! — Product Requirements Document
 
-*Status: DRAFT v3 · 2026-09-26 · P-01 (parents drive creation; lessons optional) · P-02 superseded (everything is free) · Owner: Brian Huang · Companion doc: [ROADMAP.md](ROADMAP.md)*
+*Status: DRAFT v3 · 2026-09-26 · P-01 (parents drive creation; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · Owner: Brian Huang · Companion doc: [ROADMAP.md](ROADMAP.md)*
 
-**Pop! is a free, hackathon-style pitch and demo, not a release.** Nothing is sold. This document covers what makes the demo great, reliable and safe.
+**Pop! is a free, hackathon-style pitch and demo, not a release, and it runs only on the iPhone Duo.** Nothing is sold, and no other iPhone layout is built. This document covers what makes the demo great, reliable and safe.
 
 > **"The only screen time that happens with your kid, not instead of them."**
 
@@ -113,9 +113,8 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 |---|---|---|---|
 | H1 | Page curl follows the real hinge angle; falls back if released early, turns past the threshold | P0 | Driven by the simulator's hinge controls; tracks without visible lag |
 | H2 | Pop-up at about 90°: characters rise from the spine in front of the background; depth grows with the angle; opening flat folds them back | P0 | Works on every generated page in the Duo simulator |
-| H3 | Closed = finish and save the book, with cover art and a "Title, a story for {Name}" cover | P1 | Closing a book with at least 1 page finishes and saves it and shows the cover on the closed-phone screen. A Save button does the same on any device |
+| H3 | Closed = finish and save the book, with cover art and a "Title, a story for {Name}" cover | P1 | Closing a book with at least 1 page finishes and saves it and shows the cover on the closed-phone screen. A Save button does the same |
 | H4 | The hinge drives effects only, never layout | P0 | Layout depends only on posture and user toggles |
-| H5 | Non-Duo iPhones: single-page reader with swipe turns | P1 | The whole app works on a standard iPhone simulator |
 
 ### 8.4 Bookshelf and sharing
 
@@ -165,11 +164,11 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 
 ## 10. Scope
 
-**MVP (the demo):** one parent-driven creation flow (story brief with interests, an optional real moment and an optional "teach something" note · voice or typed narration, directions and "You continue" · kid's turn when the child is there) · live text → art → animation per page · fold-to-turn curl · pop-up · closing to finish, with a cover · save and show exactly (recorded clips, bookshelf) · non-Duo fallback for development.
+**MVP (the demo):** one parent-driven creation flow (story brief with interests, an optional real moment and an optional "teach something" note · voice or typed narration, directions and "You continue" · kid's turn when the child is there) · live text → art → animation per page · fold-to-turn curl · pop-up · closing to finish, with a cover · save and show exactly (recorded clips, bookshelf) · iPhone Duo only.
 
 **Out of scope for now**
 - Physical iPhone Duo, haptics, motion sensors, camera input: the build and demo are simulator-only.
-- iPad, Android, web.
+- Any device other than the iPhone Duo: other iPhones and their layouts, iPad, Android, web.
 - Multiple kid profiles and co-creation with a relative in another place.
 - Offline generation.
 - Languages other than English at the demo. The language setting is in the data model; other languages are untested.

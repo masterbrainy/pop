@@ -48,3 +48,13 @@
   - *Animate only the first N pages of each book.* This cuts cost, but it weakens the living-page must-have (PRD P3) on every other page. It works better as a free-tier limit than as the Pro plan.
 - **Recommendation:** Do it. It keeps the business honest without touching any must-have, and "unlimited rereads of every book you make" is still a strong line. Leave the numbers to D5.
 - **Decision:** 2026-09-26, Brian (relayed by the builder, recorded in CLAUDE.md "What this is"): **everything is free**. Pop! is a hackathon-style pitch and demo, not a release, so there's no Pro plan to shape. Removed from the PRD: the paywall (K5), pricing (D5), the Kids Category decision (D6), the post-demo metrics, purchase gates, and the legal-review item (the privacy-by-design facts stay). Crash reporting becomes local timing logs plus the debug overlay (K6). The cost-per-book risk becomes a demo Reactor credit budget. Removed from the roadmap: the business items in Phase 7, and D5/D6. Applied in `8e4453d` (PRD v3, ROADMAP v3).
+
+### P-03 · iPhone Duo only · 2026-09-26 · Status: accepted
+- **Idea (Brian's words):** "Everything is ONLY for iPhone Duo. Do not worry about building for other iPhone layouts."
+- **Changes (as applied):**
+  - PRD: H5 (the non-Duo single-page reader) is removed. The MVP's "non-Duo fallback" becomes "iPhone Duo only". Other iPhones are added to out of scope. The Save button no longer promises "any device".
+  - Roadmap: `HingeSource` keeps only the Duo version and the debug slider. The non-Duo reader is out of Phase 1 (10 h to 8 h). UI tests run on the Duo simulator.
+  - New totals: MVP about 73 h, total about 107 h.
+- **Cost:** saves about 2 h. No risk for the demo; the in-app hinge slider stays as the development fallback on the Duo.
+- **Recommendation:** Do it. It matches the simulator-only, Duo-only demo.
+- **Decision:** 2026-09-26, Brian decided directly in this session.

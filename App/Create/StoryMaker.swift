@@ -493,7 +493,9 @@ final class StoryMaker {
         guard let page else { return }
         // Folded while a direction was re-building this page: the old page behind shows as it
         // was, and the direction applies to the new page behind instead.
-        if !page.text.isEmpty, let build = builds[page.index], let direction = build.direction {
+        // Once its words have landed, the rebuilt page is what just showed, so the build only
+        // finishes its picture (R-40).
+        if !page.text.isEmpty, let build = builds[page.index], let direction = build.direction, !handedOn.contains(build.id) {
             scriptLog?.append("folded mid-rebuild: the direction moves to page \(page.index + 2)")
             drop(build)
             runDirection(direction)

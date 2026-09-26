@@ -32,6 +32,14 @@ final class LivePageController {
     @ObservationIgnored private var currentPage: PageContent?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
+    /// Whether a session is up (or coming up) to animate pages.
+    var canAnimate: Bool {
+        switch status {
+        case .off, .fallback: false
+        default: true
+        }
+    }
+
     var isLive: Bool {
         if case .live = status { return true }
         return false

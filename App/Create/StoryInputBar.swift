@@ -1,8 +1,9 @@
 import PopKit
 import SwiftUI
 
-/// The creation controls under the text page: the mic, a text field, whose turn it is, and
-/// "You continue" (the story engine writes the next bit on its own, PRD S5).
+/// The creation controls along the bottom of the book, in one compact row: the mic, a text
+/// field, whose turn it is (parent or kid, PRD S2), and "You continue" (the story engine
+/// writes the next bit on its own, PRD S5). Partial speech shows above the row.
 struct StoryInputBar: View {
     @Binding var speaker: Speaker
     let isListening: Bool
@@ -16,60 +17,62 @@ struct StoryInputBar: View {
     @FocusState private var typing: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             if isListening || !partial.isEmpty {
                 Text(partial.isEmpty ? "Listening…" : partial)
-                    .font(.callout)
+                    .font(.footnote)
                     .foregroundStyle(Theme.softInk)
                     .lineLimit(2)
+                    .padding(.horizontal, 6)
                     .transition(.opacity)
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Button(action: onToggleMic) {
                     Image(systemName: isListening ? "stop.fill" : "mic.fill")
-                        .font(.title3.weight(.semibold))
-                        .frame(width: 48, height: 48)
+                        .font(.headline)
+                        .frame(width: 40, height: 40)
                         .background(isListening ? Theme.accent : Theme.ink, in: .circle)
                         .foregroundStyle(.white)
                         .symbolEffect(.pulse, isActive: isListening)
                 }
                 .accessibilityLabel(isListening ? "Stop listening" : "Tell the story out loud")
 
-                TextField(speaker == .parent ? "Tell or direct the story…" : "What happens next?", text: $typed, axis: .vertical)
-                    .lineLimit(1...3)
+                TextField(speaker == .parent ? "Tell or direct the story…" : "What happens next?", text: $typed)
                     .focused($typing)
                     .submitLabel(.send)
                     .onSubmit(send)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(.white.opacity(0.8), in: .rect(cornerRadius: 18))
+                    .font(.callout)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(.white.opacity(0.85), in: .capsule)
 
-                if !typed.isEmpty {
-                    Button(action: send) {
-                        Image(systemName: "arrow.up.circle.fill").font(.system(size: 34))
+                Button {
+                    speaker = speaker == .parent ? .kid : .parent
+                } label: {
+                    Image(systemName: speaker == .parent ? "person.fill" : "figure.child")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 36, height: 36)
+                        .background(Theme.paperShade, in: .circle)
+                }
+                .foregroundStyle(Theme.ink)
+                .accessibilityLabel(speaker == .parent ? "Parent is talking. Switch to kid" : "Kid is talking. Switch to parent")
+
+                if isWorking {
+                    ProgressView().controlSize(.small).frame(width: 36, height: 36)
+                } else {
+                    Button(action: typed.isEmpty ? onContinue : send) {
+                        Image(systemName: typed.isEmpty ? "sparkles" : "arrow.up")
+                            .font(.subheadline.weight(.bold))
+                            .frame(width: 36, height: 36)
+                            .background(Theme.accent, in: .circle)
+                            .foregroundStyle(.white)
                     }
-                    .foregroundStyle(Theme.accent)
-                    .accessibilityLabel("Add to the story")
+                    .accessibilityLabel(typed.isEmpty ? "You continue the story" : "Add to the story")
                 }
             }
-            HStack {
-                Picker("Who's talking", selection: $speaker) {
-                    Text("Parent").tag(Speaker.parent)
-                    Text("Kid").tag(Speaker.kid)
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 180)
-                Spacer()
-                if isWorking { ProgressView().controlSize(.small) }
-                Button("You continue", systemImage: "sparkles", action: onContinue)
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.accent)
-                    .disabled(isWorking)
-            }
-            .font(.subheadline)
         }
-        .padding(12)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 22))
+        .padding(8)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: 26))
         .animation(.easeInOut(duration: 0.2), value: isListening)
     }
 

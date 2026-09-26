@@ -14,6 +14,8 @@ export interface StoryTurnPromptInput {
   pages: { index: number; text: string }[];
   current: { index: number; text: string };
   input: StoryInput;
+  /** Set only on a rewrite attempt, after the first pass failed the safety gate. */
+  rewriteReason?: string | null;
 }
 
 function describeBible(bible: StoryBible): string[] {
@@ -88,6 +90,12 @@ export function buildStoryTurnSystemPrompt(input: StoryTurnPromptInput): string 
     'If input.kind is "continue", write the next beat yourself, following the brief and every direction so far.',
     "Respond with only the JSON object the response schema describes.",
   );
+
+  if (input.rewriteReason) {
+    lines.push(
+      `Your previous attempt at this page was rejected: ${input.rewriteReason} Write it again, gentler and within the word limit, keeping the same action.`,
+    );
+  }
 
   return lines.join("\n\n");
 }

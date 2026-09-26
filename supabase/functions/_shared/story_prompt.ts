@@ -6,13 +6,22 @@
 // `mode: "turn"`'s prompt builder (append/new_page/revise_current) lived here
 // too; it was removed with `mode: "turn"` once the app moved to the story
 // path and the eval passed on `path`/`page`.
+//
+// IMP-24/25: both prompts carry the guided setup (setup_prompt.ts, "book
+// interests win" for the loves line) and ask for the page's `question`
+// object per the question plan (question_prompt.ts).
 import { ART_STYLE } from "./art_style.ts";
 import { brandedCharactersIn } from "./brand_check.ts";
 import { detectsEndRequest } from "./end_request.ts";
 import { isOpeningIdea } from "./opening_idea.ts";
+import { questionKindFor } from "./question_plan.ts";
+import { questionInstruction } from "./question_prompt.ts";
 import { describeReadingLevelForPrompt, type ReadingLevel } from "./reading_levels.ts";
 import { KID_SAFETY_RUBRIC } from "./safety_rubric.ts";
 import type { Kid, ParentSettings, StoryBible, StoryBrief } from "./schemas.ts";
+import { describeSetup, lovedInterests, setupAnswerTexts } from "./setup_prompt.ts";
+
+export { describeSetup } from "./setup_prompt.ts";
 
 const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
@@ -39,7 +48,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
  */
 function languageInstruction(languageCode: string): string {
   const name = LANGUAGE_NAMES[languageCode.trim().toLowerCase()] ?? languageCode;
-  return `Write every word of the story text, art prompt and reading question only in ${name}. Never mix in a word, phrase or script from any other language.`;
+  return `Write every word of the story text, art prompt, question and choices only in ${name}. Never mix in a word, phrase or script from any other language.`;
 }
 
 function describeBible(bible: StoryBible): string[] {
@@ -131,10 +140,15 @@ function bibleTexts(bible: StoryBible): string[] {
   return [bible.title ?? "", bible.setting, ...bible.directions, ...bible.path, ...bible.characters.map((c) => `${c.name} ${c.description}`)];
 }
 
+/** Everything the family brought in that could name a brand — including profile interests the loves line leaves out. */
+function briefTexts(kid: Kid, brief: StoryBrief): string[] {
+  return [...kid.interests, ...brief.interests, brief.realMoment ?? "", brief.teach ?? "", ...setupAnswerTexts(brief)];
+}
+
 /** `mode: "path"` (docs/CONTRACTS.md): plans/replans the path from `index` on, then writes page `index`. */
 export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string {
   const level = input.kid.readingLevel as ReadingLevel;
-  const interests = Array.from(new Set([...input.kid.interests, ...input.brief.interests]));
+  const interests = lovedInterests(input.brief, input.kid);
   const keptBeats = input.bible.path.slice(0, input.index);
 
   const lines: string[] = [
@@ -146,19 +160,12 @@ export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string 
   if (interests.length > 0) {
     lines.push(`${input.kid.firstName} loves: ${interests.join(", ")}.`);
   }
-  if (input.brief.realMoment) {
-    lines.push(
-      `This story gently helps with a real moment: ${input.brief.realMoment}. Keep the tone calm and hopeful, and end reassuringly.`,
-    );
-  }
-  if (input.brief.teach) {
-    lines.push(`If it fits naturally, let the story help teach: ${input.brief.teach}.`);
-  }
+  lines.push(...describeSetup(input.brief, input.kid));
   if (input.settings.avoidTopics.length > 0) {
     lines.push(`Never include these topics: ${input.settings.avoidTopics.join(", ")}.`);
   }
   lines.push(...brandInstruction(
-    [...interests, input.brief.realMoment ?? "", input.brief.teach ?? "", input.input?.text ?? "", ...bibleTexts(input.bible)],
+    [...briefTexts(input.kid, input.brief), input.input?.text ?? "", ...bibleTexts(input.bible)],
     input.kid.firstName,
   ));
 
@@ -188,8 +195,9 @@ export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string 
       "Fold this opening idea into the bible's directions so it carries into every later page.",
     );
   } else if (input.input && input.input.text.trim() !== "") {
+    const picked = input.input.kind === "choice" ? ` (${input.kid.firstName} picked this from the page's choices.)` : "";
     lines.push(
-      `A direction just came in — kind: ${input.input.kind}, speaker: ${input.input.speaker}: "${input.input.text}"`,
+      `A direction just came in — kind: ${input.input.kind}, speaker: ${input.input.speaker}: "${input.input.text}"${picked}`,
       `Fold this direction into the bible's directions so it carries into every later page, and re-plan the path from page ${input.index} on. The ending may change, but the path must still reach one.`,
     );
     if (detectsEndRequest(input.input.text)) {
@@ -204,7 +212,14 @@ export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string 
 
   lines.push(
     `Return only the beats for page ${input.index} onward as "path" (never the beats already fixed above), plus "isEnding": true only if page ${input.index} is the last beat of the full path.`,
-    `Then write page ${input.index} itself: "pageText" at this reading level, "artPrompt" for its picture, and "readingQuestion": one short, warm question a parent can ask ${input.kid.firstName} about this page's words or picture, never about ${input.kid.firstName}'s own address, school or family details.`,
+    `Then write page ${input.index} itself: "pageText" at this reading level and "artPrompt" for its picture.`,
+    ...questionInstruction({
+      kidFirstName: input.kid.firstName,
+      index: input.index,
+      plan: questionKindFor(level, input.index, null),
+      nextPlannedBeat: null,
+      endingUnknown: true,
+    }),
     "Respond with only the JSON object the response schema describes.",
   );
 
@@ -232,18 +247,20 @@ export interface StoryPagePromptInput {
 export function buildStoryPageSystemPrompt(input: StoryPagePromptInput): string {
   const level = input.kid.readingLevel as ReadingLevel;
   const beat = input.bible.path[input.index] ?? "";
+  const nextBeat = input.bible.path[input.index + 1] ?? null;
   const isEnding = input.bible.path.length > 0 && input.index === input.bible.path.length - 1;
 
   const lines: string[] = [
     `You are Pop!'s story engine, writing one page of a live picture book for ${input.kid.firstName}.`,
     describeReadingLevelForPrompt(level),
     languageInstruction(input.brief.language),
+    ...describeSetup(input.brief, input.kid),
     "Never use surnames, home addresses, school names, or phone numbers anywhere in the story text.",
     KID_SAFETY_RUBRIC,
     `One locked illustration style is used for every picture: ${ART_STYLE}. Write an art prompt that fits this style and depicts only what is safe to show this child.`,
     ART_PROMPT_NAMES_INSTRUCTION,
     ...describeBible(input.bible),
-    ...brandInstruction([...input.kid.interests, ...input.brief.interests, ...bibleTexts(input.bible)], input.kid.firstName),
+    ...brandInstruction([...briefTexts(input.kid, input.brief), ...bibleTexts(input.bible)], input.kid.firstName),
   ];
 
   if (input.pages.length > 0) {
@@ -255,7 +272,14 @@ export function buildStoryPageSystemPrompt(input: StoryPagePromptInput): string 
     `This page's planned beat: ${beat}`,
     "Write only this page from that beat — do not invent a different moment or change the story path. Never retell an earlier page's words.",
     "This page is one still moment that suits a gentle, repeating animation; it never itself moves the plot on.",
-    `Write: "pageText" at this reading level, "artPrompt" for its picture, and "readingQuestion": one short, warm question a parent can ask ${input.kid.firstName} about this page's words or picture, never about ${input.kid.firstName}'s own address, school or family details.`,
+    `Write: "pageText" at this reading level and "artPrompt" for its picture.`,
+    ...questionInstruction({
+      kidFirstName: input.kid.firstName,
+      index: input.index,
+      plan: questionKindFor(level, input.index, input.bible.path.length),
+      nextPlannedBeat: nextBeat,
+      endingUnknown: false,
+    }),
     "Respond with only the JSON object the response schema describes.",
   );
 

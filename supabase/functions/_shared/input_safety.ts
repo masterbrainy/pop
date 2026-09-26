@@ -22,6 +22,9 @@ export interface InputSafetyDeps {
 /** Why an input (or, in story_path.ts/story_turn.ts, an output) was refused (docs/CONTRACTS.md `refusal`; R-41). */
 export type Refusal = "real_harm" | "unsafe" | null;
 
+/** How the words arrived: spoken, typed, or a tapped choice tile (IMP-25). */
+export type InputKind = "speech" | "typed" | "choice";
+
 export interface InputSafetyVerdict {
   blocked: boolean;
   /** Non-null exactly when blocked is true. */
@@ -64,11 +67,22 @@ export async function checkInputSafety(
   speaker: "parent" | "kid",
   kidFirstName: string,
   deps: InputSafetyDeps,
-  kind: "speech" | "typed" = "typed",
+  kind: InputKind = "typed",
 ): Promise<InputSafetyVerdict> {
   const trimmed = text.trim();
   if (trimmed === "") {
     return { blocked: false, parentNote: null, refusal: null };
+  }
+
+  // IMP-25: a tapped choice is words the story engine itself wrote (and gated)
+  // for this page, but the app could send any text as a "choice", so it is
+  // re-moderated. There's no real-harm rubric (a tile isn't a disclosure) and
+  // no parent second opinion (it's the kid's turn).
+  if (kind === "choice") {
+    const moderation = await deps.moderateText(trimmed);
+    return moderation.flagged
+      ? { blocked: true, parentNote: gentleParentNote(), refusal: "unsafe" }
+      : { blocked: false, parentNote: null, refusal: null };
   }
 
   // R-44: the speaker toggle defaults to the parent, so spoken words may be the
@@ -97,6 +111,16 @@ export async function checkInputSafety(
 
   const moderation = await deps.moderateText(trimmed);
   return await secondOpinionFor(trimmed, moderation.flagged, deps);
+}
+
+export const SAFE_INPUT: InputSafetyVerdict = { blocked: false, parentNote: null, refusal: null };
+
+/**
+ * Combines several input checks' verdicts: a real-harm block wins (its note
+ * is the one the parent most needs), then the first other block, else safe.
+ */
+export function firstBlockingVerdict(verdicts: InputSafetyVerdict[]): InputSafetyVerdict {
+  return verdicts.find((v) => v.blocked && v.refusal === "real_harm") ?? verdicts.find((v) => v.blocked) ?? SAFE_INPUT;
 }
 
 /** A parent's direction: blocked only when moderation flagged it and the second opinion agrees. */

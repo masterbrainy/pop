@@ -101,6 +101,8 @@ final class StoryMaker {
     private var lastDirection: String?
     /// The last page behind that a direction wrote, so the banner can say it changed.
     private var rewrittenPageId: UUID?
+    /// Pages whose question was answered, skipped, or made stale by a re-plan (IMP-25).
+    private var settledQuestions: Set<PageKey> = []
     @ObservationIgnored private var noteTask: Task<Void, Never>?
     @ObservationIgnored private var scriptLog: FileLog?
     @ObservationIgnored private var layerTasks: [UUID: Task<Void, Never>] = [:]
@@ -161,6 +163,40 @@ final class StoryMaker {
     }
 
     var canCreate: Bool { services.server != nil }
+
+    // MARK: - The page's question (IMP-25)
+
+    /// The question under the page on screen (once it shows), while it still steers what happens next.
+    var activeQuestion: ActiveQuestion? {
+        QuestionStrip.visible(page: shownPage, isEnding: isOnLastPage, directionInFlight: directionInFlight, settled: settledQuestions)
+    }
+
+    /// A tapped tile: the path's own next beat just hides the question (the page behind is
+    /// already being built that way); any other re-plans the page behind as the kid's turn.
+    func answer(_ choice: StoryChoice) {
+        guard !hasEnded, activeQuestion?.choices.contains(choice) == true else { return }
+        settleQuestion()
+        scriptLog?.append("answered: \(choice.label)\(choice.followsPath ? " (the path's own next beat)" : "")")
+        guard let input = QuestionStrip.input(for: choice) else { return }
+        lastDirection = choice.label
+        enqueue(input)
+    }
+
+    func skipQuestion() {
+        settleQuestion()
+    }
+
+    /// "Something else": the kid says their own idea, so the input bar comes back on the kid's turn with the mic on.
+    func somethingElse() async {
+        settleQuestion()
+        speaker = .kid
+        if !isListening { await startListening() }
+    }
+
+    private func settleQuestion() {
+        guard let page = shownPage else { return }
+        settledQuestions.insert(page.key)
+    }
 
     /// Gets ready for the opening prompt: speech secrets, and the kid's drawing becoming the
     /// hero. No page is written, and Orbis doesn't warm, until the parent starts the story.
@@ -303,6 +339,14 @@ final class StoryMaker {
                 await onScriptedFinish()
                 log.append("finished: \(reader.book.title ?? "?") · status \(reader.book.status)")
                 return
+            case let step where step.hasPrefix("choose:"):
+                // Taps the page's nth choice (1-based), for scripted checks of IMP-25.
+                let choices = activeQuestion?.choices ?? []
+                let number = Int(step.dropFirst("choose:".count)) ?? 0
+                log.append("question: \(activeQuestion?.ask ?? "none") · \(choices.map(\.label).joined(separator: " / "))")
+                if choices.indices.contains(number - 1) { answer(choices[number - 1]) }
+            case "skip":
+                skipQuestion()
             case let step where step.hasPrefix("fold during:"):
                 // A direction, then a fold before its words land (R-35 a).
                 submit(String(turn.dropFirst("fold during:".count)))
@@ -377,6 +421,8 @@ final class StoryMaker {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // Late words (a stop still finishing its transcripts) don't start pages after the book ended.
         guard !trimmed.isEmpty, !hasEnded else { return }
+        // A direction re-plans what happens next, so the page's question is stale (IMP-25).
+        settleQuestion()
         lastDirection = trimmed
         if reader.currentPage?.text.isEmpty == true, openingPrompt == nil { startOpening(with: trimmed) }
         enqueue(StoryTurnInput(kind: kind, speaker: speaker, text: trimmed))

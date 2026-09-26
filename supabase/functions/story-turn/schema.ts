@@ -2,6 +2,10 @@
 // "page". "path" and "page" (P-04) replace the old "turn" mode
 // (append/new_page/revise_current), which was removed once the app moved
 // over and the full eval passed on the new modes.
+//
+// IMP-24/25: the brief may carry guided-setup answers (hero/place/problem,
+// mood, purpose) and a path request's input may be a tapped "choice"
+// (≤ 120 chars) — both defined in _shared/schemas.ts.
 import { z } from "npm:zod@3.23.8";
 import {
   directionInputSchema,

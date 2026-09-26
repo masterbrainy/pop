@@ -1,11 +1,13 @@
-import { assert, assertFalse } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
 import {
   buildStoryPageSystemPrompt,
   buildStoryPathSystemPrompt,
   buildTitlePrompt,
+  describeSetup,
   type StoryPagePromptInput,
   type StoryPathPromptInput,
 } from "./story_prompt.ts";
+import type { Kid, StoryBrief } from "./schemas.ts";
 
 Deno.test("buildTitlePrompt orders pages by index and includes the setting and first name", () => {
   const prompt = buildTitlePrompt(
@@ -243,6 +245,177 @@ Deno.test("buildStoryPageSystemPrompt steers away from a branded name in the int
     brief: { interests: ["Paw Patrol"], realMoment: null, teach: null, language: "en" },
   }));
   assert(prompt.includes("Never use these brand or character names: paw patrol."));
+});
+
+// --- IMP-24 guided setup ---
+
+const kidMaya: Kid = { firstName: "Maya", readingLevel: "early_reader", interests: [] };
+const plainBrief: StoryBrief = { interests: [], realMoment: null, teach: null, language: "en" };
+
+Deno.test("describeSetup is empty for an old app's brief with nothing set", () => {
+  assertEquals(describeSetup(plainBrief, kidMaya), []);
+});
+
+Deno.test("describeSetup turns hero, place and problem tiles into phrases", () => {
+  const lines = describeSetup(
+    { ...plainBrief, hero: { tile: "kid" }, place: { tile: "castle" }, problem: { tile: "lost" } },
+    kidMaya,
+  );
+  assertEquals(lines, [
+    "The hero of this story is Maya, the child this book is for.",
+    "The story takes place in a friendly castle.",
+    "What goes wrong: something special gets lost.",
+  ]);
+});
+
+Deno.test("describeSetup quotes a text answer as the family's own words", () => {
+  const lines = describeSetup(
+    {
+      ...plainBrief,
+      hero: { text: "a purple owl called Pip", via: "speech" },
+      place: { text: "Grandma's\ngarden", via: "typed" },
+      problem: { text: "the moon went missing", via: "typed" },
+    },
+    kidMaya,
+  ).join("\n");
+  assert(lines.includes('The hero of this story, in the family\'s own words: "a purple owl called Pip".'));
+  assert(lines.includes('Where the story happens, in the family\'s own words: "Grandma\'s garden".'));
+  assert(lines.includes('What goes wrong, in the family\'s own words: "the moon went missing".'));
+});
+
+Deno.test("describeSetup ignores an unknown tile and a tile on the wrong card", () => {
+  assertEquals(describeSetup({ ...plainBrief, hero: { tile: "hoverboard" }, place: { tile: "dragon" } }, kidMaya), []);
+});
+
+Deno.test("describeSetup sets the tone for each mood", () => {
+  assert(describeSetup({ ...plainBrief, mood: "silly" }, kidMaya).join(" ").toLowerCase().includes("silly"));
+  assert(describeSetup({ ...plainBrief, mood: "cosy" }, kidMaya).join(" ").toLowerCase().includes("cosy"));
+  assert(describeSetup({ ...plainBrief, mood: "brave" }, kidMaya).join(" ").toLowerCase().includes("brave"));
+});
+
+Deno.test("describeSetup asks a bedtime story to end calm and sleepy, and adds nothing for fun", () => {
+  assert(describeSetup({ ...plainBrief, purpose: "bedtime" }, kidMaya).join(" ").includes("sleepy"));
+  assertEquals(describeSetup({ ...plainBrief, purpose: "fun" }, kidMaya), []);
+});
+
+Deno.test("describeSetup carries the real moment and teach lines", () => {
+  const lines = describeSetup({ ...plainBrief, realMoment: "a new baby brother", teach: "sharing" }, kidMaya).join("\n");
+  assert(lines.includes("a new baby brother"));
+  assert(lines.includes("help teach: sharing"));
+});
+
+Deno.test("buildStoryPathSystemPrompt: book interests win over the profile when the brief has card answers", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput({
+    kid: { firstName: "Maya", readingLevel: "early_reader", interests: ["foxes", "stars"] },
+    brief: { ...plainBrief, hero: { tile: "dragon" } },
+  }));
+  assertFalse(prompt.includes("foxes"));
+  assertFalse(prompt.includes("Maya loves"));
+  assert(prompt.includes("The hero of this story is a small, friendly dragon."));
+});
+
+Deno.test("buildStoryPathSystemPrompt: book interests win over the profile when the brief has its own interests", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput({
+    kid: { firstName: "Maya", readingLevel: "early_reader", interests: ["foxes"] },
+    brief: { ...plainBrief, interests: ["trains"] },
+  }));
+  assert(prompt.includes("Maya loves: trains."));
+  assertFalse(prompt.includes("foxes"));
+});
+
+Deno.test("buildStoryPathSystemPrompt falls back to the profile's interests for an empty brief", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput({
+    kid: { firstName: "Maya", readingLevel: "early_reader", interests: ["foxes", "stars"] },
+    brief: plainBrief,
+  }));
+  assert(prompt.includes("Maya loves: foxes, stars."));
+});
+
+Deno.test("buildStoryPathSystemPrompt still steers away from a branded profile interest the loves line dropped", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput({
+    kid: { firstName: "Maya", readingLevel: "early_reader", interests: ["Paw Patrol"] },
+    brief: { ...plainBrief, hero: { text: "Elsa", via: "typed" } },
+  }));
+  assert(prompt.includes("Never use these brand or character names: paw patrol, elsa."));
+});
+
+Deno.test("buildStoryPageSystemPrompt now carries the setup, real moment, teach and mood", () => {
+  const prompt = buildStoryPageSystemPrompt(basePageInput({
+    brief: { ...plainBrief, realMoment: "a new baby brother", teach: "sharing", mood: "cosy", hero: { tile: "bunny" } },
+  }));
+  assert(prompt.includes("a new baby brother"));
+  assert(prompt.includes("help teach: sharing"));
+  assert(prompt.toLowerCase().includes("cosy"));
+  assert(prompt.includes("The hero of this story is a little bunny."));
+});
+
+// --- IMP-25 one question per page ---
+
+Deno.test("buildStoryPageSystemPrompt includes the next planned beat so one choice can follow it", () => {
+  const prompt = buildStoryPageSystemPrompt(basePageInput({
+    bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0", "Rex finds the ball under the bed.", "Beat 2"] },
+    index: 0,
+  }));
+  assert(prompt.includes("Rex finds the ball under the bed."));
+  assert(prompt.includes('"followsPath": true'));
+});
+
+Deno.test("buildStoryPageSystemPrompt asks an early reader for 3 choices about what happens next", () => {
+  const prompt = buildStoryPageSystemPrompt(basePageInput({
+    bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0", "Beat 1"] },
+    index: 0,
+  }));
+  assert(prompt.includes('"kind": "choice"'));
+  assert(prompt.includes("exactly 3 choices"));
+  assert(prompt.includes("NEXT"));
+  assert(prompt.includes("Have you ever"));
+  assert(prompt.includes("never about Maya's own address, school or family"));
+  assertFalse(prompt.includes("readingQuestion"));
+});
+
+Deno.test("buildStoryPageSystemPrompt asks for a talk-only question on a listener page with no choices", () => {
+  const prompt = buildStoryPageSystemPrompt(basePageInput({
+    kid: { firstName: "Maya", readingLevel: "listener", interests: [] },
+    bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0", "Beat 1", "Beat 2"] },
+    index: 0,
+  }));
+  assert(prompt.includes('"kind": "talkOnly"'));
+  assertFalse(prompt.includes("exactly 2 choices"));
+});
+
+Deno.test("buildStoryPageSystemPrompt asks for a talk-only question on the ending page", () => {
+  const prompt = buildStoryPageSystemPrompt(basePageInput({
+    bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0", "Beat 1"] },
+    index: 1,
+  }));
+  assert(prompt.includes('"kind": "talkOnly"'));
+  assertFalse(prompt.includes('"kind": "choice"'));
+});
+
+Deno.test("buildStoryPathSystemPrompt asks a reader for an open question with 3 choices, talk-only if the page ends the path", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput({
+    kid: { firstName: "Maya", readingLevel: "reader", interests: [] },
+  }));
+  assert(prompt.includes('"kind": "open"'));
+  assert(prompt.includes("exactly 3 choices"));
+  assert(prompt.includes("the next beat in the path you return"));
+  assert(prompt.includes('If page 0 is the last beat of the path, make it "kind": "talkOnly"'));
+});
+
+Deno.test("both prompts' language rule covers the question and choices", () => {
+  assert(buildStoryPathSystemPrompt(basePathInput()).includes("question and choices only in English"));
+  assert(buildStoryPageSystemPrompt(basePageInput()).includes("question and choices only in English"));
+});
+
+Deno.test("buildStoryPathSystemPrompt marks a tapped choice as the child's pick", () => {
+  // Mid-story (page 1 is shown): a choice is never the opening idea.
+  const prompt = buildStoryPathSystemPrompt(basePathInput({
+    index: 1,
+    pages: [{ index: 0, text: "The dragon lost his ball." }],
+    input: { kind: "choice", speaker: "kid", text: "The dragon looks under the bed." },
+  }));
+  assert(prompt.includes("The dragon looks under the bed."));
+  assert(prompt.includes("picked this from the page's choices"));
 });
 
 Deno.test("buildStoryPathSystemPrompt never lists the kid's own name as a brand", () => {

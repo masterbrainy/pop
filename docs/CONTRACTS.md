@@ -7,11 +7,11 @@ The two tracks meet here: the app (Swift, `PopKit` + `App/`) and the server (Sup
 | Type | Fields |
 |---|---|
 | `KidProfile` | `id` (uuid) · `firstName` · `readingLevel` (`listener` \| `early_reader` \| `reader`, PRD §8.7) · `interests` [string] |
-| `StoryBrief` | `interests` [string] · `realMoment` string? · `teach` string? ("Anything you'd like this story to teach?") · `language` (default `en`) |
+| `StoryBrief` | `interests` [string] · `realMoment` string? · `teach` string? ("Anything you'd like this story to teach?") · `language` (default `en`) · guided setup (IMP-24), each optional: `hero`, `place`, `problem` (`BriefAnswer`: `{ "tile": "dragon" }` with an id from `supabase/functions/_shared/setup_tiles.json`, or `{ "text": "1–80 chars", "via": "typed \| speech" }`) · `mood` (`silly` \| `cosy` \| `brave`)? · `purpose` (`fun` \| `bedtime` \| `realMoment` \| `teach`)? |
 | `ParentSettings` | `avoidTopics` [string] · `readingLevel` override? · `language` |
 | `Character` | `id` · `name` · `description` (fixed look, reused in every picture) · `referencePath` string? (Storage path of its reference image) |
 | `StoryBible` | `title` string? · `setting` · `characters` [Character] · `directions` [string] (every direction so far, carried into later pages) |
-| `PageContent` | `id` (uuid) · `index` · `version` (bumps on every revision) · `text` · `artPrompt` string? · `stillPath` string? · `layers` (`platePath`, `cutouts` [{`characterId`, `path`}])? · `motion` ({`scene`, `motion`})? · `clipPath` string? |
+| `PageContent` | `id` (uuid) · `index` · `version` (bumps on every revision) · `text` · `artPrompt` string? · `stillPath` string? · `layers` (`platePath`, `cutouts` [{`characterId`, `path`}])? · `motion` ({`scene`, `motion`})? · `clipPath` string? · `question` string? · `questionKind` (`choice` \| `open` \| `talkOnly`)? · `choices` [StoryChoice]? (IMP-25: {`label`, `symbol`, `direction`, `followsPath`}) |
 | `Book` | `id` · `kidId` · `brief` · `bible` · `pages` [PageContent] · `status` (`draft` \| `finished`) · `title` string? · `coverPath` string? · `createdAt` · `finishedAt`? |
 
 Pictures are 16:9 until D9 is decided (important content central). Storage paths are `{userId}/{bookId}/…` in the private bucket `pop-books`.
@@ -52,7 +52,7 @@ Request: `mode`, the bible (which now carries the path) and the pages **already 
              "path": [ "Maya finds a red kite in the meadow.", "…", "Maya falls asleep holding the kite. The end." ] },
   "pages": [ { "index": 0, "text": "…" } ],
   "index": 1,
-  "input": { "kind": "speech | typed", "speaker": "parent | kid", "text": "wake the dragon up" }
+  "input": { "kind": "speech | typed | choice", "speaker": "parent | kid", "text": "wake the dragon up" }
 }
 ```
 - `mode: "path"` plans the story path, or re-plans it, from `index` onward, then writes page `index`.
@@ -67,7 +67,9 @@ Response `data` for `path`/`page`:
 ```json
 {
   "action": "page | none",
-  "page": { "index": 1, "text": "…", "artPrompt": "…", "question": "…", "isEnding": false },
+  "page": { "index": 1, "text": "…", "artPrompt": "…", "question": "…", "isEnding": false,
+            "questionKind": "choice | open | talkOnly",
+            "choices": [ { "label": "Up a tree", "symbol": "tree.fill", "direction": "Pip climbs the oak to look.", "followsPath": false } ] },
   "bible": { "title": "…", "setting": "…", "characters": [ … ], "directions": [ … ], "path": [ "…" ] },
   "parentNote": null,
   "refusal": "real_harm | unsafe | null",
@@ -77,7 +79,10 @@ Response `data` for `path`/`page`:
 - `page.isEnding` is true for the path's last beat; after it there's no page behind, and the parent closes the book to finish.
 - **Input safety (R-37, PRD §8.6):** `input.text` is moderated before it reaches the model. If it's flagged, or it sounds like the child describing real harm, the reply is `action: "none"` with the unchanged bible and a calm `parentNote`, and the words never enter the story.
 - The page goes through the output gate: moderation plus the rubric at the reading level, with one rewrite, then `none`. Its text is kept within the level's word limit (cut to whole sentences, never refused for length), it never retells earlier pages, and for an "en" brief it never mixes in a letter from another script (any other language passes through unchecked).
-- `page.question` is one short question for the parent to ask about the page (C3).
+- `page.question` is one short question for the parent to ask about the page (C3; IMP-25 one question per page). `questionKind` and `choices` say how the kid can answer: Listener pages 1 and 3 get 2 choices and the rest a talk-only prompt, Early reader pages get 3 choices, Reader pages an open question with 3 choices as a floor, and the ending is always talk-only with no choices. Exactly one choice has `followsPath: true` (it matches the planned next beat; tapping it changes nothing). Choice symbols come from an allow-list of SF Symbols. The question and choices pass their own gate, in parallel with the page's: if they fail, `question` is `""` with no kind or choices and the page still ships.
+- **Guided setup (IMP-24):** tile answers travel as ids and the server writes the words (an unknown id is ignored). The mood, a bedtime purpose, the real moment and "teach" reach both `path` and `page` prompts. **Book interests win:** when the brief has its own interests or card answers, the app sends `kid.interests: []` and the server leaves the profile's interests out of the story (they still feed the brand-name guard).
+- **Brief safety:** the brief's free text (interests, real moment, teach, own-words answers, and the profile's interests) is moderated before any model call, typed words like a parent's direction and spoken words with the real-harm check too; a block is `action: "none"` with a calm `parentNote`. A tile-only brief costs no safety call.
+- `input.kind: "choice"` is a tapped answer (the kid's turn, at most 120 characters). It's moderated only, and the app never merges it with other words.
 - `refusal` (R-41) is set only on `action: "none"` and only for a safety refusal, never for reaching the path's end: `"real_harm"` when a kid's own words sounded like real harm (input moderation or the real-harm rubric, R-37), `"unsafe"` when an input or the output failed moderation, the rubric or the language check for any other reason, and `null` otherwise (a safe page, or `page` mode past the path's end). `parentNote` stays the calm, non-alarming text either way; `refusal` is for the app to tell the two cases apart without parsing the note.
 
 ### `art`: one picture (S6, P2, pop-up layers, cover, kid's drawing as the hero)

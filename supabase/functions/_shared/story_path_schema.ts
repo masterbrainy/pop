@@ -2,7 +2,16 @@
 // docs/CONTRACTS.md "story-turn modes path and page"): a strict JSON Schema
 // for each OpenAI request, and a zod schema to re-validate the parsed
 // response (defense in depth, same reasoning as story_schema.ts).
+//
+// IMP-25: `readingQuestion` became a `question` object ({ask, kind, choices}).
+// OpenAI strict mode needs every field required, so it is always present in
+// the JSON schema; the zod side still tolerates a missing or malformed
+// question (and an unknown symbol) so the question can never fail a page.
 import { z } from "npm:zod@3.23.8";
+import { CHOICE_SYMBOLS, toChoiceSymbol } from "./choice_symbols.ts";
+import { type ModelQuestion, type PageChoice, QUESTION_KINDS } from "./question_plan.ts";
+
+export type { ModelQuestion } from "./question_plan.ts";
 
 const BIBLE_CHARACTER_JSON_SCHEMA = {
   type: "object",
@@ -21,6 +30,53 @@ const bibleCharacterOutputSchema = z.object({
   description: z.string(),
 });
 
+const QUESTION_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    ask: { type: "string" },
+    kind: { type: "string", enum: [...QUESTION_KINDS] },
+    choices: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          label: { type: "string" },
+          symbol: { type: "string", enum: [...CHOICE_SYMBOLS] },
+          direction: { type: "string" },
+          followsPath: { type: "boolean" },
+        },
+        required: ["label", "symbol", "direction", "followsPath"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["ask", "kind", "choices"],
+  additionalProperties: false,
+} as const;
+
+const choiceOutputSchema = z.object({
+  label: z.string(),
+  symbol: z.string().transform(toChoiceSymbol),
+  direction: z.string(),
+  followsPath: z.boolean().catch(false),
+});
+
+const EMPTY_QUESTION: ModelQuestion = { ask: "", kind: "talkOnly", choices: [] };
+
+/** A malformed choice is dropped; a malformed question becomes EMPTY_QUESTION. */
+const questionOutputSchema: z.ZodType<ModelQuestion, z.ZodTypeDef, unknown> = z.object({
+  ask: z.string().catch(""),
+  kind: z.enum(QUESTION_KINDS).catch("talkOnly"),
+  choices: z.array(z.unknown()).catch([]).transform((items): PageChoice[] =>
+    items.flatMap((item) => {
+      const parsed = choiceOutputSchema.safeParse(item);
+      return parsed.success ? [parsed.data] : [];
+    })
+  ),
+}).catch(EMPTY_QUESTION);
+
+const questionFieldSchema = questionOutputSchema.optional().transform((q) => q ?? EMPTY_QUESTION);
+
 // `mode: "path"`: plans (or re-plans) the story path from `index` onward and
 // writes page `index` itself in the same call.
 export const STORY_PATH_JSON_SCHEMA = {
@@ -36,7 +92,7 @@ export const STORY_PATH_JSON_SCHEMA = {
       isEnding: { type: "boolean" },
       pageText: { type: "string" },
       artPrompt: { type: "string" },
-      readingQuestion: { type: "string" },
+      question: QUESTION_JSON_SCHEMA,
       bibleTitle: { type: ["string", "null"] },
       bibleSetting: { type: "string" },
       bibleCharacters: { type: "array", items: BIBLE_CHARACTER_JSON_SCHEMA },
@@ -48,7 +104,7 @@ export const STORY_PATH_JSON_SCHEMA = {
       "isEnding",
       "pageText",
       "artPrompt",
-      "readingQuestion",
+      "question",
       "bibleTitle",
       "bibleSetting",
       "bibleCharacters",
@@ -64,7 +120,7 @@ export const storyPathModelOutputSchema = z.object({
   isEnding: z.boolean(),
   pageText: z.string(),
   artPrompt: z.string(),
-  readingQuestion: z.string().default(""),
+  question: questionFieldSchema,
   bibleTitle: z.string().nullable(),
   bibleSetting: z.string(),
   bibleCharacters: z.array(bibleCharacterOutputSchema),
@@ -84,10 +140,10 @@ export const STORY_PAGE_JSON_SCHEMA = {
     properties: {
       pageText: { type: "string" },
       artPrompt: { type: "string" },
-      readingQuestion: { type: "string" },
+      question: QUESTION_JSON_SCHEMA,
       parentNote: { type: ["string", "null"] },
     },
-    required: ["pageText", "artPrompt", "readingQuestion", "parentNote"],
+    required: ["pageText", "artPrompt", "question", "parentNote"],
     additionalProperties: false,
   },
 } as const;
@@ -95,7 +151,7 @@ export const STORY_PAGE_JSON_SCHEMA = {
 export const storyPageModelOutputSchema = z.object({
   pageText: z.string(),
   artPrompt: z.string(),
-  readingQuestion: z.string().default(""),
+  question: questionFieldSchema,
   parentNote: z.string().nullable(),
 });
 

@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
 import {
+  briefAnswerSchema,
   characterSchema,
   directionInputSchema,
   kidSchema,
@@ -80,6 +81,63 @@ Deno.test("directionInputSchema accepts speech and typed but not continue", () =
   assert(directionInputSchema.safeParse({ kind: "typed", speaker: "parent", text: "wake the dragon up" }).success);
   assert(directionInputSchema.safeParse({ kind: "speech", speaker: "kid", text: "add a puppy" }).success);
   assertFalse(directionInputSchema.safeParse({ kind: "continue", speaker: "parent", text: "" }).success);
+});
+
+// --- IMP-24 guided setup answers / IMP-25 choice input ---
+
+Deno.test("briefAnswerSchema accepts a tile or a trimmed text answer with its source", () => {
+  assert(briefAnswerSchema.safeParse({ tile: "dragon" }).success);
+  const text = briefAnswerSchema.parse({ text: "  a purple owl  ", via: "speech" });
+  assertEquals(text, { text: "a purple owl", via: "speech" });
+});
+
+Deno.test("briefAnswerSchema rejects mixed, empty, overlong and unknown-source answers", () => {
+  assertFalse(briefAnswerSchema.safeParse({ tile: "dragon", text: "x", via: "typed" }).success);
+  assertFalse(briefAnswerSchema.safeParse({ tile: "   " }).success);
+  assertFalse(briefAnswerSchema.safeParse({ text: "   ", via: "typed" }).success);
+  assertFalse(briefAnswerSchema.safeParse({ text: "a".repeat(81), via: "typed" }).success);
+  assertFalse(briefAnswerSchema.safeParse({ text: "owl", via: "telepathy" }).success);
+  assertFalse(briefAnswerSchema.safeParse({ text: "owl" }).success);
+});
+
+Deno.test("storyBriefSchema keeps an old app's brief valid with no setup fields", () => {
+  const result = storyBriefSchema.parse({ interests: [], realMoment: null, teach: null, language: "en" });
+  assertEquals(result.hero, undefined);
+  assertEquals(result.mood, undefined);
+});
+
+Deno.test("storyBriefSchema accepts hero/place/problem answers, mood and purpose", () => {
+  const result = storyBriefSchema.parse({
+    interests: [],
+    language: "en",
+    hero: { tile: "dragon" },
+    place: { text: "Grandma's garden", via: "typed" },
+    problem: null,
+    mood: "cosy",
+    purpose: "bedtime",
+  });
+  assertEquals(result.hero, { tile: "dragon" });
+  assertEquals(result.place, { text: "Grandma's garden", via: "typed" });
+  assertEquals(result.problem, null);
+  assertEquals(result.mood, "cosy");
+  assertEquals(result.purpose, "bedtime");
+});
+
+Deno.test("storyBriefSchema rejects an unknown mood or purpose", () => {
+  assertFalse(storyBriefSchema.safeParse({ interests: [], mood: "spooky" }).success);
+  assertFalse(storyBriefSchema.safeParse({ interests: [], purpose: "homework" }).success);
+});
+
+Deno.test("directionInputSchema accepts a choice of at most 120 characters", () => {
+  assert(directionInputSchema.safeParse({ kind: "choice", speaker: "kid", text: "The dragon looks under the bed." }).success);
+  assert(directionInputSchema.safeParse({ kind: "choice", speaker: "kid", text: "a".repeat(120) }).success);
+});
+
+Deno.test("directionInputSchema rejects a choice over 120 characters, but not a long typed direction", () => {
+  const result = directionInputSchema.safeParse({ kind: "choice", speaker: "kid", text: "a".repeat(121) });
+  assertFalse(result.success);
+  if (!result.success) assert(zodIssueSummary(result.error).startsWith("text:"));
+  assert(directionInputSchema.safeParse({ kind: "typed", speaker: "parent", text: "a".repeat(121) }).success);
 });
 
 Deno.test("zodIssueSummary produces a readable path: message string", () => {

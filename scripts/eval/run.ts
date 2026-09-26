@@ -20,6 +20,7 @@ import {
   checkWordLimit,
   isFalseBlock,
 } from "./checks.ts";
+import { kidAndBriefFor } from "./request_fields.ts";
 import type { CaseResult, EvalCase, EvalSummary, Speaker, TurnOutcome } from "./types.ts";
 
 const SCRIPT_DIR = new URL(".", import.meta.url);
@@ -140,17 +141,7 @@ function toDirectionInput(turn: EvalCase["turns"][number]): { kind: "speech" | "
 function baseRequestFields(evalCase: EvalCase, bookId: string, state: RunState) {
   return {
     bookId,
-    kid: {
-      firstName: evalCase.brief.kidFirstName,
-      readingLevel: evalCase.brief.readingLevel,
-      interests: evalCase.brief.interests,
-    },
-    brief: {
-      interests: evalCase.brief.interests,
-      realMoment: evalCase.brief.realMoment ?? null,
-      teach: evalCase.brief.teach ?? null,
-      language: "en",
-    },
+    ...kidAndBriefFor(evalCase.brief),
     settings: { avoidTopics: [] },
     bible: state.bible,
     pages: state.pages,

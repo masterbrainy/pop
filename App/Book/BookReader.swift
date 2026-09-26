@@ -68,7 +68,8 @@ final class BookReader {
                 return
             }
             let page = pending.index == index ? pending
-                : PageContent(index: index, text: pending.text, artPrompt: pending.artPrompt, stillPath: pending.stillPath, question: pending.question)
+                : PageContent(index: index, text: pending.text, artPrompt: pending.artPrompt, stillPath: pending.stillPath, question: pending.question,
+                              questionKind: pending.questionKind, choices: pending.choices)
             pendingNext = nil
             book = book.with(pages: book.pages + [page])
             navigator = next.with(pageCount: book.pages.count)

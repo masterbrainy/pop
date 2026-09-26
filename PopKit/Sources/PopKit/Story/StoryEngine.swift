@@ -26,7 +26,8 @@ public enum StoryEngine {
         }
         let updatedBook = book.with(bible: response.bible.carryingReferences(from: book.bible))
         let page = response.page.map {
-            PageContent(index: $0.index, text: $0.text, artPrompt: $0.artPrompt).with(question: $0.question)
+            PageContent(index: $0.index, text: $0.text, artPrompt: $0.artPrompt)
+                .with(question: $0.question, kind: $0.questionKind, choices: $0.choices)
         }
         return PathOutcome(book: updatedBook, page: page, parentNote: response.parentNote)
     }
@@ -48,7 +49,7 @@ public enum StoryEngine {
         _ mode: StoryTurnMode, book: Book, kid: KidProfile, settings: ParentSettings, shownPages: [PageContent], index: Int, input: StoryTurnInput?
     ) -> StoryTurnRequest {
         StoryTurnRequest(
-            mode: mode, bookId: book.id, kid: StoryTurnKid(kid), brief: book.brief, settings: settings, bible: book.bible,
+            mode: mode, bookId: book.id, kid: StoryTurnKid(kid, for: book.brief), brief: book.brief, settings: settings, bible: book.bible,
             pages: shownPages.map(StoryTurnPageRef.init), input: input, index: index
         )
     }

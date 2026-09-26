@@ -2,9 +2,9 @@
 import PopKit
 import Speech
 
-/// Speech-to-text with Apple's recogniser: words show live as they're said, and each utterance
-/// ends after a short pause and goes to the story straight away. OpenAI Realtime is the
-/// fallback when this can't start.
+/// Fallback speech-to-text with Apple's recogniser, used when OpenAI Realtime can't start
+/// (no network, or the `stt-token` function fails). Words show live as they're said, and each
+/// utterance ends after a short pause.
 /// Recogniser errors (for example "no speech detected" after a quiet spell) just start a fresh
 /// request; only errors that repeat straight away stop listening.
 @MainActor

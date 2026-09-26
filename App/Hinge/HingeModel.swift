@@ -17,6 +17,30 @@ final class HingeModel {
     /// The debug panel or a script is driving; device readings are ignored meanwhile.
     private(set) var overridden = LaunchOptions.debugHinge
     private(set) var lastDeviceAngle: Double?
+    /// The book is angled (partly folded): while it is, what's said goes into the story.
+    /// Opening it flat (to read) or closing it stops listening.
+    private(set) var isAngled = false
+    /// The hinge reads closed right now. The cover shows at once; the posture machine still
+    /// waits out its hold before it counts as closed (a quick close and reopen turns the page).
+    private(set) var isShut = false
+    /// The cover shows from the moment the phone shuts until it has opened far enough to turn
+    /// the page (or open the book): then the next page replaces it in the same update, so the
+    /// old page never flashes up in between.
+    var showsCover: Bool {
+        if isShut { return true }
+        switch state.phase {
+        case .closed, .closing: return true
+        case .unknown, .open: return false
+        }
+    }
+
+    /// Whether any hinge reading has arrived (a Duo, or the debug panel). Without one the
+    /// posture can't say when to listen, so the mic button does.
+    var hasReadings: Bool { lastSample != nil }
+    /// Angled below this; flat (reading) again from `flatFrom` up, so a wobble near the line
+    /// doesn't switch the mic on and off.
+    private static let angledBelow = 160.0
+    private static let flatFrom = 170.0
     /// How far the real hinge must move to take control back from the debug panel.
     private static let handBackDegrees = 2.0
 
@@ -106,6 +130,10 @@ final class HingeModel {
         let (next, events) = machine.reduce(state, sample)
         state = next
         lastSample = sample
+        let shut = sample.posture == .closed || sample.angle <= machine.config.closedAngle
+        if shut != isShut { isShut = shut }
+        let angled = sample.posture != .closed && sample.angle < (isAngled ? Self.flatFrom : Self.angledBelow)
+        if angled != isAngled { isAngled = angled }
         for event in events {
             fileLog?.append("event \(event) phase \(state.phase)")
             onEvent(event)

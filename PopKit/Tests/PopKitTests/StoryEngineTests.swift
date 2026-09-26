@@ -52,6 +52,23 @@ struct StoryEngineTests {
         #expect(outcome.pendingNextDraft?.version == 1)
     }
 
+    @Test func newPageOntoAnEmptyPageFillsThatPageInstead() {
+        let draft = PageContent(index: 0, text: "")
+        let response = StoryTurnResponse(
+            action: .newPage,
+            page: StoryTurnPageResult(index: 1, text: "A fox finds a glowing leaf.", artPrompt: "a fox and a leaf", breakSuggested: false),
+            bible: .empty, parentNote: nil, timings: timings()
+        )
+
+        let outcome = StoryEngine.apply(response, to: book(), currentDraft: draft)
+
+        #expect(outcome.currentDraft.index == 0)
+        #expect(outcome.currentDraft.id == draft.id)
+        #expect(outcome.currentDraft.text == "A fox finds a glowing leaf.")
+        #expect(outcome.currentDraft.artPrompt == "a fox and a leaf")
+        #expect(outcome.pendingNextDraft == nil)
+    }
+
     @Test func reviseCurrentBumpsTheVersionAndDropsStaleMedia() {
         let draft = PageContent(
             index: 2, version: 1, text: "A dragon appears.", artPrompt: "a dragon",

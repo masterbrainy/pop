@@ -81,3 +81,18 @@ private extension Result where Failure == ServerError {
         return true
     }
 }
+
+@Suite struct WholeNumberDecodingTests {
+    @Test func timingsWithFractionsRoundToWholeMilliseconds() throws {
+        let json = Data(#"{"modelMs": 2298.6833770000003, "safetyMs": 12}"#.utf8)
+        let timings = try JSONDecoder().decode(StoryTurnTimings.self, from: json)
+        #expect(timings == StoryTurnTimings(modelMs: 2299, safetyMs: 12))
+    }
+
+    @Test func artResponseAcceptsAFractionalMs() throws {
+        let json = Data(#"{"path":"u/b/p.png","url":"https://x","width":1344,"height":768,"placeholder":false,"ms":5012.4}"#.utf8)
+        let art = try JSONDecoder().decode(ArtResponse.self, from: json)
+        #expect(art.ms == 5012)
+        #expect(art.width == 1344)
+    }
+}

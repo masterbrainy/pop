@@ -106,11 +106,11 @@ async function passesGate(
   const start = performance.now();
   if (output.action === "none") {
     // Nothing new to check; the model already decided not to add anything.
-    return { safe: true, safetyMs: performance.now() - start };
+    return { safe: true, safetyMs: Math.round(performance.now() - start) };
   }
   const verdict = await runSafetyGate([output.pageText, output.artPrompt], readingLevel, safety);
   const wordLimitOk = withinWordLimit(output.pageText, readingLevel);
-  return { safe: verdict.safe && wordLimitOk, safetyMs: performance.now() - start };
+  return { safe: verdict.safe && wordLimitOk, safetyMs: Math.round(performance.now() - start) };
 }
 
 export async function runStoryTurn(

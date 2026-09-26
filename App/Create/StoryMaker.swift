@@ -28,6 +28,7 @@ final class StoryMaker {
     @ObservationIgnored private var speechTask: Task<Void, Never>?
     @ObservationIgnored private var turnTask: Task<Void, Never>?
     @ObservationIgnored private var noteTask: Task<Void, Never>?
+    @ObservationIgnored private var scriptLog: FileLog?
 
     init(reader: BookReader, kid: KidProfile, settings: ParentSettings, services: AppServices = .shared) {
         self.reader = reader
@@ -46,8 +47,12 @@ final class StoryMaker {
             note("Pop! is offline, so new pages can't be made right now. Saved books still work.")
             return
         }
-        await live.warmUp(server: server)
-        pageChanged(to: reader.currentPage)
+        // Warm Orbis alongside, so the parent can start telling the story straight away.
+        Task { [weak self] in
+            await self?.live.warmUp(server: server)
+            guard let self else { return }
+            self.pageChanged(to: self.reader.currentPage)
+        }
         await playScriptedTurns()
     }
 
@@ -55,6 +60,7 @@ final class StoryMaker {
     private func playScriptedTurns() async {
         guard !LaunchOptions.storyTurns.isEmpty else { return }
         let log = FileLog(name: "story")
+        scriptLog = log
         let started = Date()
         for turn in LaunchOptions.storyTurns {
             switch turn.lowercased() {
@@ -180,7 +186,9 @@ final class StoryMaker {
                 if page.id == reader.currentPage?.id { animate(page) }
             }
         case let .failed(message):
-            note(message)
+            let lines = message.split(separator: "\n", maxSplits: 1).map(String.init)
+            if lines.count > 1 { scriptLog?.append("failure detail: \(lines[1])") }
+            note(lines.first ?? message)
         }
     }
 
@@ -219,6 +227,8 @@ final class StoryMaker {
     }
 
     private func note(_ message: String) {
+        scriptLog?.append("note: \(message)")
+        AppLog.scene.info("parent note: \(message, privacy: .public)")
         parentNote = message
         noteTask?.cancel()
         noteTask = Task { [weak self] in

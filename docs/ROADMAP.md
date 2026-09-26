@@ -1,6 +1,6 @@
 # Pop! — Execution Roadmap
 
-*Status: DRAFT v2 · 2026-09-25 · P-01 applied (parents drive creation; saved books replay exactly) · Implements: [PRD.md](PRD.md)*
+*Status: DRAFT v3 · 2026-09-26 · P-01 (parents drive creation; saved books replay exactly; lessons optional) · P-02 superseded (everything is free) · Implements: [PRD.md](PRD.md)*
 
 **Planning assumptions.** Two engineers (Brian plus a teammate) building with Claude Code. Estimates are in **focused hours** and include tests. **There's no deadline (D8, resolved), so we build the full scope in phase order.** The cut lines in §7 are kept only as a fallback. Everything is built and demoed **only on the iPhone Duo simulator in Xcode 27.1 beta**.
 
@@ -48,7 +48,7 @@
 | `HingeSource` | Emits posture updates `(status, angle)`. Three versions: Duo (`onHingeChange`), a debug slider, and none (swipe) | — |
 | `PostureMachine` | Pure function from a stream of angles to effects: curl progress, turn committed or cancelled, pop depth, closed | `HingeSource` values |
 | `PagePipeline` | Per page: input → text → art → layers → animation prompt. Prepares the next page early; cancels work when a direction changes the page | StoryEngine, Art, Moderation |
-| `StoryEngine` | One LLM call per turn. Input: the story brief (interests, optional lesson, optional real moment), the bible, and the parent's or kid's words (spoken or typed) or a "You continue" tap. Structured output: `append / new_page / revise_current`, text, art prompt, bible and direction updates, parent question, fact card, word of the story | `story-turn` function |
+| `StoryEngine` | One LLM call per turn. Input: the story brief (interests, optional real moment, optional "teach something" note), the bible, and the parent's or kid's words (spoken or typed) or a "You continue" tap. Structured output: `append / new_page / revise_current`, text, art prompt, bible and direction updates, parent question | `story-turn` function |
 | `Art` | Gemini page illustration (16:9, important content kept central), background plate, character cutouts, cover | `art` function |
 | `MotionPromptBuilder` | Builds the Orbis prompt for **one page only** from a fixed template (below) | `motion-prompt` function |
 | `LiveScene` | Protocol: `prepare(image:prompt:)`, `start()`, `stop()`, event stream. Implementations: `ReactorWebScene` (also records each page's clip), `StillPanScene` (fallback) and `ClipReplayScene` (plays a saved page's recorded clip) | Reactor JS SDK |
@@ -129,19 +129,17 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 **Exit:** a 5-page mock book turns by folding in the Duo simulator, and the `PostureMachine` tests pass.
 
-### Phase 2: Live story pipeline, parent-driven (≈ 23 h · B) · must-have: live generation
+### Phase 2: Live story pipeline, parent-driven (≈ 20 h · B) · must-have: live generation
 
 - Speech input (OpenAI Realtime; Apple speech as fallback), typed input, and the parent's/kid's turn toggle (the parent is the default speaker).
-- Kid profile (first name, reading level, interests) and the per-book story brief (interests, optional lesson, optional real moment).
-- `StoryEngine` with a strict response schema, reading-level limits, page breaks, parent directions (add or change, carried into later pages), "You continue", and a revise-current action.
-- Lessons woven in: start with 4–6 curated lesson packs (for example sharing, brushing teeth, counting, space), plus a fact-check call for anything else.
-- `StoryBible` and character registry (fixed description plus reference image).
+- Kid profile (first name, reading level, interests) and the per-book story brief (interests, optional real moment, and an optional free-text "Anything you'd like this story to teach?" that simply goes into the prompt).
+- `StoryEngine` with a strict response schema, reading-level limits, page breaks, parent directions (add or change, carried into later pages), "You continue", and a revise-current action.- `StoryBible` and character registry (fixed description plus reference image).
 - `Art` (Gemini): locked art style, character references, 16:9 with important content central.
 - Moderation gate on text, prompts and images; safe fallback lines.
 - `PagePipeline`: prepares the next page early, cancels work on revision, versions each page.
 - Persistence in Supabase (rows plus Storage); timing spans for every stage.
 
-**Exit:** a parent makes a 5-page lesson book in the Duo simulator, by voice and by typing, using at least one direction and one "You continue". Pages fill with text and then art, and a latency table is recorded.
+**Exit:** a parent makes a 5-page book from a brief in the Duo simulator, by voice and by typing, using at least one direction and one "You continue". Pages fill with text and then art, and a latency table is recorded.
 
 ### Phase 3: Living page, Orbis per page (≈ 14 h · A 7, B 7)
 
@@ -171,13 +169,13 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 **Exit:** a saved 5-page book shows the identical text, pictures and clips with Reactor switched off and the network disconnected.
 
-> **═══ MVP / demo line: all must-haves done, ≈ 78 h (about 39 h per engineer) ═══**
+> **═══ MVP / demo line: all must-haves done, ≈ 75 h (about 38 h per engineer) ═══**
 
-### Phase 6: Lesson extras and parent controls (≈ 9 h)
-Word of the story and the 3 remember-when questions. Real-moment tone (calm-tone presets and safety rules). Parent settings and parental gate. PDF export.
+### Phase 6: Parent controls and sharing (≈ 7 h)
+Real-moment tone (calm-tone presets and safety rules). Parent settings and parental gate. PDF export.
 
-### Phase 7: Business and operations (≈ 5 h)
-RevenueCat paywall (3 free books; StoreKit test configuration for the simulator). Sentry with personal data scrubbed. Privacy check that no audio is ever saved.
+### Phase 7: Privacy check (≈ 1 h)
+Confirm no audio is ever saved and that only the first name and interests are stored. Timing stays in local logs and the debug overlay; there's no third-party crash or analytics service.
 
 ### Phase 8: Cut-list features, in order of priority (≈ 18 h)
 1. Read-along: `AVSpeechSynthesizer` with word highlighting · 4 h
@@ -188,7 +186,7 @@ RevenueCat paywall (3 free books; StoreKit test configuration for the simulator)
 ### Phase 9: Demo hardening (≈ 8 h · start at least 2 days before the demo)
 Golden-path script and book; a saved golden book (exact replay, stored on the device) as the fallback if the network fails; failure drills (no network, Reactor down, moderation blocks something, speech fails); performance pass; 5 rehearsals in a row.
 
-**Total ≈ 118 h.** *(v1 said 119 h, but its phases summed to 109 h. P-01 adds about 9 h net.)*
+**Total ≈ 109 h.** *(v2 was 118 h. The 2026-09-26 decisions removed lesson packs and fact-checking (3 h), lesson extras (2 h), and the paywall and crash-reporting work (4 h).)*
 
 ## 6. Critical path
 
@@ -202,21 +200,21 @@ The Orbis probe (0.3) is the riskiest unknown. Start it first.
 
 | If we have… | Build | Skip |
 |---|---|---|
-| **About 2 days (≈ 40 h)** | Phase 0 trimmed; Phase 1 (curl, slider allowed); Phase 2 with the brief, one lesson pack, directions and "You continue"; Phase 3 without drift guard or tripwire (clip recording kept); Phase 4 with two layers; Phase 5 save and exact replay with a basic cover; Phase 9 golden path | Everything else |
-| **1 week** | The MVP line + Phase 9 | Phase 6 extras, paywall, cut-list features |
+| **About 2 days (≈ 40 h)** | Phase 0 trimmed; Phase 1 (curl, slider allowed); Phase 2 with the brief, directions and "You continue"; Phase 3 without drift guard or tripwire (clip recording kept); Phase 4 with two layers; Phase 5 save and exact replay with a basic cover; Phase 9 golden path | Everything else |
+| **1 week** | The MVP line + Phase 9 | Phases 6–7, cut-list features |
 | **2+ weeks** | Everything except talking characters | Talking characters |
 
 ## 8. Testing and verification
 
 - **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, directions and "You continue" (a direction carries into later pages), reading-level limits, `PagePipeline` cancellation, the moderation gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
 - **Server function tests:** each function tested in Deno against recorded fixtures.
-- **Eval set:** 30 sessions (parent narration and directions, "You continue", kid interruptions, mind-changing, scary requests), checked for safety, reading level and coherence, plus 10 lesson briefs checked for accuracy. Run before every demo.
+- **Eval set:** 30 sessions (parent narration and directions, "You continue", kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something, checked for safety, reading level and coherence. Run before every demo.
 - **UI:** XCUITest on a standard iPhone simulator for navigation and the fallback reader. A Duo posture checklist run through Claude's simulator tool, with a screenshot per posture.
 - **Latency:** a timing span per stage, with a p50 table in the debug overlay.
 
 ## 9. Demo run-book
 
-- **T-60 min:** launch and open a New Book to warm Orbis. The overlay should show 1 open session, status ready and the credit meter running.
+- **T-60 min:** launch and open a New Book to warm Orbis. The overlay should show 1 open session, status ready and the credit meter running, with enough Reactor credit left for the demo (PRD §9 credit budget).
 - **T-15 min:** a rehearsal pass; headphones or muted speakers so the animation's sound doesn't reach the mic; a wired connection or a hotspot.
 - **Live:** follow the script. If Reactor fails, the still fallback takes over automatically. If the network fails, show the saved golden book.
 - **After:** KILL, then clean up stray sessions; confirm 0 open sessions on the account.
@@ -229,7 +227,7 @@ The Orbis probe (0.3) is the riskiest unknown. Start it first.
 | D2 | What the latency target means | G0 |
 | D3 | Orbis Stable vs Dynamic | G0 |
 | D4 | Record per-page clips | ✅ Resolved 2026-09-25 by P-01: required (saved books replay exactly). How, and the clip length: G0 |
-| D5 | Pro pricing | After Phase 5 (real cost per book) |
-| D6 | Kids Category listing | Before any public release |
 | D7 | Gemini covers images only; OpenAI keeps speech, story and narration | Assumed; confirm now |
 | D8 | Demo date → cut line | ✅ Resolved 2026-09-25: no deadline; build the full scope, including talking characters |
+
+*D5 and D6 were removed on 2026-09-26 (P-02): everything is free.*

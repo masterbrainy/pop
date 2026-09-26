@@ -91,7 +91,7 @@ Deno.test("planNewPath marks isEnding true only when index is the last beat of t
 
 Deno.test("runPathTurn plans the path and writes page index on the first safe attempt", async () => {
   const deps = pathDepsFor([pathOutput()], [true]);
-  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", null, deps);
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
   assertEquals(result.action, "page");
   assertEquals(result.page.index, 0);
   assertEquals(result.bible.path, ["Maya finds a red kite in the meadow.", "Maya falls asleep holding the kite. The end."]);
@@ -104,7 +104,7 @@ Deno.test("runPathTurn keeps beats before index when re-planning from a directio
     [pathOutput({ path: ["Maya wakes the sleepy dragon.", "The dragon and Maya nap together. The end."] })],
     [true],
   );
-  const result = await runPathTurn("early_reader", 1, bible, "Maya", { text: "wake the dragon up", speaker: "parent" }, deps);
+  const result = await runPathTurn("early_reader", 1, bible, "Maya", "en", { text: "wake the dragon up", speaker: "parent" }, deps);
   assertEquals(result.bible.path, [
     "Maya finds a red kite in the meadow.",
     "Maya wakes the sleepy dragon.",
@@ -114,13 +114,13 @@ Deno.test("runPathTurn keeps beats before index when re-planning from a directio
 
 Deno.test("runPathTurn reports isEnding for the path's last beat", async () => {
   const deps = pathDepsFor([pathOutput({ path: ["Maya falls asleep. The end."] })], [true]);
-  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", null, deps);
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
   assertEquals(result.page.isEnding, true);
 });
 
 Deno.test("runPathTurn reports isEnding false for a beat that isn't last", async () => {
   const deps = pathDepsFor([pathOutput({ path: ["Beat one", "Beat two, the end"] })], [true]);
-  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", null, deps);
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
   assertEquals(result.page.isEnding, false);
 });
 
@@ -129,7 +129,7 @@ Deno.test("runPathTurn rewrites once when the first attempt fails the gate, then
     [pathOutput({ pageText: "Something scary happens." }), pathOutput({ pageText: "Something gentle happens." })],
     [false, true],
   );
-  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", null, deps);
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
   assertEquals(result.page.text, "Something gentle happens.");
 });
 
@@ -138,7 +138,7 @@ Deno.test("runPathTurn falls back to none with a gentle parentNote after two fai
     [pathOutput({ pageText: "Bad one" }), pathOutput({ pageText: "Still bad" })],
     [false, false],
   );
-  const result = await runPathTurn("listener", 0, emptyBible, "Maya", null, deps);
+  const result = await runPathTurn("listener", 0, emptyBible, "Maya", "en", null, deps);
   assertEquals(result.action, "none");
   assertEquals(result.bible, emptyBible);
   assertEquals(result.parentNote !== null, true);
@@ -156,7 +156,7 @@ Deno.test("runPathTurn blocks a flagged direction from a kid before any model ca
     inputSafety: { moderateText: async () => ({ flagged: true, categories: ["violence"] }), checkRealHarm: async () => ({ safe: true, reason: "" }) },
   };
   const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
-  const result = await runPathTurn("early_reader", 1, bible, "Maya", { text: "unsafe direction", speaker: "kid" }, deps);
+  const result = await runPathTurn("early_reader", 1, bible, "Maya", "en", { text: "unsafe direction", speaker: "kid" }, deps);
   assertEquals(result.action, "none");
   assertEquals(result.bible, bible);
   assertEquals(modelCalled, false);
@@ -171,14 +171,27 @@ Deno.test("runPathTurn blocks a flagged direction from a parent, returning none 
     inputSafety: { moderateText: async () => ({ flagged: true, categories: ["violence"] }), checkRealHarm: async () => ({ safe: true, reason: "" }) },
   };
   const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
-  const result = await runPathTurn("early_reader", 1, bible, "Maya", { text: "unsafe direction", speaker: "parent" }, deps);
+  const result = await runPathTurn("early_reader", 1, bible, "Maya", "en", { text: "unsafe direction", speaker: "parent" }, deps);
   assertEquals(result.refusal, "unsafe");
 });
 
 Deno.test("runPathTurn returns refusal null on a successful page", async () => {
   const deps = pathDepsFor([pathOutput()], [true]);
-  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", null, deps);
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
   assertEquals(result.refusal, null);
+});
+
+Deno.test("runPathTurn fails the output gate on a foreign-script leak in an 'en' story, then accepts a clean rewrite", async () => {
+  const deps = pathDepsFor(
+    [
+      pathOutput({ pageText: "A friendly fox is рядом in the meadow." }),
+      pathOutput({ pageText: "A friendly fox is nearby in the meadow." }),
+    ],
+    [true, true],
+  );
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
+  assertEquals(result.action, "page");
+  assertEquals(result.page.text, "A friendly fox is nearby in the meadow.");
 });
 
 // --- runPageTurn ---
@@ -186,7 +199,7 @@ Deno.test("runPathTurn returns refusal null on a successful page", async () => {
 Deno.test("runPageTurn writes page index from the existing beat, with no re-planning", async () => {
   const bible: StoryBible = { ...emptyBible, path: ["Maya finds a red kite in the meadow.", "Maya falls asleep. The end."] };
   const deps = pageDepsFor([pageOutput()], [true]);
-  const result = await runPageTurn("early_reader", 0, bible, deps);
+  const result = await runPageTurn("early_reader", 0, bible, "en", deps);
   assertEquals(result.action, "page");
   assertEquals(result.page.index, 0);
   assertEquals(result.page.isEnding, false);
@@ -197,7 +210,7 @@ Deno.test("runPageTurn writes page index from the existing beat, with no re-plan
 Deno.test("runPageTurn reports isEnding true for the path's last index", async () => {
   const bible: StoryBible = { ...emptyBible, path: ["Beat 0", "Beat 1, the end"] };
   const deps = pageDepsFor([pageOutput()], [true]);
-  const result = await runPageTurn("early_reader", 1, bible, deps);
+  const result = await runPageTurn("early_reader", 1, bible, "en", deps);
   assertEquals(result.page.isEnding, true);
 });
 
@@ -211,7 +224,7 @@ Deno.test("runPageTurn past the path's end returns none with no model call", asy
     },
     safety: { moderateText: async () => ({ flagged: false, categories: [] }), checkRubric: async () => ({ safe: true, reason: "" }) },
   };
-  const result = await runPageTurn("early_reader", 1, bible, deps);
+  const result = await runPageTurn("early_reader", 1, bible, "en", deps);
   assertEquals(result.action, "none");
   assertEquals(result.parentNote, "The story has reached its ending.");
   assertEquals(modelCalled, false);
@@ -225,14 +238,14 @@ Deno.test("runPageTurn rewrites once when the first attempt fails the gate", asy
     [pageOutput({ pageText: "Something scary." }), pageOutput({ pageText: "Something gentle." })],
     [false, true],
   );
-  const result = await runPageTurn("early_reader", 0, bible, deps);
+  const result = await runPageTurn("early_reader", 0, bible, "en", deps);
   assertEquals(result.page.text, "Something gentle.");
 });
 
 Deno.test("runPageTurn falls back to none after two failed attempts", async () => {
   const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
   const deps = pageDepsFor([pageOutput({ pageText: "Bad" }), pageOutput({ pageText: "Still bad" })], [false, false]);
-  const result = await runPageTurn("listener", 0, bible, deps);
+  const result = await runPageTurn("listener", 0, bible, "en", deps);
   assertEquals(result.action, "none");
   assertEquals(result.parentNote !== null, true);
   assertEquals(result.refusal, "unsafe");
@@ -245,7 +258,7 @@ Deno.test("runPageTurn drops a page that retells an earlier shown page", async (
     [pageOutput({ pageText: "Maya the little blue dragon finds a shiny red kite in the meadow. She smiles and lifts it high." })],
     [true],
   );
-  const result = await runPageTurn("reader", 1, bible, deps, earlier);
+  const result = await runPageTurn("reader", 1, bible, "en", deps, earlier);
   assertEquals(result.page.text, "She smiles and lifts it high.");
 });
 
@@ -253,6 +266,41 @@ Deno.test("runPageTurn trims an overlong page to the reading level's word limit 
   const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
   const tooLong = Array(20).fill("word").join(" "); // 20 words > listener's 15-word cap
   const deps = pageDepsFor([pageOutput({ pageText: tooLong })], [true]);
-  const result = await runPageTurn("listener", 0, bible, deps);
+  const result = await runPageTurn("listener", 0, bible, "en", deps);
   assertEquals(result.page.text.split(" ").length, 15);
+});
+
+Deno.test("runPageTurn fails the output gate on a foreign-script leak in an 'en' story, then accepts a clean rewrite", async () => {
+  const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
+  const deps = pageDepsFor(
+    [
+      pageOutput({ pageText: "A friendly fox is рядом, and both look surprised." }),
+      pageOutput({ pageText: "A friendly fox is nearby, and both look surprised." }),
+    ],
+    [true, true], // the rubric itself passes both times; the language check is what fails the first
+  );
+  const result = await runPageTurn("reader", 0, bible, "en", deps);
+  assertEquals(result.action, "page");
+  assertEquals(result.page.text, "A friendly fox is nearby, and both look surprised.");
+});
+
+Deno.test("runPageTurn falls back to none with refusal 'unsafe' when the rewrite still leaks a foreign script", async () => {
+  const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
+  const deps = pageDepsFor(
+    [
+      pageOutput({ pageText: "A friendly fox is рядом." }),
+      pageOutput({ pageText: "A friendly fox is снова рядом." }),
+    ],
+    [true, true],
+  );
+  const result = await runPageTurn("reader", 0, bible, "en", deps);
+  assertEquals(result.action, "none");
+  assertEquals(result.refusal, "unsafe");
+});
+
+Deno.test("runPageTurn never checks language for a non-'en' brief", async () => {
+  const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
+  const deps = pageDepsFor([pageOutput({ pageText: "Un renard sympathique est рядом." })], [true]);
+  const result = await runPageTurn("reader", 0, bible, "fr", deps);
+  assertEquals(result.action, "page");
 });

@@ -67,6 +67,17 @@ Deno.test("buildStoryTurnSystemPrompt never omits the personal-details or safety
   assert(prompt.includes("Kid-safety rubric"));
 });
 
+Deno.test("buildStoryTurnSystemPrompt tells the model to write only in the brief's language", () => {
+  const english = buildStoryTurnSystemPrompt(baseInput());
+  assert(english.includes("only in English"));
+  assert(english.includes("Never mix in a word, phrase or script from any other language"));
+
+  const spanish = buildStoryTurnSystemPrompt(
+    baseInput({ brief: { interests: [], realMoment: null, teach: null, language: "es" } }),
+  );
+  assert(spanish.includes("only in Spanish"));
+});
+
 Deno.test("buildStoryTurnSystemPrompt echoes this turn's input kind, speaker and text", () => {
   const prompt = buildStoryTurnSystemPrompt(
     baseInput({ input: { kind: "continue", speaker: "kid", text: "and then a rainbow" } }),
@@ -166,6 +177,12 @@ Deno.test("buildStoryPathSystemPrompt never omits the personal-details or safety
   assert(prompt.includes("Kid-safety rubric"));
 });
 
+Deno.test("buildStoryPathSystemPrompt tells the model to write only in the brief's language", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput());
+  assert(prompt.includes("only in English"));
+  assert(prompt.includes("Never mix in a word, phrase or script from any other language"));
+});
+
 function basePageInput(overrides: Partial<StoryPagePromptInput> = {}): StoryPagePromptInput {
   return {
     kid: { firstName: "Maya", readingLevel: "early_reader", interests: ["dinosaurs"] },
@@ -188,4 +205,10 @@ Deno.test("buildStoryPageSystemPrompt never omits the personal-details or safety
   const prompt = buildStoryPageSystemPrompt(basePageInput());
   assert(prompt.includes("surnames"));
   assert(prompt.includes("Kid-safety rubric"));
+});
+
+Deno.test("buildStoryPageSystemPrompt tells the model to write only in the brief's language", () => {
+  const prompt = buildStoryPageSystemPrompt(basePageInput());
+  assert(prompt.includes("only in English"));
+  assert(prompt.includes("Never mix in a word, phrase or script from any other language"));
 });

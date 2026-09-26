@@ -18,6 +18,34 @@ export interface StoryTurnPromptInput {
   rewriteReason?: string | null;
 }
 
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: "English",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  it: "Italian",
+  pt: "Portuguese",
+  nl: "Dutch",
+  sv: "Swedish",
+  zh: "Chinese",
+  ja: "Japanese",
+  ko: "Korean",
+  ar: "Arabic",
+  hi: "Hindi",
+  ru: "Russian",
+};
+
+/**
+ * A hard language rule for every mode's prompt: observed live, the model can
+ * drop a word from another script into the story even when the brief asks
+ * for plain English. Paired with the output gate's hasForeignScriptText
+ * check (language_check.ts), which catches it if the prompt alone doesn't.
+ */
+function languageInstruction(languageCode: string): string {
+  const name = LANGUAGE_NAMES[languageCode.trim().toLowerCase()] ?? languageCode;
+  return `Write every word of the story text, art prompt and reading question only in ${name}. Never mix in a word, phrase or script from any other language.`;
+}
+
 function describeBible(bible: StoryBible): string[] {
   const characters = bible.characters.length > 0
     ? bible.characters.map((c) => `${c.name} — ${c.description}`).join("; ")
@@ -52,6 +80,7 @@ export function buildStoryTurnSystemPrompt(input: StoryTurnPromptInput): string 
   const lines: string[] = [
     `You are Pop!'s story engine, writing a live picture book with a parent for their child ${input.kid.firstName}.`,
     describeReadingLevelForPrompt(level),
+    languageInstruction(input.brief.language),
   ];
 
   if (interests.length > 0) {
@@ -130,6 +159,7 @@ export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string 
   const lines: string[] = [
     `You are Pop!'s story engine, planning a live picture book's story path for a parent and their child ${input.kid.firstName}.`,
     describeReadingLevelForPrompt(level),
+    languageInstruction(input.brief.language),
   ];
 
   if (interests.length > 0) {
@@ -208,6 +238,7 @@ export function buildStoryPageSystemPrompt(input: StoryPagePromptInput): string 
   const lines: string[] = [
     `You are Pop!'s story engine, writing one page of a live picture book for ${input.kid.firstName}.`,
     describeReadingLevelForPrompt(level),
+    languageInstruction(input.brief.language),
     "Never use surnames, home addresses, school names, or phone numbers anywhere in the story text.",
     KID_SAFETY_RUBRIC,
     `One locked illustration style is used for every picture: ${ART_STYLE}. Write an art prompt that fits this style and depicts only what is safe to show this child.`,

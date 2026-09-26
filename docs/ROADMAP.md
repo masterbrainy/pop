@@ -12,7 +12,7 @@
 |---|---|
 | Xcode 27.1 beta (27A9269) installed and selected; license accepted; first-launch components installed | ✅ |
 | Old Xcode 27.0 and every iOS 27.0 simulator image removed | ✅ |
-| iOS 27.1 simulator; **iPhone Duo** device boots | ✅ |
+| iOS 27.1 simulator; the **iPhone Duo** boots to its home screen with DeviceHub.app open (REVIEW R-21) | ✅ |
 | Duo APIs checked in the SDK (see §3) | ✅ |
 | Supabase CLI logged in and linked to the project | ✅ |
 | API keys (Reactor, Gemini, OpenAI): each returns HTTP 200, stored in Supabase secrets and the git-ignored `supabase/functions/.env` | ✅ |
@@ -31,7 +31,7 @@
 │  HingeSource ──▶  SpreadView (Arrangement)   SpeechInput ─▶ StoryEngine LiveScene    │
 │  PostureMachine   TextPage | ArtPage ◀────── PagePipeline ─▶ Art     ◀─ (WKWebView + │
 │  (pure, tested)   PageCurl · PopUp · Cover   StoryBible · Moderation    Reactor JS)  │
-│                   Bookshelf · SingleReader   Narration                 StillPan fb   │
+│                   Bookshelf                  Narration                 StillPan fb   │
 └───────────────┬────────────────────────────────────┬────────────────────┬───────────┘
                 │ Supabase (auth, Postgres, Storage)  │ Edge Functions     │ WebRTC
                 ▼                                     ▼ (keys live here)   ▼
@@ -64,7 +64,7 @@
 **Server access model (built in 0.6).** Anyone who reaches the functions' address must not be able to spend the demo's Reactor credit or kill its session.
 - The app signs in anonymously with Supabase Auth. Every server function requires that sign-in and has a per-user rate limit.
 - `reactor-token` mints Reactor tokens that last 1 h and allow 2 sessions (one live plus one reconnect); the app asks for a fresh one when a token expires or runs out. The app reports each Orbis session it opens, and the same function cleans up that user's own leftover sessions (at launch, and before minting).
-- `reactor-sessions` (list, and kill every Pop! session) is admin-only: it needs a server-side admin secret and the app never calls it. The run-book uses it after a demo. Until Brian confirms the Reactor account is his alone (REVIEW R-23), it kills only sessions Pop! reported.
+- `reactor-sessions` (list, and kill every session on the account) is admin-only: it needs a server-side admin secret and the app never calls it. The run-book uses it after a demo. The Reactor account is Brian's own (REVIEW R-23), so killing everything on it is safe.
 - API keys never leave the server. 0.3b checks whether a running session survives its token expiring; if it doesn't, G0 sets the token lifetime and the run-book's warm-up time together.
 
 ## 3. Platform facts
@@ -95,6 +95,7 @@ These were checked by reading the SDK's `SwiftUICore` interface file on 2026-09-
 
 ### Other facts that affect the design
 
+- **Xcode 27.1 has no Simulator.app.** `DeviceHub.app` (in `Xcode-beta.app/Contents/Applications`, bundle `com.apple.dt.Devices`) shows the simulators. Xcode's foldable-device plugin (`CoreDevicePopDeviceKitExtension`) adds a hinge slider to the Duo's window there. By default it sweeps through the fold instead of jumping, and a "Disable Hinge Interpolation" setting sends a single angle instead. (Found in the plugin's code; 0.1 confirms it on screen.) A Duo booted without DeviceHub open stays on the Apple logo (REVIEW R-21).
 - Apple's Vision background removal (`VNGenerateForegroundInstanceMaskRequest`) reportedly **doesn't run in the Simulator** (Apple Developer Forums). So pop-up layers are generated directly: a background plate plus character cutouts on a flat colour that Core Image keys out.
 - OpenAI text-to-speech **returns no word timings**, so read-along uses `AVSpeechSynthesizer`'s `willSpeakRangeOfSpeechString` callback. OpenAI's `tts` is used only for talking characters and video export.
 - OpenAI Realtime supports transcription-only sessions, with **short-lived client secrets minted by our server**, so the app never holds the key.
@@ -119,7 +120,7 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 | Task | Track | Est | Answers |
 |---|---|---|---|
-| 0.1 Hinge probe screen: show `status` and `angle` live while using Simulator.app's fold controls (`simctl` has no hinge command) | A | 2 h | Is the angle continuous, and how often does it update? What is the angle when closed and when fully open (the maximum isn't documented)? Does `onHingeChange` fire with the initial state? Does the app's scene move to the outer screen on `.closed`? |
+| 0.1 Hinge probe screen: show `status` and `angle` live while moving DeviceHub's hinge slider (`simctl` has no hinge command; see §3) | A | 2 h | Is the angle continuous, and how often does it update? What is the angle when closed and when fully open (the maximum isn't documented)? Does `onHingeChange` fire with the initial state? Does the app's scene move to the outer screen on `.closed`? |
 | 0.2 Spread probe: `ArrangementView` split, and the reserved regions drawn as overlays | A | 1 h | The real page size (expected about 475×669 pt, portrait), and where the fold and camera are |
 | 0.3a Orbis go/no-go: `WKWebView` + bundled JS SDK + a short-lived token minted on the Mac (the key never enters the app) → one picture animating in the Duo simulator | A | 3 h | Does WebRTC video play in a `WKWebView` in the simulator? **If not (plan B):** try a native WebRTC client (Dynamic documents raw WebRTC). If that fails too, pages fall back to the still with a slow pan, which drops a must-have, so it goes to Brian as a pivot |
 | 0.3b Orbis comparisons and clip recording | A | 5 h | Warm-up time; time from `reset` to first frame; drift after 30 and 60 s; Stable vs Dynamic on 3 picture-book images; the four page-shape options (§3). **Clips:** `MediaRecorder` on the received stream, bytes moved to native in chunks or through a `WKURLSchemeHandler`, recorded at native resolution, MB per clip; whether ReplayKit works in the simulator as the native fallback (`WKWebView.takeSnapshot` is too slow for video). **Billing:** does it start at connect or at generation, how long can a Stable session live, what does idle time cost (also ask Reactor), and does a running session survive its token expiring? |
@@ -221,7 +222,7 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 - **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, directions and "You continue" (a direction carries into later pages), reading-level limits, `PagePipeline` cancellation, the kid-safety gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
 - **Server function tests:** each function tested in Deno against recorded fixtures.
 - **Eval set:** 30 sessions (parent narration and directions, "You continue", kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something. It covers every kid-safety category at each reading level (PRD §8.6), personal details, and 40 labelled utterances for telling narration from directions (S3). Checked for safety, reading level and coherence; passing means 0 misses and false blocks on ≤ 5% of safe pages. Run before every demo.
-- **UI:** XCUITest on the iPhone Duo simulator for navigation. Duo postures are tested automatically through a scripted `HingeSource` and the debug slider, because `simctl` can't move the hinge; the real hinge is checked by hand with Simulator.app's fold controls. Screenshots of both screens: `xcrun simctl io booted screenshot --display=1` (outer) and `--display=3` (inner).
+- **UI:** XCUITest on the iPhone Duo simulator for navigation. Duo postures are tested automatically through a scripted `HingeSource` and the debug slider, because `simctl` can't move the hinge; the real hinge is checked by hand with DeviceHub's hinge slider. Screenshots of both screens: `xcrun simctl io booted screenshot --display=1` (outer) and `--display=3` (inner).
 - **Latency:** a timing span per stage, with a p50 table in the debug overlay.
 
 ## 9. Demo run-book

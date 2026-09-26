@@ -4,11 +4,10 @@
 
 ## How this works
 
-1. Brian drops a pivot or idea in the Pivots & Ideas session, in any form.
+1. Brian drops a pivot or idea in the Pivots & Ideas session, in any form. Review & QA may also send findings that only Brian can settle; each is logged here as a proposed pivot that cites its `REVIEW.md` ID.
 2. It's logged here as **proposed**, with an honest take: what it changes, what it costs, what it risks, and whether we'd do it.
 3. The status changes only when Brian decides: **accepted**, **parked** (good, not now) or **rejected**.
-4. When a pivot is **accepted**, this session updates the PRD and/or roadmap to match, pushes to `main`, and tells the builder what changed (with the commit hash).
-5. Ideas that are really pitch angles also go to the Pitch & Tech Log session.
+4. When a pivot is **accepted**, this session updates the PRD and/or roadmap to match, pushes to `main`, and tells the builder and Review & QA the pivot ID and the commit hash.
 
 **Red lines.** Ideas get pushback if they weaken a must-have (live generation, page curl, pop-up) or kid safety (PRD §8.6 K1, §12).
 
@@ -39,7 +38,7 @@
 - **Refinement (2026-09-26, Brian, relayed by the builder and recorded in CLAUDE.md "What this is"):** parents drive creation, and that stays. Lessons are **optional**: a use case of the story brief, not a subsystem. Removed: curated lesson packs, lesson fact-checking (K2), and lesson extras (S9, S10, word of the story, remember-when questions). The brief keeps an optional free-text "Anything you'd like this story to teach?". Normal kid-safety moderation (K1) stays P0. New totals: MVP about 75 h, total about 109 h. Applied in PRD v3 and ROADMAP v3 (commit below, under P-02).
 
 ### P-02 · Pro as a monthly allowance of new books, not "unlimited" · 2026-09-25 · Status: rejected (superseded: everything is free)
-- **Idea (source: Pitch & Tech Log, in PITCH.md "Unit economics"; not Brian's words):** "A fair-use allowance may beat 'unlimited'. PRD K5 still says unlimited."
+- **Idea (source: the former Pitch & Tech Log session, relayed by the builder; not Brian's words):** "A fair-use allowance may beat 'unlimited'. PRD K5 still says unlimited."
 - **Why it comes up:** making a book costs about $8.73 of Orbis time (15 live minutes). A family making four books a month costs about $35 a month in animation alone, so an "unlimited" Pro can lose money on exactly the families who love it most. Since P-01, showing a saved book costs nothing; only making new books costs money.
 - **Changes:** PRD K5 ("Pro for unlimited" becomes "Pro includes N new books a month; showing saved books is always unlimited"), with N and the price set at D5 after measuring. Roadmap Phase 7: a monthly counter in the paywall (+0.5 h).
 - **Cost:** about 0.5 h of build, no money. Risk: "unlimited" is simpler to sell; an allowance needs a friendly limit screen for the parent (never shown to the child).
@@ -48,3 +47,13 @@
   - *Animate only the first N pages of each book.* This cuts cost, but it weakens the living-page must-have (PRD P3) on every other page. It works better as a free-tier limit than as the Pro plan.
 - **Recommendation:** Do it. It keeps the business honest without touching any must-have, and "unlimited rereads of every book you make" is still a strong line. Leave the numbers to D5.
 - **Decision:** 2026-09-26, Brian (relayed by the builder, recorded in CLAUDE.md "What this is"): **everything is free**. Pop! is a hackathon-style pitch and demo, not a release, so there's no Pro plan to shape. Removed from the PRD: the paywall (K5), pricing (D5), the Kids Category decision (D6), the post-demo metrics, purchase gates, and the legal-review item (the privacy-by-design facts stay). Crash reporting becomes local timing logs plus the debug overlay (K6). The cost-per-book risk becomes a demo Reactor credit budget. Removed from the roadmap: the business items in Phase 7, and D5/D6. Applied in `8e4453d` (PRD v3, ROADMAP v3).
+
+### P-03 · iPhone Duo only · 2026-09-26 · Status: accepted
+- **Idea (Brian's words):** "Everything is ONLY for iPhone Duo. Do not worry about building for other iPhone layouts."
+- **Changes (as applied):**
+  - PRD: H5 (the non-Duo single-page reader) is removed. The MVP's "non-Duo fallback" becomes "iPhone Duo only". Other iPhones are added to out of scope. The Save button no longer promises "any device".
+  - Roadmap: `HingeSource` keeps only the Duo version and the debug slider. The non-Duo reader is out of Phase 1 (10 h to 8 h). UI tests run on the Duo simulator.
+  - New totals: MVP about 73 h, total about 107 h.
+- **Cost:** saves about 2 h. No risk for the demo; the in-app hinge slider stays as the development fallback on the Duo.
+- **Recommendation:** Do it. It matches the simulator-only, Duo-only demo.
+- **Decision:** 2026-09-26, Brian decided directly in this session.

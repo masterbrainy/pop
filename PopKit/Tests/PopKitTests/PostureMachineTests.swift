@@ -129,16 +129,41 @@ struct PostureMachineTests {
         #expect(!run.state.needsTick)
     }
 
-    @Test func reopeningBeforeTheHoldJustCarriesOn() {
+    @Test func reopeningBeforeTheHoldTurnsThePageInsteadOfClosing() {
         var run = Run()
         run.feed(180, at: 0)
         run.feed(5, at: 1)
         run.clearEvents()
         run.feed(150, at: 1.6)
-        #expect(!run.events.contains(.closed))
+        #expect(run.events == [.turnCommitted])
         #expect(run.state.phase == .open(armed: false))
         run.feed(175, at: 2)
-        #expect(run.events == [.pageSettled])
+        #expect(run.events == [.turnCommitted, .pageSettled])
+    }
+
+    /// The simulator reports only end points: a slow fold arrives as 167°, closed, then flat.
+    @Test func aQuickCloseAndReopenFromFlatTurnsThePageOnce() {
+        var run = Run()
+        run.feed(180, at: 0)
+        run.clearEvents()
+        run.feed(167, at: 1)
+        run.feed(0, at: 2)
+        run.feed(180, at: 2.8)
+        #expect(run.events.filter { $0 == .turnCommitted }.count == 1)
+        #expect(run.events.last == .pageSettled)
+        #expect(!run.events.contains(.closed))
+    }
+
+    @Test func holdingClosedFinishesTheBookWithoutTurningAPage() {
+        var run = Run()
+        run.feed(180, at: 0)
+        run.clearEvents()
+        run.feed(0, at: 1)
+        run.feed(0, at: 2.2)
+        #expect(run.events == [.closed])
+        run.feed(180, at: 5)
+        #expect(!run.events.contains(.turnCommitted))
+        #expect(run.events.contains(.opened))
     }
 
     @Test func theOsClosedStatusCountsAsClosedAtAnyAngle() {

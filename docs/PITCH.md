@@ -277,6 +277,7 @@ New pitch angles go here. Status: **new** · **used** (moved into the pitch) · 
 | Date | Idea | Audience | Status |
 |---|---|---|---|
 | 2026-09-25 | **Parent-first framing: "a parent makes a lesson book in minutes."** | Both | **used**: P-01 accepted 2026-09-25; the whole pitch is re-framed. The "2 minutes" version needs a measured time first: TBD (Phase 2) |
+| 2026-09-25 | **Category framing: learning through the kid's own interests.** For VCs who bucket by category, Pop! is edtech where the lesson rides inside a story about what this child loves, authored by the parent (from Pivots & Ideas) | VC | used (§7 "Who pays, and why"); lead with it for edtech-focused investors |
 | 2026-09-25 | **"Made at lunch, ready for bedtime."** The made-ahead flow as a one-line hook | VC | used (§6, 2:10 beat) |
 | 2026-09-25 | **Cost as a feature:** clips are recorded once, so showing a book is instant, free and works offline | Both | used (§7 unit economics, §6 2:30 beat) |
 | 2026-09-25 | **"Unlimited rereads of every book you make."** The Pro line if Pro becomes a monthly allowance of new books, while showing saved books stays unlimited | VC | **depends on P-02** (proposed) |

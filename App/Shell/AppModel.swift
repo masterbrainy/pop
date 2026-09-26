@@ -17,25 +17,28 @@ final class AppModel {
     @ObservationIgnored private let root = URL.applicationSupportDirectory.appending(path: "books", directoryHint: .isDirectory)
 
     init() {
-        // The sample kid's placeholder interests would steer every new book towards foxes (IMP-24).
-        kid = (Self.loadValue(KidProfile.self, key: Self.kidKey) ?? SampleBooks.kid).droppingSampleInterests()
+        if let saved = Self.loadValue(KidProfile.self, key: Self.kidKey) {
+            kid = saved
+        } else {
+            // No built-in child: the parent gives the name on their first story. Saved now so
+            // the profile keeps one id across launches.
+            let unnamed = KidProfile(firstName: "", readingLevel: .earlyReader, interests: [])
+            Self.saveValue(unnamed, key: Self.kidKey)
+            kid = unnamed
+        }
         settings = Self.loadValue(ParentSettings.self, key: Self.settingsKey) ?? ParentSettings()
         store = try? FileBookStore(root: root)
     }
 
-    /// Loads saved books, newest first, with the sample book at the end of the shelf.
+    /// Loads saved books, newest first.
     func load() async {
-        guard let store else {
-            books = [SampleBooks.fox]
-            return
-        }
+        guard let store else { return }
         do {
             let shelf = try await store.loadShelf()
-            books = shelf.books.map(resolvingPaths) + [SampleBooks.fox]
+            books = shelf.books.map(resolvingPaths)
             loadError = shelf.unreadableCount > 0 ? "Some saved books couldn't be opened." : nil
         } catch {
             loadError = "Some saved books couldn't be opened."
-            books = [SampleBooks.fox]
         }
     }
 
@@ -45,7 +48,7 @@ final class AppModel {
 
     /// Saves a finished (or partly told) book and puts it on the shelf.
     func save(_ book: Book) async {
-        guard book.id != SampleBooks.fox.id, let store else { return }
+        guard let store else { return }
         do {
             let saved = resolvingPaths(try await store.save(book))
             books = [saved] + books.filter { $0.id != saved.id }
@@ -55,13 +58,19 @@ final class AppModel {
     }
 
     func delete(_ book: Book) async {
-        guard book.id != SampleBooks.fox.id else { return }
         do {
             try await store?.delete(book.id)
             books.removeAll { $0.id == book.id }
         } catch {
             loadError = "The book couldn't be deleted: \(error.localizedDescription)"
         }
+    }
+
+    /// Sets the child's first name, given on the parent's first story.
+    func setFirstName(_ name: String) {
+        guard name != kid.firstName else { return }
+        kid = KidProfile(id: kid.id, firstName: name, readingLevel: kid.readingLevel, interests: kid.interests)
+        Self.saveValue(kid, key: Self.kidKey)
     }
 
     func update(kid: KidProfile, settings: ParentSettings) {
@@ -84,7 +93,9 @@ final class AppModel {
                 PageLayers(platePath: absolute(layers.platePath) ?? layers.platePath,
                            cutouts: layers.cutouts.map { Cutout(characterId: $0.characterId, path: absolute($0.path) ?? $0.path) })
             }
-            return page.with(stillPath: absolute(page.stillPath)).with(layers: layers).with(clipPath: absolute(page.clipPath))
+            return PageContent(id: page.id, index: page.index, version: page.version, text: page.text, artPrompt: page.artPrompt,
+                               stillPath: absolute(page.stillPath), layers: layers, motion: page.motion, clipPath: absolute(page.clipPath),
+                               question: page.question)
         }
         return Book(id: book.id, kidId: book.kidId, brief: book.brief, bible: book.bible, pages: pages, status: book.status,
                     title: book.title, coverPath: absolute(book.coverPath), createdAt: book.createdAt, finishedAt: book.finishedAt)

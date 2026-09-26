@@ -1,19 +1,13 @@
 import PopKit
 import SwiftUI
 
-/// The creation controls along the bottom of the book, in one compact row: the mic, a text
-/// field for directions, and whose turn it is (parent or kid, PRD S2). The story path writes
+/// The creation controls along the bottom of the book, in one compact row: the mic and a text
+/// field for directions. Everything here is the parent's (PRD S2). The story path writes
 /// itself (P-04); words here steer the page behind. Partial speech shows above the row.
 struct StoryInputBar: View {
-    @Binding var speaker: Speaker
     let isListening: Bool
     let partial: String
     let isWorking: Bool
-    /// No page is shown yet: the field asks for the opening prompt.
-    var isStarting = false
-    /// An opening prompt that didn't work, put back in the field (each new id once).
-    var returnedPrompt: String? = nil
-    var returnedPromptId: UUID? = nil
     let onToggleMic: () -> Void
     let onSubmit: (String) -> Void
 
@@ -41,7 +35,7 @@ struct StoryInputBar: View {
                 }
                 .accessibilityLabel(isListening ? "Stop listening" : "Tell the story out loud")
 
-                TextField(placeholder, text: $typed)
+                TextField("Steer what happens next…", text: $typed)
                     .focused($typing)
                     .submitLabel(.send)
                     .onSubmit(send)
@@ -49,17 +43,6 @@ struct StoryInputBar: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
                     .background(.white.opacity(0.85), in: .capsule)
-
-                Button {
-                    speaker = speaker == .parent ? .kid : .parent
-                } label: {
-                    Image(systemName: speaker == .parent ? "person.fill" : "figure.child")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(width: 36, height: 36)
-                        .background(Theme.paperShade, in: .circle)
-                }
-                .foregroundStyle(Theme.ink)
-                .accessibilityLabel(speaker == .parent ? "Parent is talking. Switch to kid" : "Kid is talking. Switch to parent")
 
                 // Another direction can always be sent; the spinner shows only while nothing is typed.
                 if isWorking, typed.isEmpty {
@@ -80,18 +63,6 @@ struct StoryInputBar: View {
         .padding(8)
         .background(.ultraThinMaterial, in: .rect(cornerRadius: 26))
         .animation(.easeInOut(duration: 0.2), value: isListening)
-        .onChange(of: returnedPromptId) { _, id in
-            if id != nil, let returnedPrompt, typed.isEmpty { typed = returnedPrompt }
-        }
-    }
-
-    private var placeholder: String {
-        switch (isStarting, speaker) {
-        case (true, .parent): "Start the story: who's it about?"
-        case (true, .kid): "What's the story about?"
-        case (false, .parent): "Steer what happens next…"
-        case (false, .kid): "What happens next?"
-        }
     }
 
     private func send() {

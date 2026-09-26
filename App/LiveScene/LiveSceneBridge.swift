@@ -41,9 +41,6 @@ final class LiveSceneBridge: NSObject {
     private let schemeHandler: SceneSchemeHandler
     private let clips = ClipAssembler()
     private(set) var pageLoaded = false
-    /// Page flows that run hidden (the page behind, pre-animated): their first frame doesn't
-    /// show the video until `reveal(generation:)`.
-    private var hiddenGenerations: Set<Int> = []
 
     override init() {
         let handler = SceneSchemeHandler()
@@ -87,24 +84,14 @@ final class LiveSceneBridge: NSObject {
         return ConnectResult(sessionId: result["sessionId"] as? String, connectMs: Self.int(result["connectMs"]) ?? 0)
     }
 
-    /// Marks page flow `generation` as hidden before it's prepared (`LivePageController`
-    /// pre-animating the page behind). Only the newest few are kept.
-    func runHidden(_ generation: Int) {
-        hiddenGenerations = hiddenGenerations.filter { $0 > generation - 8 }.union([generation])
-    }
-
     /// reset (if needed) → set_image → set_prompt → conditions_ready, as page flow `generation`
     /// (newest wins; an older one throws "superseded: …"). The still is served to the page only while this runs.
-    /// A flow marked with `runHidden` is prepared with `reveal: false`.
     func prepare(still: Data, mimeType: String, prompt: String, seed: Int? = nil, generation: Int? = nil) async throws -> PrepareResult {
         let stillURL = schemeHandler.registerStill(still, mimeType: mimeType)
         defer { schemeHandler.removeStill(at: stillURL) }
         var arguments: [String: Any] = ["imageUrl": stillURL.absoluteString, "prompt": prompt]
         if let seed { arguments["seed"] = seed }
-        if let generation {
-            arguments["generation"] = generation
-            arguments["reveal"] = !hiddenGenerations.contains(generation)
-        }
+        if let generation { arguments["generation"] = generation }
         let result = try await call("prepare", arguments) as? [String: Any] ?? [:]
         return PrepareResult(width: Self.int(result["width"]), height: Self.int(result["height"]), prepareMs: Self.int(result["prepareMs"]) ?? 0)
     }
@@ -115,15 +102,6 @@ final class LiveSceneBridge: NSObject {
         let arguments: [String: Any] = generation.map { ["generation": $0] } ?? [:]
         let result = try await call("start", arguments) as? [String: Any] ?? [:]
         return Self.int(result["startMs"]) ?? 0
-    }
-
-    /// Shows hidden page flow `generation`'s video (the parent folded to that page). False if
-    /// a newer flow has replaced it. `hasFirstFrame` says the video is already playing.
-    func reveal(generation: Int) async throws -> (revealed: Bool, hasFirstFrame: Bool) {
-        let result = try await call("reveal", ["generation": generation]) as? [String: Any] ?? [:]
-        let revealed = (result["revealed"] as? Bool) ?? false
-        if revealed { hiddenGenerations.remove(generation) }
-        return (revealed, (result["hasFirstFrame"] as? Bool) ?? false)
     }
 
     func setPrompt(_ prompt: String) async throws {
@@ -139,12 +117,9 @@ final class LiveSceneBridge: NSObject {
         _ = try await call("setFit", ["fit": fit])
     }
 
-    /// Starts recording the video now playing; it stops by itself after `maxSeconds`. With
-    /// `generation`, the page refuses ("superseded: …") if a newer flow owns the session.
-    func startClip(maxSeconds: Int, generation: Int? = nil) async throws {
-        var arguments: [String: Any] = ["maxSeconds": maxSeconds]
-        if let generation { arguments["generation"] = generation }
-        _ = try await call("startClip", arguments)
+    /// Starts recording the video now playing; it stops by itself after `maxSeconds`.
+    func startClip(maxSeconds: Int) async throws {
+        _ = try await call("startClip", ["maxSeconds": maxSeconds])
     }
 
     /// Stops recording and returns the clip once all of it is on disk.

@@ -15,7 +15,7 @@ enum LaunchOptions {
         return value > 0 ? value : 30
     }
 
-    /// `-screen book` opens the sample book directly (for automated checks).
+    /// `-screen create` makes a new book and `-screen latest` opens the newest saved one (for automated checks).
     static var screen: String? { UserDefaults.standard.string(forKey: "screen") }
 
     /// `-logHinge YES` logs hinge readings and posture events to Documents/hinge.log.
@@ -29,11 +29,9 @@ enum LaunchOptions {
         HingeScript.parse(UserDefaults.standard.string(forKey: "hingeScript") ?? "")
     }
 
-    /// `-screen create -storyTurns "a fox finds a leaf|make it snow|fold"` makes a new book and
-    /// plays these turns, one after each page settles: the first is the opening prompt (page 1
-    /// is made from it; the log says "page 1 shown in N ms"), later text is a typed direction,
-    /// and "fold" turns to the next page once it's painted (for end-to-end checks). With no
-    /// turns, `-screen create` waits for the opening prompt like a parent would.
+    /// `-screen create -storyTurns "<first idea>|You continue|fold"` makes a new book and
+    /// plays these turns, one after each page settles: text is typed input, "You continue"
+    /// taps continue, and "fold" turns to the next page (for end-to-end checks).
     static var storyTurns: [String] {
         (UserDefaults.standard.string(forKey: "storyTurns") ?? "")
             .split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
@@ -45,12 +43,6 @@ enum LaunchOptions {
         guard let name = UserDefaults.standard.string(forKey: "heroDrawing"),
               let data = try? Data(contentsOf: URL.documentsDirectory.appending(path: name)) else { return nil }
         return HeroDrawing(imageData: data, description: UserDefaults.standard.string(forKey: "heroName") ?? "the hero")
-    }
-
-    /// `-setup "hero:kid,place:pond,problem:lost,mood:silly"` answers the guided setup's cards for
-    /// `-screen create` (IMP-24), instead of starting from the kid profile.
-    static var setup: StoryBrief? {
-        UserDefaults.standard.string(forKey: "setup").map(SetupCards.brief(fromScript:))
     }
 
     /// `-hingeAngle 95` sweeps the debug hinge from flat to this angle at launch and holds it

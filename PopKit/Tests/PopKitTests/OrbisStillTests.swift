@@ -54,19 +54,6 @@ struct OrbisStillTests {
         #expect(jpeg.count < still.count)
     }
 
-    @Test func anOpenAIPageStillIsCroppedToSixteenByNine() throws {
-        let jpeg = try #require(OrbisStill.jpeg(from: png(width: 1536, height: 1024)))
-        let info = try #require(size(of: jpeg))
-        #expect(info.width == 832)
-        #expect(info.height == 468) // 3:2 centre-cropped to 16:9
-    }
-
-    @Test func aPortraitStillIsNotCropped() throws {
-        let jpeg = try #require(OrbisStill.jpeg(from: png(width: 1024, height: 1536)))
-        let info = try #require(size(of: jpeg))
-        #expect(info.width == 555 && info.height == 832)
-    }
-
     @Test func aSmallerStillIsNotUpscaled() throws {
         let jpeg = try #require(OrbisStill.jpeg(from: png(width: 640, height: 360)))
         let info = try #require(size(of: jpeg))

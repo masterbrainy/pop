@@ -2,8 +2,9 @@
 import PopKit
 import Speech
 
-/// Fallback speech-to-text with Apple's recogniser, used when Realtime can't start (no
-/// network, or the `stt-token` function fails). Utterances end after a short pause.
+/// Speech-to-text with Apple's recogniser: words show live as they're said, and each utterance
+/// ends after a short pause and goes to the story straight away. OpenAI Realtime is the
+/// fallback when this can't start.
 /// Recogniser errors (for example "no speech detected" after a quiet spell) just start a fresh
 /// request; only errors that repeat straight away stop listening.
 @MainActor
@@ -25,7 +26,7 @@ final class AppleTranscriber: SpeechInput {
     private let idPrefix = "apple-\(UUID().uuidString.prefix(8))"
     private var latest = ""
     private var isRunning = false
-    private static let pause = Duration.milliseconds(1_400)
+    private static let pause = Duration.milliseconds(1_200)
     /// An error sooner than this after a request starts counts as a quick failure.
     private static let quickFailure = Duration.seconds(1)
     private static let maxQuickFailures = 3
@@ -36,9 +37,7 @@ final class AppleTranscriber: SpeechInput {
 
     func start() async throws {
         guard !isRunning else { return }
-        let status = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
-        }
+        let status = await Self.requestAuthorization()
         guard status == .authorized, let recognizer, recognizer.isAvailable else { throw SpeechError.recognizerUnavailable }
         guard await MicrophoneStream.requestPermission() else { throw SpeechError.microphoneDenied }
         try MicrophoneStream.activateSession()
@@ -79,15 +78,39 @@ final class AppleTranscriber: SpeechInput {
         let input = engine.inputNode
         // No input route yet (it happens in the simulator): installing a tap would crash.
         guard input.outputFormat(forBus: 0).sampleRate > 0 else { throw SpeechError.audioFormat }
+        Self.feed(input, into: request)
+        engine.prepare()
+        try engine.start()
+        task = Self.recognize(request, with: recognizer) { [weak self] text, failure in
+            self?.receive(text: text, error: failure, generation: current)
+        }
+    }
+
+    // The system calls these back on its own queues (permission, audio, recognition). Closures
+    // made inside this main-actor class would be main-actor isolated, and Swift 6 stops the app
+    // when one runs anywhere else, so they're made in nonisolated helpers instead.
+
+    private nonisolated static func requestAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+        }
+    }
+
+    private nonisolated static func feed(_ input: AVAudioInputNode, into request: SFSpeechAudioBufferRecognitionRequest) {
         input.installTap(onBus: 0, bufferSize: 1_024, format: input.outputFormat(forBus: 0)) { buffer, _ in
             request.append(buffer)
         }
-        engine.prepare()
-        try engine.start()
-        task = recognizer.recognitionTask(with: request) { [weak self] result, error in
+    }
+
+    /// Hands each result (its text, or an error) back on the main actor.
+    private nonisolated static func recognize(
+        _ request: SFSpeechAudioBufferRecognitionRequest, with recognizer: SFSpeechRecognizer,
+        onResult: @escaping @MainActor @Sendable (String?, String?) -> Void
+    ) -> SFSpeechRecognitionTask {
+        recognizer.recognitionTask(with: request) { result, error in
             let text = result?.bestTranscription.formattedString
             let failure = error?.localizedDescription
-            Task { @MainActor in self?.receive(text: text, error: failure, generation: current) }
+            Task { @MainActor in onResult(text, failure) }
         }
     }
 

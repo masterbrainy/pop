@@ -25,8 +25,6 @@ public enum StoryTurnMode: String, Codable, Sendable, Equatable {
 public enum InputKind: String, Codable, Sendable, Equatable {
     case speech
     case typed
-    /// A tapped answer to a page's question (IMP-25): a kid's turn, at most 120 characters.
-    case choice
 }
 
 public enum Speaker: String, Codable, Sendable, Equatable {
@@ -48,12 +46,6 @@ public struct StoryTurnKid: Codable, Sendable, Equatable {
 
     public init(_ kid: KidProfile) {
         self.init(firstName: kid.firstName, readingLevel: kid.readingLevel, interests: kid.interests)
-    }
-
-    /// The kid as sent with this book: when the book has its own interests or setup answers,
-    /// the profile's interests stay home, so they can't steer every book (IMP-24).
-    public init(_ kid: KidProfile, for brief: StoryBrief) {
-        self.init(firstName: kid.firstName, readingLevel: kid.readingLevel, interests: brief.hasOwnSetup ? [] : kid.interests)
     }
 }
 
@@ -128,28 +120,18 @@ public struct StoryTurnPageResult: Codable, Sendable, Equatable {
     public let question: String?
     /// Whether this page ends the story (`path` and `page` modes).
     public let isEnding: Bool?
-    /// The question's kind (IMP-25); nil from older servers or when the question was gated out.
-    public let questionKind: QuestionKind?
-    /// Tap-to-steer answers to the question (IMP-25).
-    public let choices: [StoryChoice]?
 
-    public init(
-        index: Int, text: String, artPrompt: String, question: String? = nil, isEnding: Bool? = nil,
-        questionKind: QuestionKind? = nil, choices: [StoryChoice]? = nil
-    ) {
+    public init(index: Int, text: String, artPrompt: String, question: String? = nil, isEnding: Bool? = nil) {
         self.index = index
         self.text = text
         self.artPrompt = artPrompt
         self.question = question
         self.isEnding = isEnding
-        self.questionKind = questionKind
-        self.choices = choices
     }
 
-    private enum CodingKeys: String, CodingKey { case index, text, artPrompt, question, isEnding, questionKind, choices }
+    private enum CodingKeys: String, CodingKey { case index, text, artPrompt, question, isEnding }
 
-    /// Tolerates a response that omits `question`, `isEnding` or the choices, and a question kind
-    /// or choice this build doesn't know (the page still arrives, just without them).
+    /// Tolerates a response that omits `question` or `isEnding`.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         index = try container.decode(Int.self, forKey: .index)
@@ -157,8 +139,6 @@ public struct StoryTurnPageResult: Codable, Sendable, Equatable {
         artPrompt = try container.decode(String.self, forKey: .artPrompt)
         question = try container.decodeIfPresent(String.self, forKey: .question)
         isEnding = try container.decodeIfPresent(Bool.self, forKey: .isEnding)
-        questionKind = (try? container.decodeIfPresent(String.self, forKey: .questionKind)).flatMap { $0.flatMap(QuestionKind.init(rawValue:)) }
-        choices = try? container.decodeIfPresent([StoryChoice].self, forKey: .choices)
     }
 }
 

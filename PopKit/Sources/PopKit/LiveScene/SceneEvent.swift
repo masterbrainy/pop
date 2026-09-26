@@ -13,9 +13,7 @@ public enum SceneEvent: Sendable, Equatable {
     case model(type: String, json: String)
     case runtime(type: String, json: String)
     /// `generation` is the page flow the frame belongs to (nil from pages that predate it).
-    /// `background` is true for a hidden flow (the page behind, pre-animated): its video
-    /// stays hidden until it's revealed.
-    case firstFrame(generation: Int?, sinceStartMs: Double?, width: Int, height: Int, background: Bool)
+    case firstFrame(generation: Int?, sinceStartMs: Double?, width: Int, height: Int)
     case stats(fps: Double?, rttMs: Double?, kbps: Double?)
     case error(code: String, message: String, recoverable: Bool)
     case log(String)
@@ -40,8 +38,7 @@ public enum SceneEvent: Sendable, Equatable {
         case let .chunk(index, frames): "chunk \(Self.text(index)) · \(Self.text(frames)) frames"
         case let .model(type, json): "model \(type) \(json)"
         case let .runtime(type, json): "runtime \(type) \(json)"
-        case let .firstFrame(_, ms, width, height, background):
-            "first frame after \(Self.text(ms.map { Int($0) })) ms at \(width)×\(height)\(background ? " (hidden)" : "")"
+        case let .firstFrame(_, ms, width, height): "first frame after \(Self.text(ms.map { Int($0) })) ms at \(width)×\(height)"
         case let .stats(fps, rtt, kbps):
             "stats fps=\(Self.text(fps.map { Int($0.rounded()) })) rtt=\(Self.text(rtt.map { Int($0) }))ms kbps=\(Self.text(kbps.map { Int($0) }))"
         case let .error(code, message, _): "error \(code): \(message)"
@@ -67,8 +64,7 @@ public enum SceneEvent: Sendable, Equatable {
             return name == "model" ? .model(type: type, json: json) : .runtime(type: type, json: json)
         case "firstFrame":
             guard let width = read.int("width"), let height = read.int("height") else { return nil }
-            return .firstFrame(generation: read.int("generation"), sinceStartMs: read.double("sinceStartMs"), width: width, height: height,
-                               background: read.bool("background") ?? false)
+            return .firstFrame(generation: read.int("generation"), sinceStartMs: read.double("sinceStartMs"), width: width, height: height)
         case "stats": return .stats(fps: read.double("fps"), rttMs: read.double("rttMs"), kbps: read.double("kbps"))
         case "error":
             guard let code = read.string("code"), let message = read.string("message") else { return nil }

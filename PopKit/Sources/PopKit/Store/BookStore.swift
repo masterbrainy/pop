@@ -123,8 +123,10 @@ public actor FileBookStore: BookStoring {
         let stillPath = try page.stillPath.map { try copyMedia(from: $0, into: mediaDirectory, baseName: baseName) }
         let layers = try page.layers.map { try rewritten(layers: $0, baseName: baseName, into: mediaDirectory) }
         let clipPath = try page.clipPath.map { try copyMedia(from: $0, into: mediaDirectory, baseName: "\(baseName)-clip") }
-        // Only the media paths change; the words, question and choices are kept as they are.
-        return page.with(stillPath: stillPath).with(layers: layers).with(clipPath: clipPath)
+        return PageContent(
+            id: page.id, index: page.index, version: page.version, text: page.text, artPrompt: page.artPrompt,
+            stillPath: stillPath, layers: layers, motion: page.motion, clipPath: clipPath, question: page.question
+        )
     }
 
     private func rewritten(layers: PageLayers, baseName: String, into mediaDirectory: URL) throws -> PageLayers {

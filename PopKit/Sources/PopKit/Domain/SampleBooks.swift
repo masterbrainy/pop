@@ -1,6 +1,6 @@
 import Foundation
 
-/// Mock content for building the book UI before the story pipeline exists, and for tests.
+/// Fixed content for tests only; the app itself ships no built-in child or book.
 public enum SampleBooks {
     public static let kid = KidProfile(
         id: UUID(uuidString: "6F0C2E1A-6A51-4D5B-9B8E-0A1B2C3D4E5F")!,

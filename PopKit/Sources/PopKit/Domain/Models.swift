@@ -17,6 +17,22 @@ public struct KidProfile: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+public struct StoryBrief: Codable, Equatable, Sendable {
+    public let interests: [String]
+    /// A real moment the story helps with (first day of school, a new sibling…), told gently (S11).
+    public let realMoment: String?
+    /// "Anything you'd like this story to teach?" It only goes into the prompt; there's no lesson subsystem.
+    public let teach: String?
+    public let language: String
+
+    public init(interests: [String], realMoment: String? = nil, teach: String? = nil, language: String = "en") {
+        self.interests = interests
+        self.realMoment = realMoment
+        self.teach = teach
+        self.language = language
+    }
+}
+
 public struct ParentSettings: Codable, Equatable, Sendable {
     public let avoidTopics: [String]
     public let readingLevel: ReadingLevel?
@@ -135,15 +151,11 @@ public struct PageContent: Codable, Equatable, Identifiable, Sendable {
     public let clipPath: String?
     /// One question for the parent to ask about this page (PRD C3); nil in books saved before it.
     public let question: String?
-    /// What kind of question it is (IMP-25); nil when there's no question, or before IMP-25.
-    public let questionKind: QuestionKind?
-    /// Tap-to-steer answers to the question (IMP-25); nil when it has none.
-    public let choices: [StoryChoice]?
 
     public init(
         id: UUID = UUID(), index: Int, version: Int = 1, text: String, artPrompt: String? = nil,
         stillPath: String? = nil, layers: PageLayers? = nil, motion: MotionParts? = nil, clipPath: String? = nil,
-        question: String? = nil, questionKind: QuestionKind? = nil, choices: [StoryChoice]? = nil
+        question: String? = nil
     ) {
         self.id = id
         self.index = index
@@ -155,76 +167,37 @@ public struct PageContent: Codable, Equatable, Identifiable, Sendable {
         self.motion = motion
         self.clipPath = clipPath
         self.question = question
-        self.questionKind = questionKind
-        self.choices = choices
     }
 
     /// A new version of this page: new words and art prompt, and no media yet (it's regenerated).
-    /// Its question and choices were about the old words, so they go too.
     public func revised(text: String, artPrompt: String?) -> PageContent {
         PageContent(id: id, index: index, version: version + 1, text: text, artPrompt: artPrompt)
     }
 
-    /// The same page (id, version, media) at another position: the page behind can be
-    /// renumbered when the parent turns to it, and its loop and layers must stay with it.
-    public func with(index: Int) -> PageContent {
-        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers,
-                    motion: motion, clipPath: clipPath, question: question, questionKind: questionKind, choices: choices)
-    }
-
     public func with(stillPath: String?) -> PageContent {
-        copy(stillPath: stillPath)
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath, question: question)
     }
 
     public func with(layers: PageLayers?) -> PageContent {
-        copy(layers: layers)
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath, question: question)
     }
 
     public func with(motion: MotionParts?) -> PageContent {
-        copy(motion: motion)
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath, question: question)
     }
 
     public func with(clipPath: String?) -> PageContent {
-        copy(clipPath: clipPath)
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath, question: question)
+    }
+
+    public func with(question: String?) -> PageContent {
+        let trimmed = question?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers,
+                           motion: motion, clipPath: clipPath, question: trimmed?.isEmpty == false ? trimmed : nil)
     }
 
     public func with(text: String) -> PageContent {
-        copy(text: text)
-    }
-
-    /// This page with a question, keeping its kind and choices; a blank question clears all three.
-    public func with(question: String?) -> PageContent {
-        with(question: question, kind: questionKind, choices: choices)
-    }
-
-    /// This page with a question, its kind and its choices. A blank question has no kind or
-    /// choices, and an empty list of choices is stored as none.
-    public func with(question: String?, kind: QuestionKind?, choices: [StoryChoice]?) -> PageContent {
-        let trimmed = question?.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let ask = trimmed, !ask.isEmpty else {
-            return copy(question: .some(nil), questionKind: .some(nil), choices: .some(nil))
-        }
-        let kept = choices?.isEmpty == false ? choices : nil
-        return copy(question: .some(ask), questionKind: .some(kind), choices: .some(kept))
-    }
-
-    /// This page with some fields changed; everything else (id, version, question, choices) is kept.
-    private func copy(
-        text: String? = nil, stillPath: String?? = nil, layers: PageLayers?? = nil, motion: MotionParts?? = nil,
-        clipPath: String?? = nil, question: String?? = nil, questionKind: QuestionKind?? = nil, choices: [StoryChoice]?? = nil
-    ) -> PageContent {
-        PageContent(
-            id: id, index: index, version: version, text: text ?? self.text, artPrompt: artPrompt,
-            stillPath: stillPath ?? self.stillPath, layers: layers ?? self.layers, motion: motion ?? self.motion,
-            clipPath: clipPath ?? self.clipPath, question: question ?? self.question,
-            questionKind: questionKind ?? self.questionKind, choices: choices ?? self.choices
-        )
-    }
-
-    /// This page at another index and version (placing, re-numbering), keeping everything else.
-    public func renumbered(index: Int, version: Int) -> PageContent {
-        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers,
-                    motion: motion, clipPath: clipPath, question: question, questionKind: questionKind, choices: choices)
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath, question: question)
     }
 }
 

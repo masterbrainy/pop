@@ -1,6 +1,6 @@
 # Pop! — Improvement audit
 
-*An outside review of `main` @ `5e0d4e5`, rebased on `eba14be` (2026-09-26, after P-04, the R-31 fix, QA's R-35–R-37 and the working hinge). Read-only: no code was changed. Priorities, in order: **latency**, **demo reliability**, **output quality**; then cost and stack logistics. Nothing was off the table, including the premise. Findings already in [REVIEW.md](REVIEW.md) (R-01 to R-37) aren't repeated unless something new was found; related R-IDs are named.*
+*An outside review of `main` @ `5e0d4e5`, rebased on `fd71c50` (2026-09-26, after P-04, the R-30 and R-31 fixes, QA's R-35–R-39, the working hinge and the golden-book run-book). Read-only: no code was changed. Priorities, in order: **latency**, **demo reliability**, **output quality**; then cost and stack logistics. Nothing was off the table, including the premise. Findings already in [REVIEW.md](REVIEW.md) (R-01 to R-39) aren't repeated unless something new was found; related R-IDs are named.*
 
 **How to read this.** Each item says what's wrong, where (file:line), the fix, a rough effort, and **what was checked versus estimated**. Latency numbers other than the Phase 0 probes (Gemini 5.0 s; Orbis prepare 1.6 s plus first frame 4.8 s; one story-model call of 2.3 s from the timing fixture in `c20e90f`) are estimates, because no end-to-end latency table exists yet (IMP-03). Everything was reviewed against the post-P-04 PRD. Where the code hasn't caught up with P-04, the item says whether it still applies.
 
@@ -68,7 +68,7 @@
 - **Clip source.** The bundled SDK 3.0.2 already has server-side `requestClip(durationSeconds)` and `downloadClipAsFile` (`index.d.ts:433-485, 837-846`; docs.reactor.inc/concepts/recordings: *"Captures the last durationSeconds of the live session"*). That's independent of whether the web view is on screen, and it can grab a clip after the fact (up to 5 min back). Spend 30 minutes on the next paid probe to confirm Orbis has recording enabled and to check clip resolution and size. Keep `MediaRecorder` as the fallback.
 - **Must-haves.**
   - A clip carries (page id, version). Today a clip recorded before a revision is attached to the revised page, which then never animates (`StoryMaker.attachClip` looks up by id only; `LivePageController.swift:160` compares against its own stale copy). A page behind that is rebuilt after a direction must drop its old clip.
-  - The frame tripwire checks at 3 s and then every 15 s (`FrameTripwire.swift:18-19`), but a clip is 10 s long, so most of every saved clip is never moderated. And `hold()` never clears a clip that's already attached. Check 3–5 frames sampled from the finished clip before attaching it.
+  - (Related R-38.) The frame tripwire checks at 3 s and then every 15 s (`FrameTripwire.swift:18-19`), but a clip is 10 s long, so most of every saved clip is never moderated. And `hold()` never clears a clip that's already attached. Check 3–5 frames sampled from the finished clip before attaching it.
 - **Cheaper first steps (~2 h).**
   - Send Orbis a downscaled 832×480 JPEG instead of the stored 1344×768 PNG (`StillImageLoader.swift:20`). Measured on sample art: 1.8 MB versus 175 KB. That's about 1.4 s versus 0.14 s at 10 Mbit/s uplink.
   - Split prepare so the upload and `set_image` start when the still lands, and `set_prompt` plus `start` run when the motion prompt lands.
@@ -187,15 +187,15 @@
 - **Confidence.** Checked: the code, plus the repro against a fake. Behaviour against real Orbis is unverified. How often a fold lands in the prepare window is unmeasured.
 
 <a id="imp-12"></a>
-### IMP-12 · Session hygiene: warm-up time, a hard cap, resolution and audio · LOW · ~1.5 h · related R-08, R-30
+### IMP-12 · Session hygiene: warm-up time, a hard cap, resolution and audio · LOW · ~1.5 h · related R-08
 - **What.**
   - Reactor's billing page says *"the meter runs for every minute the GPU is held for you, even if you are idle"* and advises against speculative pre-warming (docs.reactor.inc/resources/billing).
-  - ROADMAP §9 still says T-60 (about $35 idle at the project's price), though 0.3a measured connect at 3.5 s.
+  - The run-book (`5f7eab1`) now warms Orbis only when the demo's New book opens, which is right: 0.3a measured connect at 3.5 s. Keep it that way; don't pre-warm.
   - The mint body (`reactor_client.ts:20-32`) doesn't set `constraints.max_session_duration_seconds`, a server-enforced cap on any leaked session.
   - The app never sends `set_resolution` or `set_audio_enabled`, so video arrives at 2560×1440 and 7–10 Mbit/s for 832×480 content, with an audio track the PRD says is off.
   - Reactor's billing page lists Orbis Stable's price as **"TBD"**, so every dollar figure in the PRD rests on the unsourced $0.582/min.
 - **Fix.**
-  1. Warm at about T-2 min.
+  1. Keep warm-up at New book (no earlier).
   2. Mint with `max_session_duration_seconds` of about 1800.
   3. After connect, send `set_resolution('1080p')` and `set_audio_enabled(false)`. Both survive `reset`.
   4. Record clips from a page-sized canvas at about 1.5 Mbit/s.
@@ -234,15 +234,15 @@
 - **Confidence.** Checked: the code and SQL. Per-book counts are derived, not measured.
 
 <a id="imp-15"></a>
-### IMP-15 · Run-book: add a preflight script, a golden-book backup and drills · MEDIUM · ~4 h (folds into Phase 9)
+### IMP-15 · Run-book: automate the checks and add drills · MEDIUM · ~3 h (folds into Phase 9) · updated for `5f7eab1`
 - **What.**
-  - The golden book lives only in the simulator's app container, and R-21's fix (erasing the Duo) would wipe it along with the Keychain user.
-  - There's no preflight check, no screen-recording fallback and no drill script.
+  - `5f7eab1` added `scripts/golden-book.sh` (backup and restore) and a concrete run-book with a failure table. That covers the golden-book risk and most manual checks. What's left is automating the checks and rehearsing failures.
+  - There's still no scripted preflight check, no screen-recording fallback and no drill script.
   - The stats event doesn't report the ICE candidate type, so whether WebRTC went direct or through TURN over TCP is invisible.
   - Supabase Free projects pause after a week of inactivity, and the project's plan isn't recorded.
 - **Fix.**
   1. `scripts/preflight.sh`, read-only, printing PASS/FAIL. It checks that: DeviceHub is running and the Duo is booted to its home screen; the app and golden book are present; each function returns its envelope (which also warms them); 0 Reactor sessions are open; today's art count; the Mac's default input device (not AirPods); download speed ≥ 15 Mbit/s; no colima or xcodebuild is running.
-  2. `scripts/golden.sh backup|restore` to a git-ignored folder, plus a screen recording of a full good run as the last resort.
+  2. Keep a screen recording of a full good run as the last resort.
   3. Drills, each with its expected result: Wi-Fi off mid-page; a Reactor 429; an OpenAI 5xx; art rejected by moderation; art cap exhausted; close with two unclipped pages; a fresh install; UDP blocked with `pfctl`; network off → golden book.
 - **Confidence.** Checked: `scripts/`, the docs and the Supabase pausing doc. The drills are proposals.
 
@@ -468,7 +468,7 @@ Beats are labels on the pages of the path, not a new structure, so PRD S14 still
 
 | Phase | Work | Exit test |
 |---|---|---|
-| A | P-04's `story-turn` rework (`plan`/`replan`, outline-only path, bible delta) + IMP-01, IMP-02, IMP-03, IMP-23 + R-37 input moderation + R-30 | Every plan ends on `ending`; a re-plan never changes the page on screen; a clip landing mid-turn survives; save → load → save keeps media |
+| A | P-04's `story-turn` rework (`plan`/`replan`, outline-only path, bible delta) + IMP-01, IMP-02, IMP-03, IMP-23 + R-37 input moderation | Every plan ends on `ending`; a re-plan never changes the page on screen; a clip landing mid-turn survives; save → load → save keeps media |
 | B | IMP-24 guided setup | ≤ 45 s to "Go" with no typing; page 1 text ≤ 5 s after the last card, over 5 real runs |
 | C | IMP-25 questions | 0 K1 misses on questions and choices; choice → page behind rebuilt p50 ≤ 15 s |
 | D | IMP-26 demo subset | Replay-exact after reopening; a series row after "Another adventure" |

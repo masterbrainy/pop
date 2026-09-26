@@ -120,6 +120,8 @@ final class StoryMaker {
     @ObservationIgnored private var noteTask: Task<Void, Never>?
     @ObservationIgnored private var scriptLog: FileLog?
     @ObservationIgnored private var layerTasks: [UUID: Task<Void, Never>] = [:]
+    /// The parent was told once that the live session is in use elsewhere.
+    @ObservationIgnored private var toldLiveBusy = false
     /// Characters whose reference sheet is being made (or was tried).
     @ObservationIgnored private var referencesRequested: Set<String> = []
     /// Set by the book view: a scripted "finish" step ends and saves the book.
@@ -139,6 +141,11 @@ final class StoryMaker {
         hasOpened = underWay
         sttSecrets = services.server.map(Self.speechSecrets)
         live.onClip = { [weak self] pageId, url in self?.attachClip(url, to: pageId) }
+        live.onLiveBusy = { [weak self] in
+            guard let self, !self.toldLiveBusy else { return }
+            self.toldLiveBusy = true
+            self.note("Moving pictures are busy on another device, so pages stay still for now. They come alive once it's free.")
+        }
         live.onFrameFlagged = { [weak self] pageId in
             guard let self else { return }
             // A clip saved before the flag must not replay in the finished book (R-38).
@@ -593,12 +600,13 @@ final class StoryMaker {
             if builds[current.index] == nil { startBuild(at: current.index, direction: nil) }
             return
         }
-        if current.stillPath == nil { paint(current) }
+        // A page that gave up on its picture is settled; it tries again only once it shows.
+        if !isPictureSettled(current) { paint(current) }
         for offset in 1...reader.lookahead {
             let index = current.index + offset
             guard bible.hasPage(after: index - 1), builds[index] == nil else { return }
             if let page = reader.ahead.first(where: { $0.index == index }) {
-                if page.stillPath == nil { paint(page) }
+                if !isPictureSettled(page) { paint(page) }
             } else {
                 startBuild(at: index, direction: nil)
                 return
@@ -636,7 +644,6 @@ final class StoryMaker {
               isNextToPaint(page) else { return }
         let book = reader.book
         let run = UUID()
-        picturelessPages.remove(page.id)
         let started = callPipeline { await pipeline.paint(page, book: book) }
         let task = Task { [weak self] in
             var painted = false
@@ -727,6 +734,8 @@ final class StoryMaker {
         guard builds[build.index]?.id == build.id else { return }
         wordsDone(build)
         refreshLatency()
+        // A failed build may have held back the pages after it.
+        ensureBuilds()
     }
 
     /// This build's words landed or failed: the page is no longer being written, and a
@@ -870,6 +879,7 @@ final class StoryMaker {
             // Only onto the same page and version; a page replaced meanwhile drops it.
             if let updated = reader.updatePage(id: key.id, version: key.version, { $0.with(stillPath: path) }) {
                 paintFailures[updated.id] = nil
+                picturelessPages.remove(updated.id)
                 lastPaintFailure = ""
                 // Pop-up layers are several more pictures, so only the page on screen makes them.
                 if updated.id == reader.currentPage?.id { prepareLayers(for: updated) }
@@ -935,6 +945,8 @@ final class StoryMaker {
         }
         refreshWorking()
         ensureBuilds()
+        // A page that gave up on its picture tries again now that it shows (not past the daily limit).
+        if picturelessPages.contains(page.id), !lastPaintFailure.contains("art-daily") { paint(page) }
         animate(page)
         if page.stillPath != nil, page.layers == nil, layerTasks[page.id] == nil { prepareLayers(for: page) }
     }

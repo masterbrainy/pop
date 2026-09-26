@@ -16,7 +16,7 @@ export const UPSTREAM_TIMEOUTS_MS = {
   chat: 12_000,
   moderation: 3_500,
   geminiText: 10_000,
-  geminiImage: 25_000,
+  image: 30_000,
 } as const;
 
 export type Fetcher = (signal?: AbortSignal) => Promise<Response>;

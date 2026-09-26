@@ -73,8 +73,7 @@ struct BookView: View {
                         speaker: Binding(get: { maker.speaker }, set: { maker.speaker = $0 }),
                         isListening: maker.isListening, partial: maker.partial, isWorking: maker.isWorking,
                         onToggleMic: { Task { await maker.toggleMic() } },
-                        onSubmit: { maker.submit($0) },
-                        onContinue: { maker.continueStory() }
+                        onSubmit: { maker.submit($0) }
                     )
                     .padding(.horizontal, 12)
                     .padding(.bottom, 14)
@@ -94,8 +93,14 @@ struct BookView: View {
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(.ultraThinMaterial, in: .capsule)
             }
-            if reader.pendingNext != nil, hinge.state.phase != .closed {
-                Label("Page full. Fold to turn", systemImage: "book.pages")
+            if maker?.isOnLastPage == true, hinge.state.phase != .closed {
+                Label("The end. Close the book to finish", systemImage: "book.closed")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Theme.accent, in: .capsule)
+            } else if reader.pendingNext != nil, hinge.state.phase != .closed {
+                Label("Next page ready. Fold to turn", systemImage: "book.pages")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14).padding(.vertical, 8)

@@ -2,8 +2,8 @@ import PopKit
 import SwiftUI
 
 /// The creation controls along the bottom of the book, in one compact row: the mic, a text
-/// field, whose turn it is (parent or kid, PRD S2), and "You continue" (the story engine
-/// writes the next bit on its own, PRD S5). Partial speech shows above the row.
+/// field for directions, and whose turn it is (parent or kid, PRD S2). The story path writes
+/// itself (P-04); words here steer the page behind. Partial speech shows above the row.
 struct StoryInputBar: View {
     @Binding var speaker: Speaker
     let isListening: Bool
@@ -11,7 +11,6 @@ struct StoryInputBar: View {
     let isWorking: Bool
     let onToggleMic: () -> Void
     let onSubmit: (String) -> Void
-    let onContinue: () -> Void
 
     @State private var typed = ""
     @FocusState private var typing: Bool
@@ -37,7 +36,7 @@ struct StoryInputBar: View {
                 }
                 .accessibilityLabel(isListening ? "Stop listening" : "Tell the story out loud")
 
-                TextField(speaker == .parent ? "Tell or direct the story…" : "What happens next?", text: $typed)
+                TextField(speaker == .parent ? "Steer what happens next…" : "What happens next?", text: $typed)
                     .focused($typing)
                     .submitLabel(.send)
                     .onSubmit(send)
@@ -60,14 +59,15 @@ struct StoryInputBar: View {
                 if isWorking {
                     ProgressView().controlSize(.small).frame(width: 36, height: 36)
                 } else {
-                    Button(action: typed.isEmpty ? onContinue : send) {
-                        Image(systemName: typed.isEmpty ? "sparkles" : "arrow.up")
+                    Button(action: send) {
+                        Image(systemName: "arrow.up")
                             .font(.subheadline.weight(.bold))
                             .frame(width: 36, height: 36)
-                            .background(Theme.accent, in: .circle)
+                            .background(Theme.accent.opacity(typed.isEmpty ? 0.4 : 1), in: .circle)
                             .foregroundStyle(.white)
                     }
-                    .accessibilityLabel(typed.isEmpty ? "You continue the story" : "Add to the story")
+                    .disabled(typed.isEmpty)
+                    .accessibilityLabel("Steer the story")
                 }
             }
         }

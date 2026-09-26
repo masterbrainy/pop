@@ -3,10 +3,9 @@ import Foundation
 /// Serializes story-turn inputs so a second input arriving while a turn is in
 /// flight is never lost (R-31). `submit` returns the input to run immediately
 /// when no turn is running; while one is running, later inputs are queued.
-/// `drain` is called when a turn finishes: it returns the queued inputs merged
-/// into one to run next, or `nil` once the queue is empty (and marks the queue
-/// idle). A "continue" request queued alongside real text is dropped — the
-/// text wins.
+/// `drain` is called when a turn finishes: it returns the next queued inputs from
+/// one speaker merged into one to run next (a parent's and a kid's words are never
+/// joined), or `nil` once the queue is empty (and marks the queue idle).
 public actor TurnQueue {
     public private(set) var isBusy = false
     private var pending: [StoryTurnInput] = []
@@ -33,9 +32,10 @@ public actor TurnQueue {
             isBusy = false
             return nil
         }
-        let merged = Self.merge(pending)
-        pending.removeAll()
-        return merged
+        let speaker = pending[0].speaker
+        let run = Array(pending.prefix { $0.speaker == speaker })
+        pending.removeFirst(run.count)
+        return Self.merge(run)
     }
 
     /// Clears anything queued and marks the queue idle, for when the in-flight
@@ -45,18 +45,10 @@ public actor TurnQueue {
         isBusy = false
     }
 
-    /// Joins queued text inputs in order with a space, keeping the speaker (and
-    /// kind) of the latest one. A queued "continue" is dropped when real text is
-    /// queued alongside it; if only "continue" requests are queued, the latest
-    /// one is kept as-is.
+    /// Joins one speaker's queued inputs in order with a space, keeping the kind
+    /// of the latest one.
     private static func merge(_ inputs: [StoryTurnInput]) -> StoryTurnInput {
-        let textInputs = inputs.filter { $0.kind != .continueStory }
-        guard !textInputs.isEmpty else {
-            // Only "continue" requests queued: keep the latest one as-is.
-            return inputs[inputs.count - 1]
-        }
-        let joinedText = textInputs.map(\.text).joined(separator: " ")
-        let latest = textInputs[textInputs.count - 1]
-        return StoryTurnInput(kind: latest.kind, speaker: latest.speaker, text: joinedText)
+        let latest = inputs[inputs.count - 1]
+        return StoryTurnInput(kind: latest.kind, speaker: latest.speaker, text: inputs.map(\.text).joined(separator: " "))
     }
 }

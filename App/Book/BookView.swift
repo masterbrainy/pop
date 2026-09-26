@@ -46,6 +46,14 @@ struct BookView: View {
         .onTapGesture(count: 3) { showsDebugPanel.toggle() }
         .onChange(of: hinge.state.popDepth) { _, depth in reader.setPopDepth(depth) }
         .task { await start() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            guard let maker, !finishing else { return }
+            Task { await maker.pauseLive() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            guard let maker, !finishing else { return }
+            Task { await maker.resumeLive() }
+        }
         .onDisappear {
             readAloud.stop()
             if let maker { Task { await maker.end() } }

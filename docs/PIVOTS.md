@@ -57,3 +57,14 @@
 - **Cost:** saves about 2 h. No risk for the demo; the in-app hinge slider stays as the development fallback on the Duo.
 - **Recommendation:** Do it. It matches the simulator-only, Duo-only demo.
 - **Decision:** 2026-09-26, Brian decided directly in this session.
+
+### P-04 · Story path, with the next page built behind the current one · 2026-09-26 · Status: accepted
+- **Idea (Brian's words):** "There shouldn't be severe time latency issues. We're storing pages behind the current one. Ahead of time we'll have a story path generated from the first prompt which can adjust as the user prompts it more during the middle. But there's always a definitive path to some end, even if the end will change… the live model animation for event 1 [is] like some dragon flying into a tree, where the live model aspect would simply have it like repeated animation bobbing up and down after it's unconscious on the ground… The user can say they want the dragon to be woken up again, and then it will create a new story path… a new live model generation for a separate scene that is consistent with the first scene, creating a page behind the current. When flipping the page, it will display that scene, with its new dialogue."
+- **Changes (as applied):**
+  - PRD §7: the brief produces a story path that always reaches an ending, and the next page is always built behind the one on screen. Directions re-plan the path from the page behind and never change the page on screen. Each page's animation is a gentle, repeating motion of its moment.
+  - PRD §8: S5, S7 and S12 are rewritten, and S14 (story path) is new. S8 ("You continue") is removed, because the path always has a next page. P4 now specifies the repeating motion, and S13 saves only pages that were shown.
+  - PRD §5, §9, §12 and D2: the latency budget is now brief → page 1, direction → page behind rebuilt, and fold → next page shown at once. D2 is resolved.
+  - Roadmap: the `StoryEngine` and `PagePipeline` units, Phase 2 bullets and exit, the 2-day cut line, unit tests and the eval set. Hours are unchanged: path planning replaces the speech page-break and revise-current work.
+- **Cost:** about neutral in hours. The code already built needs rework: `story-turn` currently returns `append / new_page / revise_current`, and it now needs to plan and re-plan a path instead. Risk: a single Orbis session can only animate one page, so the new page's animation starts after the fold (its still shows first, about the reset-to-first-frame time measured in probe 0.3). A second warm session could pre-roll the page behind, at double the credit.
+- **Recommendation:** Do it. It hides almost all generation latency and makes the story always land. Keep one Orbis session unless probe 0.3 shows a noticeable gap after the fold.
+- **Decision:** 2026-09-26, Brian decided directly in this session.

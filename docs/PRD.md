@@ -1,6 +1,6 @@
 # Pop! — Product Requirements Document
 
-*Status: DRAFT v3.1 · 2026-09-26 · P-01 (parents drive creation; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · v3.1 adds the readiness fixes from REVIEW.md · Owner: Brian Huang · Companion doc: [ROADMAP.md](ROADMAP.md)*
+*Status: DRAFT v3.1 · 2026-09-26 · P-01 (parents drive creation; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · P-04 (story path; page built behind the current one) · v3.1 adds the readiness fixes from REVIEW.md · Owner: Brian Huang · Companion doc: [ROADMAP.md](ROADMAP.md)*
 
 **Pop! is a free, hackathon-style pitch and demo, not a release, and it runs only on the iPhone Duo.** Nothing is sold, and no other iPhone layout is built. This document covers what makes the demo great, reliable and safe.
 
@@ -42,9 +42,10 @@ We'll know we're right when **parents in test sessions finish books** (at least 
 |---|---|---|
 | End-to-end reliability | 5 rehearsal runs in a row of a 5-page book, with no crash and no manual fix | Rehearsal log |
 | Saved book replays exactly | Every page shows the same text, picture and animation clip as when it was made, with no generation calls | Automated replay check |
-| Sentence end (or "You continue" tap) → page text visible | p50 ≤ 2.5 s | Timing spans per pipeline stage (local timing logs and the debug overlay) |
-| Sentence end → page visible (text plus "painting…" art placeholder) | p50 ≤ 5 s (the spec's target) | Same |
+| Brief submitted → story path planned and page 1 text visible | p50 ≤ 5 s | Timing spans per pipeline stage (local timing logs and the debug overlay) |
 | Page art visible (still illustration) | p50 ≤ 10 s after the page's text *(TBD, measured in the Phase 0 spike)* | Same |
+| Direction → page behind rebuilt (text and picture) | p50 ≤ 15 s *(TBD, Phase 0)*, normally before the parent folds | Same |
+| Fold → next page's text and picture shown | ≤ 300 ms when the page behind is ready (the normal case); otherwise its text with "painting…" | Same |
 | Page flip → animation playing | p50 ≤ 5 s *(TBD, measured in probe 0.3)*. The still shows until then. Not counted during Orbis's warm-up at the start of a book, when the still with a slow pan counts as a pass | Same |
 | Unsafe output shown to the child | 0 in a 30-session red-team set that covers every kid-safety category (§8.6) at each reading level, with false blocks on ≤ 5% of safe pages | Eval script; a person checks borderline cases |
 | Page curl tracks the hinge | No visible lag when driven by the simulator's hinge controls | Manual check with screen recording |
@@ -64,12 +65,12 @@ We'll know we're right when **parents in test sessions finish books** (at least 
 There is **one way to make a book**. The parent can do it alone ahead of time or with the child beside them; the steps are identical, and the only difference is who's watching.
 
 1. **Parent starts a book** with a short story brief: what the child loves (from the kid profile, for example dinosaurs, trucks, their cat), an optional real moment (first day of school, a new sibling, the dentist), and an optional free-text field: "Anything you'd like this story to teach?" (for example sharing, or why we brush our teeth). The child's first name and reading level come from the kid profile. The live animation engine starts warming up now, because it takes minutes to be ready.
-2. **The parent tells the story**, by voice or by typing. They can narrate a page themselves, give a direction ("add a friendly dragon", "she should learn to wait her turn"), or tap **"You continue"** so the AI writes the next page following the brief and every direction so far. Rambling speech becomes clean page text at the right reading level. The engine decides where each page ends and shows a gentle "fold to turn" cue, but it never turns the page itself: anything said after that goes into the next page, which appears when the parent folds. If the child is there, a "parent's turn / kid's turn" toggle lets them add ideas the same way.
-3. **The page fills in**, left to right:
+2. **A story path is planned from the brief.** The AI plans the whole story as a path of pages that always reaches an ending. Page 1 is built first, and **the next page is always built behind the one on screen** (text, picture, pop-up layers and animation prompt), so folding never waits.
+3. **The parent steers it**, by voice or by typing, at any time. They can say what happens next or give a direction ("wake the dragon up", "add a friendly dragon", "she should learn to wait her turn"). The AI re-plans the path from the next page on (the ending can change, but there is always one) and rebuilds the page behind, consistent with everything so far. The page on screen doesn't change. Rambling speech becomes clean page text at the right reading level. If the child is there, a "parent's turn / kid's turn" toggle lets them add ideas the same way.
+4. **Each page shows** left to right:
    - **Left page:** the story text appears first.
-   - **Right page:** a "painting…" placeholder, then the finished illustration, then the illustration **comes alive as a short animation**. The animation shows only this page's scene.
-4. **Change anything** ("no, make it a dragon!"). The current page regenerates: new text, new picture, new animation. The change carries into the pages that follow.
-5. **Fold to turn.** As the phone folds, the page lifts and curls with the hinge. Open it back before the turn point and the page settles back; fold past the turn point and it turns. **Each newly shown page starts its own fresh animation.**
+   - **Right page:** a "painting…" placeholder, then the finished illustration, then the illustration **comes alive**. The live animation is a gentle, repeating motion of this page's moment (for example, the dragon that flew into a tree lies knocked out on the ground, bobbing gently). It never moves the plot on; the next page does.
+5. **Fold to turn.** As the phone folds, the page lifts and curls with the hinge. Open it back before the turn point and the page settles back; fold past the turn point and it turns. **The page behind appears with its new text, and its own animation starts.** A new page is built behind it.
 6. **Keep folding to about 90° to pop up.** The page now showing pops up: its characters rise out of the spine in front of the background, deeper as the angle grows. Opening flat folds them back into the picture and its animation starts. Opening the book from its cover pops page 1 up the same way.
 7. **Finish and save.** When the parent is happy, closing the phone (or tapping Save) finishes the book. It has to stay closed for about a second, so a brief overshoot while turning doesn't count; reopening sooner just carries on. The cover screen shows AI cover art and a title such as *"Rex Learns to Share, a story for Maya."* The book is saved to the bookshelf exactly as it was made: text, pictures, pop-up layers and each page's recorded animation clip.
 8. **Show it.** Opening a saved book plays it back exactly as it was made, with the same fold-to-turn and pop-up, and needs no new generation. A book made live with the child is saved and shown the same way.
@@ -84,17 +85,17 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 
 | ID | Requirement | Pri | Acceptance criteria |
 |---|---|---|---|
-| S1 | Live voice storytelling with streaming speech-to-text | P0 | The parent (or kid) speaks and the text for the current page appears within the latency budget |
+| S1 | Live voice storytelling with streaming speech-to-text | P0 | The parent (or kid) speaks, and their words steer the page behind within the latency budget |
 | S2 | Typed input | P0 | Anything the parent could say, they can type. It goes through the same story engine |
 | S3 | Parent's turn / kid's turn toggle | P0 | The parent is the default speaker. Parent input is either narration or a direction, and the engine tells them apart correctly at least 95% of the time on a labelled set of 40 utterances. On kid's turn, the child's words become story content, cleaned up |
 | S4 | Kid profile and story brief | P0 | Kid profile: first name, reading level, things they love. Brief per book: which interests to use, an optional real moment, and an optional free-text "Anything you'd like this story to teach?". The engine follows the brief on every page |
-| S5 | Story engine: clean text at the chosen reading level, page breaks, a running story bible | P0 | Text meets the per-level word limits (§8.7). Characters and setting stay consistent across pages. The engine proposes page breaks, but only the parent's fold turns the page |
+| S5 | Story engine: clean text at the chosen reading level, a running story bible | P0 | Text meets the per-level word limits (§8.7). Characters and setting stay consistent across pages. One page per step of the story path; only the parent's fold turns the page |
 | S6 | Consistent characters in the art | P0 | Each character keeps a fixed reference description and reference image, used for every picture |
-| S7 | Directions and changes: the parent (or kid) says what to add or change | P0 | Revised page text within ≤ 3 s. Art and animation restart. Superseded work is cancelled. The direction carries into later pages |
-| S8 | "You continue": the AI writes the next page | P0 | The page follows the brief and every direction so far, within the same latency budget |
+| S7 | Directions: the parent (or kid) says what should happen or change | P0 | The path is re-planned from the page behind onward and still reaches an ending. The page behind is rebuilt within the §5 budget; superseded work is cancelled. The page on screen never changes |
+| S14 | Story path to an ending | P0 | From the brief, the engine plans an ordered path of pages (about 5–8) that ends the story. Every direction re-plans the rest of the path. There is always a definite ending |
 | S11 | Real-moment tone | P1 | When the brief has a real moment, the tone stays calm and hopeful and the story ends reassuringly |
-| S12 | Next page prepared early | P0 | While page N+1 is being told, page N's art and animation prompt are finished. A flip never waits on text or art that could have been ready |
-| S13 | Save and show exactly | P0 | A saved book stores each page's text, picture, pop-up layers and recorded animation clip, and keeps a copy on the device. Showing it replays all of them unchanged, with no generation calls, and works without a network. A page whose clip didn't finish recording (for example, it was turned early) is re-animated and recorded before the book is saved |
+| S12 | Page built behind the current one | P0 | While page N shows, page N+1 is fully built along the path: text, picture, pop-up layers and animation prompt. A fold shows it straight away |
+| S13 | Save and show exactly | P0 | A saved book stores each page's text, picture, pop-up layers and recorded animation clip, and keeps a copy on the device. Showing it replays all of them unchanged, with no generation calls, and works without a network. A page whose clip didn't finish recording (for example, it was turned early) is re-animated and recorded before the book is saved. Only pages that were shown are saved; the unseen page behind is dropped |
 
 ### 8.2 The page (book mode, fully open)
 
@@ -103,7 +104,7 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 | P1 | Left page: story text at the kid's reading level | P0 | Type is at least 32 pt for Listener, 28 pt for Early reader and 24 pt for Reader. Kept out of the fold and camera regions |
 | P2 | Right page: page illustration in one fixed art style | P0 | Style is consistent across the book. Faces are kept out of the fold and camera regions |
 | P3 | **Living illustration:** the right page's picture animates using Reactor's Orbis model (image-to-video anchored on the page's illustration) | P0 | Animation starts ≤ 5 s after the page is shown *(TBD until probe 0.3; not during warm-up, when the still with a slow pan shows)*. The still shows until the first frames arrive |
-| P4 | **Animation stays relevant:** motion shows only what this page's text and picture contain | P0 | The animation prompt comes only from this page's text and picture. The camera and scene stay fixed. Motion is gentle. Nothing new appears. A drift guard re-anchors the animation to the still if it wanders. On topic means an LLM judge scores frames sampled every 10 s over 60 s at 4 or more out of 5 against the page's text, on 10 pages |
+| P4 | **Animation stays relevant:** motion shows only what this page's text and picture contain | P0 | The animation prompt comes only from this page's text and picture. The camera and scene stay fixed. Motion is a gentle, repeating action of the page's moment that doesn't move the plot on. Nothing new appears. A drift guard re-anchors the animation to the still if it wanders. On topic means an LLM judge scores frames sampled every 10 s over 60 s at 4 or more out of 5 against the page's text, on 10 pages |
 | P5 | **New page, new animation:** every flip starts a fresh animation for the page now showing | P0 | A flip ends the previous page's animation; the new one begins from the new page's picture. In a saved book, the page's recorded clip plays instead (S13) |
 | P6 | Graceful fallback when the animation service is down | P0 | The right page shows the still with a slow pan-and-zoom. The child never sees an error |
 
@@ -170,7 +171,7 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 
 ## 9. Non-functional requirements
 
-- **Latency:** see the budget in §5. The spec's "under 5 s" target is met by the page text plus a placeholder. The illustration and animation arrive after that (decision D2).
+- **Latency:** see the budget in §5. Generation time is hidden by building the page behind the current one: a fold shows a ready page, and only the new page's animation starts after the fold, with its still showing first (decision D2).
 - **Privacy:** Pop! never stores audio; it's streamed to OpenAI only to transcribe it. OpenAI's API terms let it keep inputs for abuse monitoring (reportedly up to 30 days), and Gemini's unpaid tier may use prompts to improve Google's products, so the Gemini key's Google project must have billing on. Gemini's image models have no free tier anyway. The only personal data Pop! keeps is the kid's first name and the interests the parent enters, and the story text leaves out surnames, addresses, schools and phone numbers (K1 rubric). What is saved: book text, pictures, pop-up layers and animation clips.
 - **Security:** every server function requires a signed-in app user (anonymous sign-in is enough for the demo) and has per-user rate limits. API keys stay on the server; the app holds only its sign-in and short-lived Reactor tokens (1 h, at most 2 sessions). Account-wide cleanup of Orbis sessions is admin-only and never exposed to the app.
 - **Demo Reactor credit budget:** live animation is billed per second, about $0.58 per minute on Orbis Stable (about $9 for 15 live minutes). It runs only while a book is being made; showing a saved book plays recorded clips and uses no credit. Budget enough credit for rehearsals plus the demo, watch the credit meter in the debug overlay, warm and shut down sessions on purpose, and have the server clean up stray sessions. Unknown until probe 0.3: whether billing starts at connect or at generation, how long a Stable session can live, and what idle time between pages costs. If billing starts at connect, an hour of warm-up alone costs about $35.
@@ -180,7 +181,7 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 
 ## 10. Scope
 
-**MVP (the demo):** one parent-driven creation flow (story brief with interests, an optional real moment and an optional "teach something" note · voice or typed narration, directions and "You continue" · kid's turn when the child is there) · live text → art → animation per page · fold-to-turn curl · pop-up · closing to finish, with a cover · save and show exactly (recorded clips, bookshelf) · iPhone Duo only.
+**MVP (the demo):** one parent-driven creation flow (story brief with interests, an optional real moment and an optional "teach something" note · a story path to an ending, with the next page built behind the current one · voice or typed directions that re-plan it · kid's turn when the child is there) · live text → art → animation per page · fold-to-turn curl · pop-up · closing to finish, with a cover · save and show exactly (recorded clips, bookshelf) · iPhone Duo only.
 
 **Out of scope for now**
 - Physical iPhone Duo, haptics, motion sensors, camera input: the build and demo are simulator-only.
@@ -212,7 +213,7 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 | The simulator's hinge controls give only set postures, not a continuous angle | Med | High (curl and pop-up) | Phase 0 probe. In-app hinge slider as fallback |
 | Folding to turn and folding to about 90° to pop up are the same motion | High | Med | One continuous motion (D1): the turn commits first, then the page now showing pops at about 90°. Phase 0 sets the angles |
 | Apple's Vision background removal doesn't run in the simulator (reportedly needs the Neural Engine) | High | High (pop-up) | Generate pop-up layers directly (background plate plus character cutouts). No segmentation needed |
-| Art or animation latency misses the 5 s target | High | Med | Show text first, then a placeholder, then the still, then the animation. Prepare the next page early. Measure in Phase 0 |
+| Art or animation latency misses the 5 s target | High | Med | The page behind is built while the current one shows, so a fold rarely waits. If it isn't ready, show its text with "painting…". Measure in Phase 0 |
 | An unsafe picture or animation reaches a child | Low | Critical | Moderate before display. Animation prompts are generated only from checked content. Sampled frames act as a tripwire and switch back to the still |
 | The Orbis session drops mid-demo | Med | High | Reconnect with backoff. Server-side cleanup. Kill switch. Still-image fallback |
 | Mic picks up app audio (the animation's generated sound, narration) | High | Med | Mute animation audio while the mic is live. Headphones for the demo |
@@ -222,8 +223,8 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 
 | # | Decision | Recommendation |
 |---|---|---|
-| D1 | Gesture model: how folding to turn and folding to pop up coexist | One continuous motion. From flat, folding lifts the page; opening back before the turn point lets it settle; folding past it turns the page, with hysteresis so jitter can't turn two. Keep folding to about 90° and the page now showing pops up; opening flat folds it back and starts its animation. Opening the book from its cover pops page 1. Closing counts only after about 1 s. While creating, the engine proposes page breaks and the parent's fold turns the page. G0 sets the angles and the hold time from probe 0.1 |
-| D2 | What "page appears in under 5 s" means | Text plus art placeholder within 5 s; still ≤ 10 s; animation ≤ 5 s after flip, once Orbis has warmed up |
+| D1 | Gesture model: how folding to turn and folding to pop up coexist | One continuous motion. From flat, folding lifts the page; opening back before the turn point lets it settle; folding past it turns the page, with hysteresis so jitter can't turn two. Keep folding to about 90° and the page now showing pops up; opening flat folds it back and starts its animation. Opening the book from its cover pops page 1. Closing counts only after about 1 s. While creating, the page behind is already built and the parent's fold turns to it (P-04). G0 sets the angles and the hold time from probe 0.1 |
+| D2 | What "page appears in under 5 s" means | ✅ Resolved by P-04: the next page is built behind the current one, so a fold shows it at once. Page 1 text within 5 s of the brief; animation ≤ 5 s after a fold, once Orbis has warmed up |
 | D3 | Orbis Stable vs Dynamic | Stable (higher resolution, half the price); confirm in the Phase 0 spike |
 | D4 | Record each page's animation clip | ✅ Resolved by P-01: required, because saved books replay exactly. Phase 0 settles how, and the clip length per page |
 | D7 | Which vendor does what | ✅ Confirmed by Brian on 2026-09-25. Gemini: images and animation prompts only. OpenAI: speech-to-text, story, moderation, and voices for talking characters and video export. Read-along uses Apple's on-device voice |

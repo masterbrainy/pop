@@ -3,8 +3,9 @@ import SwiftUI
 
 /// The right page, as layers: the still (drifting slowly as the fallback), a saved book's
 /// recorded clip, the live Orbis video on top once its first frame arrives, and the pop-up
-/// diorama as the phone folds toward 90° (PRD P3–P6). A soft "Painting…" placeholder shows
-/// until the picture exists (PRD §7 step 3).
+/// diorama as the phone folds toward 90° (PRD P3–P6). While creating, a page is shown only
+/// once its picture is finished ("no page until painted"), so before page 1 the right page
+/// is a start card; a page whose picture can't come shows the imagine card.
 struct ArtPageView: View {
     let page: PageContent?
     var live: LivePageController? = nil
@@ -23,7 +24,7 @@ struct ArtPageView: View {
                 } else if showsImagineCard {
                     ImagineCard()
                 } else {
-                    PaintingPlaceholder(isEmpty: page?.text.isEmpty ?? true)
+                    WaitingCard()
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -69,8 +70,8 @@ struct ArtPageView: View {
         (live?.isShowingLive(page) ?? false) || (replaysClips && page?.clipPath != nil)
     }
 
-    /// A page with words but no picture that will never arrive: moderation turned it away, or
-    /// it's a saved book being read (nothing is painting then), so "Painting…" would wait forever.
+    /// A page with words but no picture that will never arrive: moderation turned it away, it
+    /// failed or ran past its deadline, or it's a saved book being read (nothing is painting then).
     private var showsImagineCard: Bool {
         guard let page, !page.text.isEmpty else { return false }
         return pictureUnavailable || live == nil
@@ -91,16 +92,17 @@ private struct ImagineCard: View {
     }
 }
 
-private struct PaintingPlaceholder: View {
-    let isEmpty: Bool
+/// The right page with no page to show yet: the start of a new book (never "Painting…": a
+/// page shows only with its picture).
+private struct WaitingCard: View {
     @State private var breathing = false
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: isEmpty ? "book.pages" : "paintbrush.pointed")
+            Image(systemName: "book.pages")
                 .font(.system(size: 44))
                 .scaleEffect(breathing ? 1.06 : 0.94)
-            Text(isEmpty ? "A new page" : "Painting…")
+            Text("A new page")
                 .font(Theme.storyFont(size: 20))
         }
         .foregroundStyle(Theme.softInk)

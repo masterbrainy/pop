@@ -375,6 +375,44 @@ Deno.test("runPathTurn does not force an early ending for an ordinary direction"
   assertEquals(result.page.isEnding, false);
 });
 
+Deno.test("runPathTurn never ends on page 1 because the opening idea mentions an ending", async () => {
+  // The first prompt (index 0, nothing shown, input set) plans the whole story;
+  // an opening like "…and we end the story with a bedtime hug" describes the
+  // story's close, not a request to stop now.
+  const deps = pathDepsFor(
+    [pathOutput({ path: ["Beat 0", "Beat 1", "Beat 2, a bedtime hug"], isEnding: false })],
+    [true],
+  );
+  const result = await runPathTurn(
+    "early_reader",
+    0,
+    emptyBible,
+    "Maya",
+    "en",
+    { text: "a bunny who finds a lost star, and we end the story with a bedtime hug", speaker: "parent" },
+    deps,
+    [],
+  );
+  assertEquals(result.bible.path, ["Beat 0", "Beat 1", "Beat 2, a bedtime hug"]);
+  assertEquals(result.page.isEnding, false);
+});
+
+Deno.test("runPathTurn still forces the ending for an end request on page 0 once that page has been shown", async () => {
+  const deps = pathDepsFor([pathOutput({ path: ["Beat 0", "Beat 1"], isEnding: false })], [true]);
+  const result = await runPathTurn(
+    "early_reader",
+    0,
+    emptyBible,
+    "Maya",
+    "en",
+    { text: "Let's finish the story here with a proper ending.", speaker: "parent" },
+    deps,
+    ["Maya finds a red kite in the meadow."],
+  );
+  assertEquals(result.bible.path, ["Beat 0"]);
+  assertEquals(result.page.isEnding, true);
+});
+
 Deno.test("runPathTurn regression (ending-reader false block, R-41 root cause): an end-request direction that moderation misflags still reaches the model and forces the ending", async () => {
   // Reproduces the actual observed bug: OpenAI's moderation model flagged
   // "Let's finish the story here with a proper ending." under its "violence"

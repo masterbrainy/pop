@@ -12,6 +12,7 @@ import { hasForeignScriptText } from "./language_check.ts";
 import { namesBrandedCharacter } from "./brand_check.ts";
 import { closeWithTheEnd } from "./ending.ts";
 import { detectsEndRequest } from "./end_request.ts";
+import { isOpeningIdea } from "./opening_idea.ts";
 import { mergeBibleCharacters, stripRepeatedEarlierText, trimToLimit } from "./story_turn.ts";
 import type { StoryBible } from "./schemas.ts";
 import type { StoryPageModelOutput, StoryPathModelOutput } from "./story_path_schema.ts";
@@ -152,9 +153,10 @@ export interface RunPathTurnDeps {
 
 /**
  * `mode: "path"` (docs/CONTRACTS.md): plans or re-plans the path from `index`
- * onward, then writes page `index`. `input` is null at the very start (the
- * brief alone drives the path); when present it's a direction, moderated
- * before any model call.
+ * onward, then writes page `index`. `input` is null when the brief alone
+ * drives the path; at index 0 with no shown pages it's the opening idea
+ * (opening_idea.ts); otherwise a direction. Either way it's moderated before
+ * any model call.
  */
 export async function runPathTurn(
   readingLevel: ReadingLevel,
@@ -181,8 +183,13 @@ export async function runPathTurn(
 
   // R-42/ending-eval product rule: a direction that explicitly asks to end
   // the story now (docs/CONTRACTS.md) forces the re-planned path to end at
-  // this very page, regardless of what the model returns.
-  const forceEnd = input !== null && detectsEndRequest(input.text);
+  // this very page, regardless of what the model returns. Never for the
+  // opening idea (opening_idea.ts): an ending it describes is how the story
+  // should close, not a request to stop on page 1. `earlierTexts` is the
+  // request's shown `pages`, so its length is the shown-page count.
+  const forceEnd = input !== null &&
+    !isOpeningIdea(index, earlierTexts.length, input.text) &&
+    detectsEndRequest(input.text);
 
   const prepare = (attempt: PathModelAttempt): PathModelAttempt => ({
     ...attempt,

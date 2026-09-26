@@ -64,8 +64,8 @@ final class HingeModel {
         if source == .device {
             // Someone moved the real hinge (Device Hub's slider): it takes back over from the
             // debug panel, so a book left in debug mode by a script still folds by hand.
-            // With no earlier reading, compare against open flat, where the Duo starts.
-            if overridden, abs(degrees - (lastDeviceAngle ?? 180)) >= Self.handBackDegrees {
+            // The first reading (sent on appear with the current state) is only the baseline (R-46).
+            if overridden, let previous = lastDeviceAngle, abs(degrees - previous) >= Self.handBackDegrees {
                 setOverride(false)
                 fileLog?.append("device hinge moved: debug override off")
             }

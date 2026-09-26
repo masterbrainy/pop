@@ -5,6 +5,11 @@
 supabase/functions/.env
 supabase/.temp/
 config/*.local.xcconfig
+config/*Secret*
+*.p8
+*.p12
+*.pem
+supabase/.branches/
 
 # Claude Code worktrees for sibling sessions
 .claude/worktrees/

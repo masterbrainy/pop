@@ -179,8 +179,21 @@ final class StoryMaker {
         }
     }
 
-    /// Listening is off from Begin until the first page is ready.
-    var canListen: Bool { !hasBegun || hasOpened }
+    /// Listening is off from Begin until the first page is ready, and while a page is read
+    /// aloud (the mic would hear the voice and take it for a direction).
+    var canListen: Bool { (!hasBegun || hasOpened) && !isReadingAloud }
+    @ObservationIgnored private var isReadingAloud = false
+
+    /// A page is being read aloud: the mic pauses (words already said still go in), and comes
+    /// back once it's done if the phone is still in the talking position.
+    func setReadingAloud(_ reading: Bool) async {
+        isReadingAloud = reading
+        if reading, isListening {
+            await stopListening()
+        } else if !reading, postureWantsListening, !isListening, canListen, !hasEnded {
+            await startListening()
+        }
+    }
 
     /// Whether a page's picture is done: painted, turned away by moderation, or failed.
     func isPictureSettled(_ page: PageContent) -> Bool {
@@ -405,7 +418,8 @@ final class StoryMaker {
 
     func toggleMic() async {
         guard isListening || canListen else {
-            note("The mic comes back on once the first page is ready.")
+            note(isReadingAloud ? "The mic comes back on once the page has been read."
+                                : "The mic comes back on once the first page is ready.")
             return
         }
         if isListening {

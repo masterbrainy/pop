@@ -102,17 +102,3 @@ extension ReadAloud: AVSpeechSynthesizerDelegate {
         Task { @MainActor in self.reset() }
     }
 }
-
-enum HighlightedText {
-    /// The page text with the spoken word marked in the accent colour and underlined.
-    static func attributed(_ text: String, highlight range: NSRange?) -> AttributedString {
-        var result = AttributedString(text)
-        guard let range, let swiftRange = Range(range, in: text),
-              let lower = AttributedString.Index(swiftRange.lowerBound, within: result),
-              let upper = AttributedString.Index(swiftRange.upperBound, within: result)
-        else { return result }
-        result[lower..<upper].foregroundColor = Theme.accent
-        result[lower..<upper].underlineStyle = .single
-        return result
-    }
-}

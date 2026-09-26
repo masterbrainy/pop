@@ -1,4 +1,4 @@
-// The `motion-prompt` function's own model prompt: read this page's still and
+// The `motion-prompt` function's own Gemini prompt: read this page's still and
 // text, describe only what's already there (CONTRACTS.md §3 `motion-prompt`).
 // Distinct from PopKit's MotionPromptBuilder, which assembles the app-side
 // Orbis prompt from this function's {scene, motion} output.
@@ -45,7 +45,6 @@ export const MOTION_RESPONSE_SCHEMA = {
     motion: { type: "string" },
   },
   required: ["scene", "motion"],
-  additionalProperties: false,
 } as const;
 
 export const motionOutputSchema = z.object({

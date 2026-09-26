@@ -24,7 +24,7 @@ public enum StoryEngine {
         guard response.action != .none else {
             return PathOutcome(book: book, page: nil, parentNote: response.parentNote)
         }
-        let updatedBook = book.with(bible: response.bible.carryingReferences(from: book.bible))
+        let updatedBook = book.with(bible: response.bible.keepingCharacters(from: book.bible))
         let page = response.page.map {
             PageContent(index: $0.index, text: $0.text, artPrompt: $0.artPrompt).with(question: $0.question)
         }

@@ -59,7 +59,7 @@ All Pop! sessions live in the sidebar group **"Pop!"**. Set your own title to yo
 - Don't copy any of these values into tracked files, docs or messages.
 
 ## Environment
-- Xcode 27.1 beta at `/Applications/Xcode-beta.app` (selected). Only the iOS 27.1 simulator runtime is installed; the device is **iPhone Duo**. Build and demo **only in the simulator**: no physical Duo, camera, haptics or motion sensors.
+- Xcode 27.1 beta at `/Applications/Xcode-beta.app` (selected). Only the iOS 27.1 simulator runtime is installed; the device is **iPhone Duo**. There's no Simulator.app in Xcode 27.1: `Xcode-beta.app/Contents/Applications/DeviceHub.app` shows simulators and has the Duo's hinge slider. Keep it open, or a booted Duo stays on the Apple logo. Build and demo **only in the simulator**: no physical Duo, camera, haptics or motion sensors.
 - Supabase CLI (logged in, linked), Docker, Node 22, Swift 6.4, `gh` (logged in as masterbrainy; private repo `masterbrainy/pop`).
 - The teammate's `jadroy/orbis-hackathon-starter` may be reused with permission (see ROADMAP §4).
 

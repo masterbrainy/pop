@@ -4,8 +4,8 @@
 
 export const RETRY_STATUSES = new Set([402, 429, 500, 502, 503, 504]);
 
-/** Waits before each retry; two retries by default. */
-export const DEFAULT_RETRY_DELAYS_MS = [1_500, 4_000];
+/** Waits before each retry: three retries over about 17 s, since a 402 burst can outlast 5 s. */
+export const DEFAULT_RETRY_DELAYS_MS = [2_000, 5_000, 10_000];
 
 export interface RetryOptions {
   delaysMs?: number[];

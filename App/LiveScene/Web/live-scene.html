@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Pop! live scene</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+    /* The native page still sits behind this view; the video fades in on its first frame. */
+    video {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; background: transparent;
+      opacity: 0; transition: opacity 300ms ease;
+    }
+    video.live { opacity: 1; }
+  </style>
+</head>
+<body>
+  <video id="scene" playsinline autoplay muted disablepictureinpicture></video>
+  <script type="module" src="live-scene.js"></script>
+</body>
+</html>

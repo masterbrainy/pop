@@ -245,14 +245,14 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 4. Install the current build (`scripts/sim.sh run`). Check that `scripts/reactor-sessions.sh list` shows 0 open sessions and there's Reactor credit for the demo (PRD §9).
 5. Open the Duo with the slider. If the inner screen stays black, click it once to wake it.
 
-**Rehearsal (T-15 min):** make a two-page book once. Mute the Mac, so Orbis sound can't reach the mic. Use a wired connection or a hotspot.
+**Rehearsal (T-15 min):** make a book once (about 4 minutes for 8 pages). Then `scripts/golden-book.sh restore` so the golden book, "Maya and the Star Stone" (8 pages), is on the shelf. Mute the Mac, so Orbis sound can't reach the mic. Use a wired connection or a hotspot.
 
 **Live:**
 1. **Bookshelf.** Tap New book, fill in the brief (first name, interests), and open.
-2. **Tell.** Type or speak page 1. The words land left; about 7 s later the picture lands right and comes alive about 10 s after that.
-3. **Direct.** Type a change ("make the kite purple"). The page is redrawn, and the character keeps its look.
-4. **Turn.** Fold slowly with the slider to about 100°, pause, then open flat. The page turns and the next page is ready for words. The in-app panel (triple tap) turns pages if the hinge lags.
-5. **You continue.** Tap the sparkles: the story writes the next bit itself.
+2. **The story starts itself.** From the brief, the story path is planned and page 1's words land left in about 5 s. The picture lands right about 10 s later and comes alive about 10 s after that. Meanwhile page 2 is built behind it.
+3. **Steer.** Type or say a direction ("give the fox a tiny red hat"). Page 1 stays as it is; the page behind is rebuilt in a few seconds (it says "Next page ready. Fold to turn" when it's done).
+4. **Turn.** Fold slowly with the slider to about 100°, pause, then open flat. The page behind appears with its picture, and the next one starts building. The in-app panel (triple tap) turns pages if the hinge lags.
+5. **The end.** After about 6–8 pages the story reaches its ending, and the banner says "The end. Close the book to finish".
 6. **Pop-up.** Fold to about 90° and hold: the scene tilts back and the characters stand up.
 7. **Finish.** Tap Finish, or close the Duo. The book gets a title and a painted cover and is saved.
 8. **Replay.** Open it from the bookshelf. The same words, pictures and clips play back with no network.

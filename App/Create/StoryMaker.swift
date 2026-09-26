@@ -74,6 +74,7 @@ final class StoryMaker {
             }
             self.note("The moving picture drifted off, so this page keeps its still picture.")
         }
+        live.onFirstFrame = { [weak self] index, ms in self?.scriptLog?.append("first frame page \(index + 1) in \(ms) ms") }
         reader.onPageChange = { [weak self] page in self?.pageChanged(to: page) }
     }
 

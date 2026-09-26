@@ -279,6 +279,7 @@ New pitch angles go here. Status: **new** · **used** (moved into the pitch) · 
 | 2026-09-25 | **Parent-first framing: "a parent makes a lesson book in minutes."** | Both | **used**: P-01 accepted 2026-09-25; the whole pitch is re-framed. The "2 minutes" version needs a measured time first: TBD (Phase 2) |
 | 2026-09-25 | **"Made at lunch, ready for bedtime."** The made-ahead flow as a one-line hook | VC | used (§6, 2:10 beat) |
 | 2026-09-25 | **Cost as a feature:** clips are recorded once, so showing a book is instant, free and works offline | Both | used (§7 unit economics, §6 2:30 beat) |
+| 2026-09-25 | **"Unlimited rereads of every book you make."** The Pro line if Pro becomes a monthly allowance of new books, while showing saved books stays unlimited | VC | **depends on P-02** (proposed) |
 | 2026-09-25 | **Lesson packs from partners:** pediatric dentists, child therapists or schools supply curated lesson packs for real moments (a B2B2C angle) | VC | new; would need a Pivots review |
 | 2026-09-25 | **Printed hardcover** of a saved book as an upsell beyond Pro (PDF export, B3, is the base) | VC | new |
 | 2026-09-25 | **Grandparent gifting:** a grandparent makes a book for a grandchild, or it's shared as a video (B4) | VC | new; remote co-creation is out of scope today |

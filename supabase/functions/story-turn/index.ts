@@ -48,6 +48,7 @@ async function handleTurn(apiKey: string, body: TurnRequest) {
       callModel: (rewriteReason) => callModelFor(apiKey, body, rewriteReason),
       safety: buildSafetyDeps(apiKey),
     },
+    body.pages.filter((page) => page.index < body.current.index).sort((a, b) => a.index - b.index).map((page) => page.text),
   );
   return data;
 }

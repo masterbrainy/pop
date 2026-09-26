@@ -94,6 +94,60 @@ export function keepExistingWords(output: StoryModelOutput, currentText: string)
   return { ...output, pageText: `${existing} ${output.pageText.trim()}` };
 }
 
+/**
+ * Keeps a safe page within the reading level's word limit without refusing it. A safe
+ * addition that overflows a full page moves onto a new page with only the new words; any
+ * other overlong page is cut to whole sentences (or, for one long sentence, to the limit).
+ */
+export function fitToPage(output: StoryModelOutput, currentText: string, level: ReadingLevel): StoryModelOutput {
+  if (output.action === "none" || withinWordLimit(output.pageText, level)) return output;
+  const existing = currentText.trim().split(/\s+/).filter(Boolean);
+  const words = output.pageText.trim().split(/\s+/).filter(Boolean);
+  if (output.action === "append" && existing.length > 0 && words.length > existing.length) {
+    const added = words.slice(existing.length).join(" ");
+    return { ...output, action: "new_page", pageText: trimToLimit(added, level) };
+  }
+  return { ...output, pageText: trimToLimit(output.pageText, level) };
+}
+
+function trimToLimit(text: string, level: ReadingLevel): string {
+  if (withinWordLimit(text, level)) return text.trim();
+  const sentences = text.trim().split(/(?<=[.!?])\s+/);
+  let kept = "";
+  for (const sentence of sentences) {
+    const candidate = kept ? `${kept} ${sentence}` : sentence;
+    if (!withinWordLimit(candidate, level)) break;
+    kept = candidate;
+  }
+  if (kept) return kept;
+  const words = text.trim().split(/\s+/);
+  let cut = words.length;
+  while (cut > 1 && !withinWordLimit(words.slice(0, cut).join(" "), level)) cut -= 1;
+  return `${words.slice(0, cut).join(" ").replace(/[,;:]$/, "")}.`.replace(/([.!?])\.$/, "$1");
+}
+
+/**
+ * The model sometimes starts a page by retelling the pages before it. Strip earlier pages'
+ * words from the front of the new text (in order, ignoring case, spacing and punctuation),
+ * unless that would leave the page empty.
+ */
+export function dropRepeatedEarlierText(output: StoryModelOutput, earlierTexts: string[]): StoryModelOutput {
+  if (output.action === "none") return output;
+  const words = output.pageText.trim().split(/\s+/).filter(Boolean);
+  const bare = (word: string) => word.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+  let start = 0;
+  for (const earlier of earlierTexts) {
+    const earlierWords = earlier.trim().split(/\s+/).filter(Boolean).map(bare);
+    if (earlierWords.length === 0) continue;
+    const next = words.slice(start, start + earlierWords.length).map(bare);
+    if (next.length === earlierWords.length && next.every((word, i) => word === earlierWords[i])) {
+      start += earlierWords.length;
+    }
+  }
+  if (start === 0 || start >= words.length) return output;
+  return { ...output, pageText: words.slice(start).join(" ") };
+}
+
 /** The safe fallback when even the rewrite fails the gate (PRD §8.6 responses). */
 function noneResponse(
   currentIndex: number,
@@ -131,10 +185,11 @@ export async function runStoryTurn(
   currentText: string,
   existingBible: StoryBible,
   deps: StoryTurnDeps,
+  earlierTexts: string[] = [],
 ): Promise<StoryTurnResponseData> {
   const keepPage = (attempt: ModelAttempt): ModelAttempt => ({
     ...attempt,
-    output: keepExistingWords(attempt.output, currentText),
+    output: fitToPage(keepExistingWords(dropRepeatedEarlierText(attempt.output, earlierTexts), currentText), currentText, readingLevel),
   });
   const first = keepPage(await deps.callModel(null));
   const firstGate = await passesGate(first.output, readingLevel, deps.safety);

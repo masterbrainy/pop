@@ -33,6 +33,7 @@ final class LiveSceneBridge: NSObject {
     let events: AsyncStream<SceneEvent>
     private let sink: AsyncStream<SceneEvent>.Continuation
     private let schemeHandler: SceneSchemeHandler
+    private let clips = ClipAssembler()
     private(set) var pageLoaded = false
 
     override init() {
@@ -57,10 +58,11 @@ final class LiveSceneBridge: NSObject {
         super.init()
         webView.navigationDelegate = self
         webView.configuration.userContentController.add(WeakScriptMessageHandler(target: self), name: "pop")
+        webView.configuration.userContentController.add(WeakScriptMessageHandler(target: self), name: "popClip")
     }
 
     /// Loads the page and waits for its `loaded` event.
-    func load(timeout: Duration = .seconds(10)) async throws {
+    func load(timeout: Duration = .seconds(45)) async throws {
         if pageLoaded { return }
         webView.load(URLRequest(url: SceneSchemeHandler.pageURL))
         let clock = ContinuousClock()
@@ -105,6 +107,23 @@ final class LiveSceneBridge: NSObject {
         _ = try await call("setFit", ["fit": fit])
     }
 
+    /// Starts recording the video now playing; it stops by itself after `maxSeconds`.
+    func startClip(maxSeconds: Int) async throws {
+        _ = try await call("startClip", ["maxSeconds": maxSeconds])
+    }
+
+    /// Stops recording and returns the clip once all of it is on disk.
+    func stopClip() async throws -> ClipAssembler.Clip {
+        let result = try await call("stopClip") as? [String: Any] ?? [:]
+        guard let clipId = result["clipId"] as? String else { throw ClipAssembler.ClipError.malformed }
+        return try await clips.clip(clipId)
+    }
+
+    /// Throws away a clip in progress (the page turned before it completed).
+    func cancelClip() async {
+        _ = try? await call("cancelClip")
+    }
+
     /// Ends the Orbis session (the SDK's disconnect always ends it on the server).
     func disconnect() async throws {
         _ = try await call("disconnect")
@@ -139,6 +158,10 @@ final class LiveSceneBridge: NSObject {
 
 extension LiveSceneBridge: WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "popClip" {
+            clips.receive(message.body)
+            return
+        }
         guard let event = SceneEvent(body: message.body) else {
             AppLog.scene.error("live scene sent an unknown message")
             return

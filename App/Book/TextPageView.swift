@@ -7,6 +7,8 @@ struct TextPageView: View {
     let text: String
     let level: ReadingLevel
     let pageNumber: Int
+    /// The word read-along is saying right now.
+    var highlight: NSRange? = nil
     var placeholder = "Tell the story, and the words appear here."
 
     private var fontSize: Double { level.minimumTextSize + 4 }
@@ -16,7 +18,7 @@ struct TextPageView: View {
             let insets = ReservedRegionInsets.insets(for: proxy)
             ZStack(alignment: .bottom) {
                 Theme.paper
-                Text(text.isEmpty ? placeholder : text)
+                Text(text.isEmpty ? AttributedString(placeholder) : HighlightedText.attributed(text, highlight: highlight))
                     .font(Theme.storyFont(size: fontSize))
                     .foregroundStyle(text.isEmpty ? Theme.softInk : Theme.ink)
                     .lineSpacing(fontSize * 0.25)

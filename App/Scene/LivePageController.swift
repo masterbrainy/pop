@@ -5,7 +5,9 @@ import PopKit
 /// Brings the page on screen to life with Orbis (ROADMAP Phase 3): warm up on a new book,
 /// run reset → set_image → set_prompt → start for each page shown, crossfade from the still
 /// to video on the first frame, record the page's clip, and fall back to the slow pan if
-/// Orbis is off or fails. `SessionController` owns the lifecycle and reconnects.
+/// Orbis is off or fails. `SessionController` owns the lifecycle and reconnects. While a page
+/// is live, sampled frames go through moderation (`FrameTripwire`); a flagged frame sends the
+/// page back to its still for good.
 @MainActor
 @Observable
 final class LivePageController {
@@ -14,6 +16,8 @@ final class LivePageController {
         case warming
         case preparing(page: Int)
         case live(page: Int)
+        /// A frame on this page was flagged, so the page keeps its still.
+        case held(page: Int)
         case fallback(String)
     }
 
@@ -22,10 +26,18 @@ final class LivePageController {
 
     private(set) var status: Status = .off
     private(set) var credits: Double = 0
+    private(set) var framesChecked = 0
+    private(set) var framesFlagged = 0
     let bridge = LiveSceneBridge()
 
     /// Called with (page id, clip file) when a page's clip is recorded.
     @ObservationIgnored var onClip: @MainActor (UUID, URL) -> Void = { _, _ in }
+    /// Called with the page id when a sampled frame on that page is flagged.
+    @ObservationIgnored var onFrameFlagged: @MainActor (UUID) -> Void = { _ in }
+    @ObservationIgnored private var tripwire: FrameTripwire?
+    @ObservationIgnored private var tripwireTask: Task<Void, Never>?
+    /// Page versions ("id#version") that stay on their still after a flagged frame.
+    @ObservationIgnored private var heldPages: Set<String> = []
     @ObservationIgnored private var session: SessionController?
     @ObservationIgnored private var eventsTask: Task<Void, Never>?
     @ObservationIgnored private var clipTask: Task<Void, Never>?
@@ -51,6 +63,7 @@ final class LivePageController {
         status = .warming
         let session = SessionController(server: server, transport: BridgeTransport(bridge: bridge))
         self.session = session
+        tripwire = FrameTripwire(server: server)
         listen()
         watchSession()
         do {
@@ -64,6 +77,12 @@ final class LivePageController {
     /// Animates `page` if it has a still and a motion prompt; otherwise keeps the still.
     func show(_ page: PageContent, still: Data, prompt: String) async {
         guard let session else { return }
+        guard !isHeld(page) else {
+            await stopClip()
+            currentPage = page
+            status = .held(page: page.index)
+            return
+        }
         if currentPage?.id == page.id, currentPage?.version == page.version, isLive || status == .preparing(page: page.index) { return }
         await stopClip()
         currentPage = page
@@ -78,7 +97,13 @@ final class LivePageController {
         if case .live = status { status = .warming }
     }
 
+    /// Whether a flagged frame keeps this version of `page` on its still.
+    func isHeld(_ page: PageContent) -> Bool {
+        heldPages.contains(Self.key(page))
+    }
+
     func kill() async {
+        tripwireTask?.cancel()
         clipTask?.cancel()
         eventsTask?.cancel()
         pollTask?.cancel()
@@ -89,6 +114,8 @@ final class LivePageController {
     }
 
     private func stopClip() async {
+        tripwireTask?.cancel()
+        tripwireTask = nil
         clipTask?.cancel()
         clipTask = nil
         await bridge.cancelClip()
@@ -111,6 +138,7 @@ final class LivePageController {
             guard let page = currentPage else { return }
             status = .live(page: page.index)
             recordClip(for: page)
+            watchFrames(on: page)
         case let .error(code, message, recoverable):
             AppLog.scene.error("live scene error \(code, privacy: .public): \(message, privacy: .public)")
             if recoverable { await session?.reportDisconnected(message) }
@@ -138,6 +166,47 @@ final class LivePageController {
             }
         }
     }
+
+    private func watchFrames(on page: PageContent) {
+        tripwireTask?.cancel()
+        guard let tripwire else { return }
+        tripwireTask = Task { [weak self] in
+            var index = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: FrameTripwire.delay(beforeCheck: index))
+                index += 1
+                guard let self, !Task.isCancelled, self.currentPage?.id == page.id, self.isLive else { return }
+                guard let frame = try? await self.bridge.sampleFrame(maxSide: FrameTripwire.maxSide) else { continue }
+                let verdict = await tripwire.check(base64: frame.base64, mimeType: frame.mimeType)
+                self.framesChecked += 1
+                switch verdict {
+                case .clear:
+                    break
+                case let .unchecked(reason):
+                    AppLog.scene.error("frame check failed: \(reason, privacy: .public)")
+                case let .flagged(categories):
+                    AppLog.scene.error("frame flagged on page \(page.index): \(categories.joined(separator: ","), privacy: .public)")
+                    await self.hold(page)
+                    return
+                }
+            }
+        }
+    }
+
+    /// A flagged frame: stop the video, drop the clip, and keep the page's still.
+    private func hold(_ page: PageContent) async {
+        framesFlagged += 1
+        heldPages.insert(Self.key(page))
+        clipTask?.cancel()
+        clipTask = nil
+        await bridge.cancelClip()
+        try? await bridge.pause()
+        guard currentPage?.id == page.id else { return }
+        status = .held(page: page.index)
+        onFrameFlagged(page.id)
+    }
+
+    private static func key(_ page: PageContent) -> String { "\(page.id.uuidString)#\(page.version)" }
 
     /// Mirrors the session's phase into `status` and the credit meter.
     private func watchSession() {

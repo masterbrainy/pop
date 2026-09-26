@@ -22,6 +22,7 @@ const popScene = {
   startClip: (args: { maxSeconds: number }) => controller.startClip(args.maxSeconds),
   stopClip: () => controller.stopClip(),
   cancelClip: () => controller.cancelClip(),
+  sampleFrame: (args: { maxSide: number }) => controller.sampleFrame(args.maxSide),
   disconnect: () => controller.disconnect(),
 };
 

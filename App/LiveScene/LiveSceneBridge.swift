@@ -124,6 +124,15 @@ final class LiveSceneBridge: NSObject {
         _ = try? await call("cancelClip")
     }
 
+    /// The frame now showing as a small JPEG (base64), for the moderation tripwire.
+    func sampleFrame(maxSide: Int) async throws -> (base64: String, mimeType: String) {
+        let result = try await call("sampleFrame", ["maxSide": maxSide]) as? [String: Any] ?? [:]
+        guard let base64 = result["base64"] as? String, let mimeType = result["mimeType"] as? String else {
+            throw BridgeError.script(function: "sampleFrame", message: "no frame returned")
+        }
+        return (base64, mimeType)
+    }
+
     /// Ends the Orbis session (the SDK's disconnect always ends it on the server).
     func disconnect() async throws {
         _ = try await call("disconnect")

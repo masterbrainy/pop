@@ -41,6 +41,9 @@ final class StoryMaker {
         self.settings = settings
         self.services = services
         live.onClip = { [weak self] pageId, url in self?.attachClip(url, to: pageId) }
+        live.onFrameFlagged = { [weak self] _ in
+            self?.note("The moving picture drifted off, so this page keeps its still picture.")
+        }
         reader.onPageChange = { [weak self] page in self?.pageChanged(to: page) }
     }
 
@@ -86,7 +89,7 @@ final class StoryMaker {
             }
             try? await Task.sleep(for: .milliseconds(300))
             while isWorking { try? await Task.sleep(for: .milliseconds(250)) }
-            AppLog.scene.info("scripted turn done: \(turn, privacy: .public) · page \(self.reader.pageNumber) · \(self.reader.currentPage?.text ?? "", privacy: .public)")
+            AppLog.scene.info("scripted turn done · page \(self.reader.pageNumber)")
             let page = reader.currentPage
             log.append("turn '\(turn)' → page \(reader.pageNumber) still=\(page?.stillPath != nil) motion=\(page.map { motionPrompts[$0.id] != nil } ?? false) pending=\(reader.pendingNext != nil): \(page?.text ?? "")")
         }
@@ -264,7 +267,7 @@ final class StoryMaker {
     func completeClips(perPage: Duration = .seconds(45)) async -> (recorded: Int, missing: Int) {
         var recorded = 0
         var missing = 0
-        for page in reader.book.pages where page.clipPath == nil && !page.text.isEmpty {
+        for page in reader.book.pages where page.clipPath == nil && !page.text.isEmpty && !live.isHeld(page) {
             guard live.canAnimate, let prompt = motionPrompts[page.id], let data = StillImageLoader.data(for: page.stillPath) else {
                 missing += 1
                 continue
@@ -279,6 +282,11 @@ final class StoryMaker {
         }
         scriptLog?.append("completed clips: recorded \(recorded), still missing \(missing)")
         return (recorded, missing)
+    }
+
+    /// Adds a line to the scripted run's log (automation only).
+    func record(_ line: String) {
+        scriptLog?.append(line)
     }
 
     private func attachClip(_ url: URL, to pageId: UUID) {

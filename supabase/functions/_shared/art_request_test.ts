@@ -50,9 +50,10 @@ Deno.test("buildArtPrompt lists every character for page/cover kinds", () => {
   assertEquals(prompt.includes("Sara"), true);
 });
 
-Deno.test("buildArtPrompt always ends with the caller's own prompt", () => {
-  const prompt = buildArtPrompt("cover", "the whole gang on an adventure", []);
-  assertEquals(prompt.endsWith("the whole gang on an adventure"), true);
+Deno.test("buildArtPrompt puts the caller's own prompt last before the closing style line", () => {
+  const lines = buildArtPrompt("cover", "the whole gang on an adventure", []).split("\n\n");
+  assertEquals(lines[lines.length - 2], "the whole gang on an adventure");
+  assertEquals(lines[lines.length - 1].startsWith("Render this strictly as a"), true);
 });
 
 Deno.test("STANDARD_DIMENSIONS matches CONTRACTS.md's example for 16:9", () => {
@@ -70,9 +71,9 @@ Deno.test("buildArtPrompt redraws a drawing onto the same magenta backdrop as cu
   assertEquals(prompt.includes("shapes, colours and distinguishing features recognisable"), true);
 });
 
-Deno.test("buildArtPrompt ends a drawing prompt with the kid's own description", () => {
-  const prompt = buildArtPrompt("drawing", "a purple cat with wings", []);
-  assertEquals(prompt.endsWith("a purple cat with wings"), true);
+Deno.test("buildArtPrompt keeps the kid's own description in a drawing prompt", () => {
+  const lines = buildArtPrompt("drawing", "a purple cat with wings", []).split("\n\n");
+  assertEquals(lines[lines.length - 2], "a purple cat with wings");
 });
 
 Deno.test("drawingInlineImage returns undefined for every kind except drawing", () => {

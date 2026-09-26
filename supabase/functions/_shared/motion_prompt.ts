@@ -18,7 +18,8 @@ export function buildMotionPromptInstruction(pageText: string): string {
     'Respond with only JSON: {"scene": string, "motion": string}.',
     `"scene": start with exactly this phrase: "${ART_STYLE_PREFIX}", then continue with one or two plain sentences describing what is visibly in this picture (setting, characters, mood). For example: "${ART_STYLE_PREFIX} of a dinosaur in a sunny meadow."`,
     '"motion": ONE gentle motion clause using only things already in the scene (for example, "the leaves sway softly"). ' +
-      "Nothing new may enter the scene. Keep it calm, continuous, and suitable for a young child.",
+      "Nothing new may enter the scene. Keep it calm, continuous, and suitable for a young child. " +
+      "Never name a camera move, a medium or a visual style in either field; the picture-book look is fixed.",
   ].join("\n");
 }
 

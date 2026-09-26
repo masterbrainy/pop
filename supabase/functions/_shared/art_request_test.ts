@@ -56,7 +56,7 @@ Deno.test("buildArtPrompt always ends with the caller's own prompt", () => {
 });
 
 Deno.test("STANDARD_DIMENSIONS matches CONTRACTS.md's example for 16:9", () => {
-  assertEquals(STANDARD_DIMENSIONS["16:9"], { width: 1536, height: 1024 });
+  assertEquals(STANDARD_DIMENSIONS["16:9"], { width: 1344, height: 768 });
 });
 
 Deno.test("referencePathsFor: drawing never includes any existing character reference", () => {

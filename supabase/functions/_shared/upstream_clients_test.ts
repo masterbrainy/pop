@@ -1,10 +1,10 @@
-// IMP-10: the OpenAI chat, moderation and image clients each send a
+// IMP-10: the OpenAI chat and moderation clients and the Gemini image client each send a
 // deadline signal with every request and retry a 503 once. `fetch` is stubbed, so
 // no network call (and no paid API) is made.
 import { assert, assertEquals, assertRejects } from "jsr:@std/assert@1";
 import { chatJSON } from "./openai_chat.ts";
 import { moderateText } from "./openai_moderation.ts";
-import { generateImage, ImageBlockedError } from "./openai_images.ts";
+import { generateImage } from "./gemini_client.ts";
 import { PopError } from "./errors.ts";
 
 async function withStubbedFetch(replies: Response[], run: () => Promise<void>): Promise<(AbortSignal | undefined)[]> {
@@ -60,7 +60,7 @@ async function withRecordedFetch(replies: Response[], run: () => Promise<void>):
   return calls;
 }
 
-const picture = () => json({ data: [{ b64_json: "aW1n" }] });
+const picture = () => json({ candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "aW1n" } }] } }] });
 
 Deno.test("chatJSON sends a picture alongside the text when given one", async () => {
   const calls = await withRecordedFetch([json({ choices: [{ message: { content: "{}" } }] })], async () => {
@@ -76,47 +76,28 @@ Deno.test("chatJSON sends a picture alongside the text when given one", async ()
   ]);
 });
 
-Deno.test("generateImage paints a 16:9 page at OpenAI's 1536x1024 with no references", async () => {
+Deno.test("generateImage asks Gemini for the page's 16:9 shape", async () => {
   let base64 = "";
   const calls = await withRecordedFetch([picture()], async () => {
     base64 = (await generateImage("key", { prompt: "a fox", aspectRatio: "16:9" })).base64;
   });
   assertEquals(base64, "aW1n");
-  assertEquals(calls[0].url, "https://api.openai.com/v1/images/generations");
-  assertEquals(JSON.parse(String(calls[0].init?.body)).size, "1536x1024");
+  assert(calls[0].url.endsWith(":generateContent"));
+  assertEquals(JSON.parse(String(calls[0].init?.body)).generationConfig.imageConfig.aspectRatio, "16:9");
 });
 
-Deno.test("generateImage sends reference images to the edits endpoint", async () => {
-  const calls = await withRecordedFetch([picture()], async () => {
-    await generateImage("key", {
-      prompt: "a fox", aspectRatio: "1:1",
-      referenceImages: [{ mimeType: "image/png", data: "aW1n" }, { mimeType: "image/jpeg", data: "aW1n" }],
-    });
-  });
-  assertEquals(calls[0].url, "https://api.openai.com/v1/images/edits");
-  const form = calls[0].init?.body as FormData;
-  assertEquals(form.getAll("image[]").length, 2);
-  assertEquals(form.get("size"), "1024x1024");
-});
-
-Deno.test("generateImage retries a 503 once, with a deadline on each attempt", async () => {
-  const signals = await withStubbedFetch([busy(), picture()], async () => {
+Deno.test("generateImage retries a 402 burst once, with a deadline on each attempt", async () => {
+  const signals = await withStubbedFetch([new Response("busy", { status: 402 }), picture()], async () => {
     await generateImage("key", { prompt: "a fox", aspectRatio: "16:9" });
   });
   assertEquals(signals.length, 2);
   assert(signals.every((signal) => signal instanceof AbortSignal));
 });
 
-Deno.test("generateImage reports OpenAI's own safety refusal as ImageBlockedError", async () => {
-  const blocked = new Response(JSON.stringify({ error: { code: "moderation_blocked" } }), { status: 400 });
-  await withStubbedFetch([blocked], async () => {
-    await assertRejects(() => generateImage("key", { prompt: "x", aspectRatio: "16:9" }), ImageBlockedError);
-  });
-});
-
-Deno.test("generateImage fails as upstream on any other error", async () => {
-  await withStubbedFetch([new Response("nope", { status: 401 })], async () => {
+Deno.test("generateImage gives up as upstream after one retry", async () => {
+  const signals = await withStubbedFetch([busy(), busy(), picture()], async () => {
     const error = await assertRejects(() => generateImage("key", { prompt: "x", aspectRatio: "16:9" }), PopError);
     assertEquals(error.code, "upstream");
   });
+  assertEquals(signals.length, 2);
 });

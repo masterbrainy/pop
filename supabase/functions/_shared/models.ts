@@ -16,10 +16,9 @@ export const TTS_MODEL = "gpt-4o-mini-tts";
 // this key's model list.
 export const TRANSCRIBE_MODEL = "gpt-4o-transcribe";
 
-// P-05 (accepted 2026-09-26): OpenAI paints every picture; measured 12-13 s for a
-// 1536x1024 page at medium quality, about $0.011 each (docs/PIVOTS.md P-05).
-export const IMAGE_MODEL = "gpt-image-2.5-flare";
-export const IMAGE_QUALITY = "medium";
+// Gemini paints every picture (Brian switched back from OpenAI on 2026-09-26):
+// a 16:9 page is 1344x768 in about 5-6 s.
+export const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
 // motion-prompt reads the page's still and text with the story model.
 export const MOTION_MODEL = STORY_MODEL;
 

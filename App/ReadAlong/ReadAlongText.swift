@@ -9,6 +9,8 @@ struct ReadAlongText: View {
     /// The range (in `text`) of the word being spoken, or nil when nothing is being read.
     let highlight: NSRange?
     var ballSize: Double = 14
+    /// The spoken word's colour and the ball's.
+    var accent: Color = Theme.accent
 
     @State private var ballIndex: Double = 0
 
@@ -21,7 +23,7 @@ struct ReadAlongText: View {
 
     var body: some View {
         styledText
-            .textRenderer(BouncingBallRenderer(ballIndex: ballIndex, showsBall: spokenWord != nil, ballSize: ballSize))
+            .textRenderer(BouncingBallRenderer(ballIndex: ballIndex, showsBall: spokenWord != nil, ballSize: ballSize, color: accent))
             .onChange(of: spokenWord, initial: true) { old, new in
                 guard let new else { return }
                 // The first word of a reading starts under the ball; later words hop to it.
@@ -46,7 +48,7 @@ struct ReadAlongText: View {
             }
             var word = Text(verbatim: source.substring(with: range)).customAttribute(WordIndex(index: index))
             if index == spokenWord {
-                word = word.foregroundStyle(Theme.accent).underline()
+                word = word.foregroundStyle(accent).underline()
             }
             result = Text("\(result)\(word)")
             cursor = range.location + range.length
@@ -74,6 +76,7 @@ private struct BouncingBallRenderer: TextRenderer {
     var ballIndex: Double
     var showsBall: Bool
     var ballSize: Double
+    var color: Color
 
     var animatableData: Double {
         get { ballIndex }
@@ -110,6 +113,6 @@ private struct BouncingBallRenderer: TextRenderer {
         let top = from.minY + (to.minY - from.minY) * progress
         let hop = sin(progress * .pi) * hopHeight
         let ball = CGRect(x: x - ballSize / 2, y: top - gap - ballSize - hop, width: ballSize, height: ballSize)
-        context.fill(Circle().path(in: ball), with: .color(Theme.accent))
+        context.fill(Circle().path(in: ball), with: .color(color))
     }
 }

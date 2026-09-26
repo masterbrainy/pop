@@ -2,7 +2,7 @@ import PopKit
 import SwiftUI
 
 /// The left page: the story text at the kid's reading level (PRD P1), padded clear of the
-/// fold and camera.
+/// fold and camera, on paper in the pastels of the page's own illustration.
 struct TextPageView: View {
     let text: String
     let level: ReadingLevel
@@ -12,6 +12,10 @@ struct TextPageView: View {
     var placeholder = "Tell the story, and the words appear here."
     /// The co-pilot strip's question for the parent to ask (PRD C3); shown while reading.
     var question: String? = nil
+    /// The page's illustration: its colours tint the paper, ink and read-along accent.
+    var backdrop: UIImage? = nil
+    /// Caches the backdrop's colours; the still's path.
+    var backdropKey: String? = nil
 
     private var fontSize: Double { level.minimumTextSize + 4 }
 
@@ -21,18 +25,20 @@ struct TextPageView: View {
             // The closed Duo's outer screen gives each page half of 466×678 pt; there the
             // text shrinks further and the margins tighten so the whole page still fits.
             let compact = proxy.size.height < 420
+            let palette = PagePalette.of(backdrop, key: backdropKey)
             ZStack(alignment: .bottom) {
-                Theme.paper
+                PastelPageBackground(palette: palette, image: backdrop)
+                    .animation(.smooth(duration: 0.8), value: backdropKey)
                 Group {
                     if text.isEmpty {
                         Text(placeholder)
                     } else {
                         // The spoken word is highlighted, with a ball bouncing along above it.
-                        ReadAlongText(text: text, highlight: highlight, ballSize: compact ? 10 : 14)
+                        ReadAlongText(text: text, highlight: highlight, ballSize: compact ? 10 : 14, accent: palette.accent)
                     }
                 }
                     .font(Theme.storyFont(size: compact ? fontSize * 0.8 : fontSize))
-                    .foregroundStyle(text.isEmpty ? Theme.softInk : Theme.ink)
+                    .foregroundStyle(text.isEmpty ? Theme.softInk : palette.ink)
                     .lineSpacing(fontSize * (compact ? 0.12 : 0.25))
                     // P1: never smaller than the level's minimum size on the open book.
                     .minimumScaleFactor(compact ? 0.5 : level.minimumTextSize / fontSize)

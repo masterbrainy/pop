@@ -120,6 +120,8 @@ final class StoryMaker {
     @ObservationIgnored private var noteTask: Task<Void, Never>?
     @ObservationIgnored private var scriptLog: FileLog?
     @ObservationIgnored private var layerTasks: [UUID: Task<Void, Never>] = [:]
+    /// The parent was told once that the live session is in use elsewhere.
+    @ObservationIgnored private var toldLiveBusy = false
     /// Characters whose reference sheet is being made (or was tried).
     @ObservationIgnored private var referencesRequested: Set<String> = []
     /// Set by the book view: a scripted "finish" step ends and saves the book.
@@ -139,6 +141,11 @@ final class StoryMaker {
         hasOpened = underWay
         sttSecrets = services.server.map(Self.speechSecrets)
         live.onClip = { [weak self] pageId, url in self?.attachClip(url, to: pageId) }
+        live.onLiveBusy = { [weak self] in
+            guard let self, !self.toldLiveBusy else { return }
+            self.toldLiveBusy = true
+            self.note("Moving pictures are busy on another device, so pages stay still for now. They come alive once it's free.")
+        }
         live.onFrameFlagged = { [weak self] pageId in
             guard let self else { return }
             // A clip saved before the flag must not replay in the finished book (R-38).

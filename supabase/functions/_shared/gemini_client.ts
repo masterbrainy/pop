@@ -7,6 +7,7 @@ import { fetchWithOneRetry, fetchWithRetry, UPSTREAM_TIMEOUTS_MS } from "./retry
 import { describeGeminiError, geminiErrorCode } from "./gemini_error.ts";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const IMAGE_RETRY_DELAYS_MS = [2_000];
 
 export interface InlineImage {
   mimeType: string;
@@ -50,8 +51,9 @@ export async function generateImage(
     parts.push({ inlineData: { mimeType: image.mimeType, data: image.data } });
   }
 
-  // The image service sometimes turns a burst of calls away (402/429); retry briefly.
-  // Each attempt has its own deadline, so one hung call can't hold the page on "Painting…".
+  // The image service sometimes turns a burst of calls away (402/429); retry once after
+  // 2 s. Each attempt has its own deadline, so one picture stays well under the app's
+  // wait and Supabase's limit (R-49); the app retries a failed picture itself.
   const requestBody = JSON.stringify({
     contents: [{ parts }],
     generationConfig: {
@@ -68,7 +70,7 @@ export async function generateImage(
       },
       body: requestBody,
       signal,
-    }), { timeoutMs: UPSTREAM_TIMEOUTS_MS.geminiImage, label: "Image generation" });
+    }), { delaysMs: IMAGE_RETRY_DELAYS_MS, timeoutMs: UPSTREAM_TIMEOUTS_MS.image, label: "Image generation" });
   if (!res.ok) {
     const body = await res.text();
     // The full reason stays in the server log; it can name the Cloud project.

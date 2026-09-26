@@ -46,6 +46,9 @@ final class LivePageController {
     @ObservationIgnored var onClip: @MainActor (UUID, URL) -> Void = { _, _ in }
     /// Called with the page id when a sampled frame on that page is flagged.
     @ObservationIgnored var onFrameFlagged: @MainActor (UUID) -> Void = { _ in }
+    /// Called when Reactor turns the session away because the account's one live session is in
+    /// use elsewhere (another device or a session left open), so pages keep their stills.
+    @ObservationIgnored var onLiveBusy: @MainActor () -> Void = {}
     /// Called with (page index, ms from show to its first live frame).
     @ObservationIgnored var onFirstFrame: @MainActor (Int, Int) -> Void = { _, _ in }
     @ObservationIgnored private var shownAt: ContinuousClock.Instant?
@@ -242,6 +245,7 @@ final class LivePageController {
             watchFrames(on: page)
         case let .error(code, message, recoverable):
             AppLog.scene.error("live scene error \(code, privacy: .public): \(message, privacy: .public)")
+            if code == "RATE_LIMITED" { onLiveBusy() }
             if recoverable { await session?.reportDisconnected(message) }
         case let .status(value) where value == "disconnected":
             if currentPage != nil { await session?.reportDisconnected("disconnected") }

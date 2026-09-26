@@ -17,6 +17,10 @@ public struct EmptyPayload: Codable, Equatable, Sendable {
 public enum StoryTurnMode: String, Codable, Sendable, Equatable {
     case turn
     case title
+    /// Plan (or re-plan from `index`, following `input`) the story path, and write page `index` (P-04).
+    case path
+    /// Write page `index` along the existing path.
+    case page
 }
 
 public enum InputKind: String, Codable, Sendable, Equatable {
@@ -95,12 +99,14 @@ public struct StoryTurnRequest: Codable, Sendable, Equatable {
     public let pages: [StoryTurnPageRef]
     /// Present for `mode: .turn`; omitted for `mode: .title`, which only needs the finished pages.
     public let current: StoryTurnCurrent?
-    /// Present for `mode: .turn`; omitted for `mode: .title`.
+    /// Present for `mode: .turn`, and for `mode: .path` when it follows a direction.
     public let input: StoryTurnInput?
+    /// The page to write, for `mode: .path` and `mode: .page`.
+    public let index: Int?
 
     public init(
         mode: StoryTurnMode, bookId: UUID, kid: StoryTurnKid, brief: StoryBrief, settings: ParentSettings,
-        bible: StoryBible, pages: [StoryTurnPageRef], current: StoryTurnCurrent? = nil, input: StoryTurnInput? = nil
+        bible: StoryBible, pages: [StoryTurnPageRef], current: StoryTurnCurrent? = nil, input: StoryTurnInput? = nil, index: Int? = nil
     ) {
         self.mode = mode
         self.bookId = bookId
@@ -111,6 +117,7 @@ public struct StoryTurnRequest: Codable, Sendable, Equatable {
         self.pages = pages
         self.current = current
         self.input = input
+        self.index = index
     }
 
     /// A `mode: "turn"` request.
@@ -136,13 +143,29 @@ public struct StoryTurnPageResult: Codable, Sendable, Equatable {
     public let breakSuggested: Bool
     /// One question for the parent to ask about the page (PRD C3).
     public let question: String?
+    /// Whether this page ends the story (`path` and `page` modes).
+    public let isEnding: Bool?
 
-    public init(index: Int, text: String, artPrompt: String, breakSuggested: Bool, question: String? = nil) {
+    public init(index: Int, text: String, artPrompt: String, breakSuggested: Bool = false, question: String? = nil, isEnding: Bool? = nil) {
         self.index = index
         self.text = text
         self.artPrompt = artPrompt
         self.breakSuggested = breakSuggested
         self.question = question
+        self.isEnding = isEnding
+    }
+
+    private enum CodingKeys: String, CodingKey { case index, text, artPrompt, breakSuggested, question, isEnding }
+
+    /// `path` and `page` responses carry no `breakSuggested`.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        index = try container.decode(Int.self, forKey: .index)
+        text = try container.decode(String.self, forKey: .text)
+        artPrompt = try container.decode(String.self, forKey: .artPrompt)
+        breakSuggested = try container.decodeIfPresent(Bool.self, forKey: .breakSuggested) ?? false
+        question = try container.decodeIfPresent(String.self, forKey: .question)
+        isEnding = try container.decodeIfPresent(Bool.self, forKey: .isEnding)
     }
 }
 
@@ -150,6 +173,8 @@ public enum StoryTurnAction: String, Codable, Sendable, Equatable {
     case append
     case newPage = "new_page"
     case reviseCurrent = "revise_current"
+    /// A page written by `path` or `page` mode.
+    case page
     case none
 }
 

@@ -30,12 +30,12 @@ extension StoryBible {
     public func carryingReferences(from old: StoryBible) -> StoryBible {
         let known = Dictionary(old.characters.compactMap { c in c.referencePath.map { (c.id, $0) } }) { first, _ in first }
         let merged = characters.map { $0.referencePath == nil ? $0.with(referencePath: known[$0.id]) : $0 }
-        return StoryBible(title: title, setting: setting, characters: merged, directions: directions)
+        return with(characters: merged)
     }
 
     /// Sets `path` as the reference for character `id` if it has none yet.
     public func settingReference(_ path: String, for id: String) -> StoryBible {
         let updated = characters.map { $0.id == id && $0.referencePath == nil ? $0.with(referencePath: path) : $0 }
-        return StoryBible(title: title, setting: setting, characters: updated, directions: directions)
+        return with(characters: updated)
     }
 }

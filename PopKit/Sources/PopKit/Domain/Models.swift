@@ -66,15 +66,44 @@ public struct StoryBible: Codable, Equatable, Sendable {
     public let characters: [Character]
     /// Every direction so far; each one carries into the pages that follow (S7).
     public let directions: [String]
+    /// The planned story, one short beat per page, always ending (P-04); empty in books saved before it.
+    public let path: [String]
 
-    public init(title: String? = nil, setting: String = "", characters: [Character] = [], directions: [String] = []) {
+    public init(title: String? = nil, setting: String = "", characters: [Character] = [], directions: [String] = [], path: [String] = []) {
         self.title = title
         self.setting = setting
         self.characters = characters
         self.directions = directions
+        self.path = path
     }
 
     public static let empty = StoryBible()
+
+    private enum CodingKeys: String, CodingKey { case title, setting, characters, directions, path }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        setting = try container.decodeIfPresent(String.self, forKey: .setting) ?? ""
+        characters = try container.decodeIfPresent([Character].self, forKey: .characters) ?? []
+        directions = try container.decodeIfPresent([String].self, forKey: .directions) ?? []
+        path = try container.decodeIfPresent([String].self, forKey: .path) ?? []
+    }
+
+    /// The same bible with a different cast, keeping everything else.
+    public func with(characters: [Character]) -> StoryBible {
+        StoryBible(title: title, setting: setting, characters: characters, directions: directions, path: path)
+    }
+
+    /// Whether `pageIndex` is the path's last beat: the ending, with no page behind it.
+    public func isEnding(pageIndex: Int) -> Bool {
+        !path.isEmpty && pageIndex >= path.count - 1
+    }
+
+    /// Whether the path has a page after `pageIndex` to build behind it.
+    public func hasPage(after pageIndex: Int) -> Bool {
+        pageIndex + 1 < path.count
+    }
 }
 
 /// The page's animation prompt parts from the `motion-prompt` function; `MotionPromptBuilder` assembles them.

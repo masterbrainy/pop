@@ -7,6 +7,8 @@ public enum PagePipelineEvent: Sendable, Equatable {
     /// carried forward), the current draft, a pending next-page draft if the turn
     /// proposed a break, and a parent note if there was nothing to show.
     case textReady(StoryTurnOutcome)
+    /// A `path` or `page` call wrote a page (or refused with a note), P-04.
+    case pageWritten(PathOutcome)
     case stillReady(pageIndex: Int, path: String, url: String)
     case motionReady(pageIndex: Int, prompt: String)
     case failed(String)
@@ -70,6 +72,16 @@ public actor PagePipeline {
     public func preparePendingDraft(_ page: PageContent, book: Book) -> AsyncStream<PagePipelineEvent> {
         start(pageIndex: page.index) { [self] runID, continuation in
             await self.executeArtAndMotionOnly(runID: runID, page: page, book: book, continuation: continuation)
+        }
+    }
+
+    /// The full build of one page along the story path (P-04): the `path` or `page` call in
+    /// `request`, then art and motion-prompt for the page it wrote. Keyed by the request's
+    /// index, so a direction's rebuild of the page behind cancels the build it replaces.
+    @discardableResult
+    public func buildPage(_ request: StoryTurnRequest, book: Book) -> AsyncStream<PagePipelineEvent> {
+        start(pageIndex: request.index ?? 0) { [self] runID, continuation in
+            await self.executePageBuild(runID: runID, request: request, book: book, continuation: continuation)
         }
     }
 
@@ -148,6 +160,30 @@ public actor PagePipeline {
         }
     }
 
+    private func executePageBuild(
+        runID: UUID, request: StoryTurnRequest, book: Book, continuation: AsyncStream<PagePipelineEvent>.Continuation
+    ) async {
+        defer {
+            finish(runID: runID, pageIndex: request.index ?? 0)
+            continuation.finish()
+        }
+        do {
+            let response = try await timedStoryTurn { try await self.server.storyTurn(request) }
+            try Task.checkCancellation()
+            let outcome = StoryEngine.applyPage(response, to: book)
+            continuation.yield(.pageWritten(outcome))
+            guard let page = outcome.page else { return }
+            try Task.checkCancellation()
+            try await runArtAndMotion(page: page, book: outcome.book, continuation: continuation)
+        } catch is CancellationError {
+            // superseded by a newer build of the same page; stay quiet.
+        } catch let error as ServerError {
+            continuation.yield(.failed(error.message + "\n" + error.serverDetail))
+        } catch {
+            continuation.yield(.failed("\(error)"))
+        }
+    }
+
     private func executeArtAndMotionOnly(
         runID: UUID, page: PageContent, book: Book, continuation: AsyncStream<PagePipelineEvent>.Continuation
     ) async {
@@ -168,7 +204,7 @@ public actor PagePipeline {
     private func shouldIllustrateCurrentPage(action: StoryTurnAction, currentDraft: PageContent) -> Bool {
         switch action {
         case .reviseCurrent: true
-        case .append: currentDraft.stillPath == nil
+        case .append, .page: currentDraft.stillPath == nil
         case .newPage: currentDraft.stillPath == nil && !currentDraft.text.isEmpty
         case .none: false
         }

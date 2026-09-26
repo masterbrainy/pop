@@ -38,7 +38,7 @@ extension StoryBible {
     /// This bible with `hero` added or replacing any existing character with the same id.
     func addingHero(_ hero: Character) -> StoryBible {
         let others = characters.filter { $0.id != hero.id }
-        return StoryBible(title: title, setting: setting, characters: others + [hero], directions: directions)
+        return with(characters: others + [hero])
     }
 }
 

@@ -10,6 +10,8 @@ struct TextPageView: View {
     /// The word read-along is saying right now.
     var highlight: NSRange? = nil
     var placeholder = "Tell the story, and the words appear here."
+    /// The co-pilot strip's question for the parent to ask (PRD C3); shown while reading.
+    var question: String? = nil
 
     private var fontSize: Double { level.minimumTextSize + 4 }
 
@@ -32,12 +34,42 @@ struct TextPageView: View {
                     .padding(.leading, (compact ? 24 : 40) + insets.leading)
                     .padding(.trailing, (compact ? 24 : 40) + insets.trailing)
                     .padding(.bottom, (compact ? 36 : 64) + insets.bottom)
-                Text("\(pageNumber)")
-                    .font(Theme.storyFont(size: compact ? 12 : 15))
-                    .foregroundStyle(Theme.softInk)
-                    .padding(.bottom, (compact ? 10 : 24) + insets.bottom)
+                VStack(spacing: compact ? 6 : 12) {
+                    if let question {
+                        CoPilotStrip(question: question, compact: compact)
+                            .padding(.leading, (compact ? 16 : 32) + insets.leading)
+                            .padding(.trailing, (compact ? 16 : 32) + insets.trailing)
+                    }
+                    Text("\(pageNumber)")
+                        .font(Theme.storyFont(size: compact ? 12 : 15))
+                        .foregroundStyle(Theme.softInk)
+                }
+                .padding(.bottom, (compact ? 10 : 24) + insets.bottom)
             }
         }
+    }
+}
+
+/// Reading together (PRD C3): one question the parent can ask about the page.
+private struct CoPilotStrip: View {
+    let question: String
+    let compact: Bool
+
+    var body: some View {
+        Label {
+            Text(question)
+                .font(.system(size: compact ? 12 : 15, weight: .medium, design: .rounded))
+                .foregroundStyle(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                .foregroundStyle(Theme.accent)
+        }
+        .padding(.horizontal, compact ? 10 : 14)
+        .padding(.vertical, compact ? 6 : 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.paperShade, in: .rect(cornerRadius: 14))
+        .accessibilityLabel("Ask: \(question)")
     }
 }
 

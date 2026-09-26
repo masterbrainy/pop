@@ -14,6 +14,8 @@ export interface StoryPageResponse {
   text: string;
   artPrompt: string;
   breakSuggested: boolean;
+  /** One question to ask about the page (PRD C3); empty when there's none. */
+  question: string;
 }
 
 export interface StoryTurnResponseData {
@@ -75,6 +77,7 @@ function toResponseData(
       text: output.pageText,
       artPrompt: output.artPrompt,
       breakSuggested: output.breakSuggested,
+      question: output.readingQuestion.trim(),
     },
     bible: bibleFromOutput(output, existingCharacters),
     parentNote: output.parentNote,
@@ -157,7 +160,7 @@ function noneResponse(
 ): StoryTurnResponseData {
   return {
     action: "none",
-    page: { index: currentIndex, text: currentText, artPrompt: "", breakSuggested: false },
+    page: { index: currentIndex, text: currentText, artPrompt: "", breakSuggested: false, question: "" },
     bible: existingBible,
     parentNote: gentleParentNote(),
     timings,
@@ -174,7 +177,7 @@ async function passesGate(
     // Nothing new to check; the model already decided not to add anything.
     return { safe: true, safetyMs: Math.round(performance.now() - start) };
   }
-  const verdict = await runSafetyGate([output.pageText, output.artPrompt], readingLevel, safety);
+  const verdict = await runSafetyGate([output.pageText, output.artPrompt, output.readingQuestion], readingLevel, safety);
   const wordLimitOk = withinWordLimit(output.pageText, readingLevel);
   return { safe: verdict.safe && wordLimitOk, safetyMs: Math.round(performance.now() - start) };
 }

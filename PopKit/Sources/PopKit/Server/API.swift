@@ -134,12 +134,15 @@ public struct StoryTurnPageResult: Codable, Sendable, Equatable {
     public let text: String
     public let artPrompt: String
     public let breakSuggested: Bool
+    /// One question for the parent to ask about the page (PRD C3).
+    public let question: String?
 
-    public init(index: Int, text: String, artPrompt: String, breakSuggested: Bool) {
+    public init(index: Int, text: String, artPrompt: String, breakSuggested: Bool, question: String? = nil) {
         self.index = index
         self.text = text
         self.artPrompt = artPrompt
         self.breakSuggested = breakSuggested
+        self.question = question
     }
 }
 

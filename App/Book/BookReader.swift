@@ -56,7 +56,7 @@ final class BookReader {
         if case let .newPage(index) = outcome {
             // A page only follows one that has words; an empty page stays put.
             guard !(currentPage?.text.isEmpty ?? true) else { return }
-            let page = pendingNext.map { $0.index == index ? $0 : PageContent(index: index, text: $0.text, artPrompt: $0.artPrompt, stillPath: $0.stillPath) }
+            let page = pendingNext.map { $0.index == index ? $0 : PageContent(index: index, text: $0.text, artPrompt: $0.artPrompt, stillPath: $0.stillPath, question: $0.question) }
                 ?? PageContent(index: index, text: "")
             pendingNext = nil
             book = book.with(pages: book.pages + [page])

@@ -59,7 +59,7 @@ Response `data` for `mode: "turn"`:
 ```json
 {
   "action": "append | new_page | revise_current | none",
-  "page": { "index": 1, "text": "…", "artPrompt": "…", "breakSuggested": false },
+  "page": { "index": 1, "text": "…", "artPrompt": "…", "breakSuggested": false, "question": "What colour is the kite?" },
   "bible": { "title": null, "setting": "…", "characters": [ … ], "directions": [ … ] },
   "parentNote": null,
   "timings": { "modelMs": 0, "safetyMs": 0 }
@@ -68,6 +68,7 @@ Response `data` for `mode: "turn"`:
 - `append`: the words continue the current page. `new_page`: the page was full, so this is the next page's draft (shown after the parent folds; the engine never turns the page). `revise_current`: a direction changed the current page. `none`: nothing for the story (for example, an unsafe request); `parentNote` explains gently.
 - The server runs the kid-safety gate (PRD §8.6) before replying: `omni-moderation-latest` on the input, text and art prompt, plus an LLM rubric check at the kid's reading level. A failing page is rewritten once; if it still fails, the reply is `none` with a gentle `parentNote`. A kid's words that sound like real harm never enter the story, and only `parentNote` mentions them.
 - The text obeys the reading level's limits (§8.7) and never contains surnames, addresses, schools or phone numbers.
+- `page.question` is one short question for the parent to ask about the page (PRD C3, the co-pilot strip while reading). It goes through the same safety gate; it's an empty string for `none`. A safe addition that overflows a full page comes back as `new_page` with only the new words, and an overlong page is cut to whole sentences, rather than refused.
 - `mode: "title"` returns `{ "title": "Rex Learns to Share" }` from the whole book (the cover adds ", a story for {firstName}").
 
 ### `art`: one picture (S6, P2, pop-up layers, cover, kid's drawing as the hero)

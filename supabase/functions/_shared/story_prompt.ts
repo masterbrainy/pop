@@ -110,9 +110,9 @@ function endingCloseInstruction(level: ReadingLevel): string {
 }
 
 /**
- * `art` draws (and sends reference images for) only the bible characters a
- * page's artPrompt names (art_request.ts charactersIn), so the art prompt has
- * to name each character on the page exactly as the bible does, and no others.
+ * `art` matches the characters in a picture to the bible by name, so the art
+ * prompt has to name each character on the page exactly as the bible does,
+ * and no others.
  */
 const ART_PROMPT_NAMES_INSTRUCTION =
   "In artPrompt, name every character who appears by their bible name, and only those.";

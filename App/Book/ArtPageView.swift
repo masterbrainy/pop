@@ -36,9 +36,7 @@ struct ArtPageView: View {
         let popped = popDepth > 0.02
         ZStack {
             StillPanView(image: image, isMoving: !showsLiveVideo)
-            // A saved book replays its clips; while creating, a page switches from live video to
-            // its recorded clip once it's made, so it keeps the look it started with.
-            if let clip = StillImageLoader.url(for: page?.clipPath) {
+            if replaysClips, let clip = StillImageLoader.url(for: page?.clipPath) {
                 ClipPlayerView(url: clip)
                     .transition(.opacity)
             }
@@ -68,7 +66,7 @@ struct ArtPageView: View {
     }
 
     private var showsLiveVideo: Bool {
-        (live?.isShowingLive(page) ?? false) || page?.clipPath != nil
+        (live?.isShowingLive(page) ?? false) || (replaysClips && page?.clipPath != nil)
     }
 
     /// A page with words but no picture that will never arrive: moderation turned it away, or

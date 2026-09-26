@@ -1,23 +1,14 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
-import { buildArtPrompt, charactersIn, drawingInlineImage, referencePathsFor, STANDARD_DIMENSIONS } from "./art_request.ts";
+import { buildArtPrompt, drawingInlineImage, referencePathsFor, STANDARD_DIMENSIONS } from "./art_request.ts";
 import type { Character } from "./schemas.ts";
 
 const rex: Character = { id: "rex", name: "Rex", description: "a friendly green dinosaur", referencePath: "u/b/character-rex-v1.png" };
 const maya: Character = { id: "maya", name: "Maya", description: "a curious kid", referencePath: null };
 
-Deno.test("referencePathsFor: cover includes every character with a saved reference", () => {
+Deno.test("referencePathsFor: page/cover include every character with a saved reference", () => {
+  assertEquals(referencePathsFor("page", [rex, maya]), ["u/b/character-rex-v1.png"]);
   assertEquals(referencePathsFor("cover", [rex, maya]), ["u/b/character-rex-v1.png"]);
-});
-
-Deno.test("referencePathsFor: page includes only the characters its prompt names that have a saved reference", () => {
-  assertEquals(referencePathsFor("page", [rex, maya], null, "Rex and Maya fly a kite"), ["u/b/character-rex-v1.png"]);
-  assertEquals(referencePathsFor("page", [rex, maya], null, "Maya flies a kite"), []);
-});
-
-Deno.test("referencePathsFor: a page prompt that names nobody gets the whole cast's references", () => {
-  // "the little dragon" instead of "Rex" must not redraw Rex from scratch.
-  assertEquals(referencePathsFor("page", [rex, maya], null, "The little dragon flies a kite"), ["u/b/character-rex-v1.png"]);
 });
 
 Deno.test("referencePathsFor: cutout/character include only the matching characterId", () => {
@@ -54,70 +45,9 @@ Deno.test("buildArtPrompt names the single character for cutout/character kinds"
 });
 
 Deno.test("buildArtPrompt lists every character for page/cover kinds", () => {
-  const page = buildArtPrompt("page", "Rex and Maya playing together", [rex, maya]);
-  assertEquals(page.includes("a friendly green dinosaur"), true);
-  assertEquals(page.includes("a curious kid"), true);
-  const cover = buildArtPrompt("cover", "playing together", [rex, maya]);
-  assertEquals(cover.includes("Rex"), true);
-  assertEquals(cover.includes("Maya"), true);
-});
-
-// A page picture draws only the characters its own prompt names: sending every
-// bible character (and every reference image) painted absent characters in.
-const bella: Character = { id: "bella", name: "Bella the bunny", description: "a small white bunny", referencePath: "u/b/character-bella-v1.png" };
-const rusty: Character = { id: "rusty", name: "Rusty the fox", description: "a red fox", referencePath: "u/b/character-rusty-v1.png" };
-
-Deno.test("buildArtPrompt and referencePathsFor leave out a character the page prompt doesn't name", () => {
-  const pagePrompt = "Bella hops through the snowy garden";
-  const prompt = buildArtPrompt("page", pagePrompt, [bella, rusty]);
-  assertEquals(prompt.includes("Rusty"), false);
-  assertEquals(prompt.includes("a red fox"), false);
-  assertEquals(prompt.includes("a small white bunny"), true);
-  assertEquals(referencePathsFor("page", [bella, rusty], null, pagePrompt), ["u/b/character-bella-v1.png"]);
-});
-
-Deno.test("buildArtPrompt lists the whole cast when the page prompt names none of them", () => {
-  const prompt = buildArtPrompt("page", "The little bunny naps in a snowy garden", [bella, rusty]);
-  assertEquals(prompt.includes("Bella the bunny"), true);
-  assertEquals(prompt.includes("Rusty the fox"), true);
-});
-
-Deno.test("buildArtPrompt lists no characters when there are none", () => {
-  assertEquals(buildArtPrompt("page", "A quiet snowy garden at dawn", []).includes("Characters appearing in this picture"), false);
-});
-
-Deno.test("buildArtPrompt and referencePathsFor keep every character for a cover", () => {
-  const prompt = buildArtPrompt("cover", "Bella hops through the snowy garden", [bella, rusty]);
-  assertEquals(prompt.includes("Rusty the fox"), true);
-  assertEquals(prompt.includes("Bella the bunny"), true);
-  assertEquals(referencePathsFor("cover", [bella, rusty], null, "Bella hops"), [
-    "u/b/character-bella-v1.png",
-    "u/b/character-rusty-v1.png",
-  ]);
-});
-
-Deno.test("charactersIn matches a whole name phrase or the id, ignoring case", () => {
-  assertEquals(charactersIn("bella the bunny naps", [bella, rusty]), [bella]);
-  assertEquals(charactersIn("RUSTY waves hello", [bella, rusty]), [rusty]);
-  assertEquals(charactersIn("Rusty the Fox and Bella share a carrot", [bella, rusty]), [bella, rusty]);
-});
-
-Deno.test("charactersIn matches whole words only", () => {
-  assertEquals(charactersIn("A trip to Rustyville", [bella, rusty]), []);
-  assertEquals(charactersIn("Isabella reads a book", [bella, rusty]), []);
-  assertEquals(charactersIn("Rusty's tail swishes.", [bella, rusty]), [rusty]);
-});
-
-Deno.test("charactersIn treats regex characters in a name literally", () => {
-  const dot: Character = { id: "mr-dot", name: "Mr. Dot (the ladybug)", description: "a ladybug", referencePath: null };
-  assertEquals(charactersIn("Mr. Dot (the ladybug) lands on a leaf", [dot]), [dot]);
-  assertEquals(charactersIn("Mrs Dotty lands on a leaf", [dot]), []);
-});
-
-Deno.test("charactersIn matches a name with letters outside English", () => {
-  const zoe: Character = { id: "zoe", name: "Zoë", description: "a girl", referencePath: null };
-  assertEquals(charactersIn("Zoë paints a boat", [zoe]), [zoe]);
-  assertEquals(charactersIn("Zoëtrope spins", [zoe]), []);
+  const prompt = buildArtPrompt("page", "playing together", [rex, maya]);
+  assertEquals(prompt.includes("Rex"), true);
+  assertEquals(prompt.includes("Maya"), true);
 });
 
 Deno.test("buildArtPrompt always ends with the caller's own prompt", () => {

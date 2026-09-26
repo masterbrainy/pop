@@ -260,23 +260,12 @@ final class LivePageController {
                 let clip = try await bridge.stopClip()
                 guard currentPage?.id == page.id, currentPage?.version == page.version else { return }
                 onClip(page.id, clip.url)
-                settleOnClip(page)
             } catch is CancellationError {
                 return
             } catch {
                 AppLog.scene.error("clip failed: \(error.localizedDescription, privacy: .public)")
             }
         }
-    }
-
-    /// The page's clip is recorded: it loops from now on (`ArtPageView`), so hide the live
-    /// video. Orbis drifts further from the still the longer it runs (characters change shape
-    /// and colour, the style turns photoreal); the first seconds are the ones worth keeping.
-    private func settleOnClip(_ page: PageContent) {
-        guard liveKey == Self.key(page) else { return }
-        tripwireTask?.cancel()
-        tripwireTask = nil
-        leaveCurrentPage()
     }
 
     private func watchFrames(on page: PageContent) {

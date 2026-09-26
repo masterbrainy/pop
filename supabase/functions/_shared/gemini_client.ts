@@ -1,13 +1,12 @@
-// Gemini image generation for `art` (every picture kind) and structured text
-// generation for `motion-prompt`. CONTRACTS.md §3 pins the endpoint, headers
-// and generationConfig shape.
+// Gemini image generation (`art`) and structured text generation
+// (`motion-prompt`). CONTRACTS.md §3 pins the image endpoint, headers and
+// generationConfig shape exactly; this wraps both in one small client.
 import { PopError } from "./errors.ts";
 import { GEMINI_IMAGE_MODEL, GEMINI_TEXT_MODEL } from "./models.ts";
 import { fetchWithOneRetry, fetchWithRetry, UPSTREAM_TIMEOUTS_MS } from "./retry.ts";
 import { describeGeminiError, geminiErrorCode } from "./gemini_error.ts";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const IMAGE_RETRY_DELAYS_MS = [2_000];
 
 export interface InlineImage {
   mimeType: string;
@@ -51,9 +50,8 @@ export async function generateImage(
     parts.push({ inlineData: { mimeType: image.mimeType, data: image.data } });
   }
 
-  // The image service sometimes turns a burst of calls away (402/429); retry once after
-  // 2 s. Each attempt has its own deadline, so one picture stays well under the app's
-  // wait and Supabase's limit (R-49).
+  // The image service sometimes turns a burst of calls away (402/429); retry briefly.
+  // Each attempt has its own deadline, so one hung call can't hold the page on "Painting…".
   const requestBody = JSON.stringify({
     contents: [{ parts }],
     generationConfig: {
@@ -70,7 +68,7 @@ export async function generateImage(
       },
       body: requestBody,
       signal,
-    }), { delaysMs: IMAGE_RETRY_DELAYS_MS, timeoutMs: UPSTREAM_TIMEOUTS_MS.image, label: "Image generation" });
+    }), { timeoutMs: UPSTREAM_TIMEOUTS_MS.geminiImage, label: "Image generation" });
   if (!res.ok) {
     const body = await res.text();
     // The full reason stays in the server log; it can name the Cloud project.

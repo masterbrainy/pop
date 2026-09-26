@@ -16,12 +16,7 @@ export const TTS_MODEL = "gpt-4o-mini-tts";
 // this key's model list.
 export const TRANSCRIBE_MODEL = "gpt-4o-transcribe";
 
-// Gemini paints every picture (Brian switched back from OpenAI on 2026-09-26):
-// a 16:9 page is 1344x768 in about 5-6 s.
 export const GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
-// motion-prompt reads the page's still and text with Gemini, as before P-05
-// (882d0fa): the OpenAI story model's scene descriptions made Orbis's live
-// pages drift further from the picture.
 // gemini-2.5-flash returned HTTP 404 live on 2026-09-26 ("no longer available
 // to new users"; Google's error pointed at this replacement), even though it
 // still appears in this key's /v1beta/models listing.

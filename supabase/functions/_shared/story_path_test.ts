@@ -243,6 +243,31 @@ Deno.test("runPathTurn fails the output gate on a foreign-script leak in an 'en'
   assertEquals(result.page.text, "A friendly fox is nearby in the meadow.");
 });
 
+Deno.test("runPathTurn fails the output gate on a branded character, then accepts an original one", async () => {
+  const deps = pathDepsFor(
+    [
+      pathOutput({ pageText: "Mickey Mouse and Maya fly a kite." }),
+      pathOutput({ pageText: "A round-eared mouse named Pip and Maya fly a kite." }),
+    ],
+    [true, true],
+  );
+  const result = await runPathTurn("listener", 0, emptyBible, "Maya", "en", null, deps);
+  assertEquals(result.action, "page");
+  assertEquals(result.page.text, "A round-eared mouse named Pip and Maya fly a kite.");
+});
+
+Deno.test("runPathTurn refuses when the rewrite still names a branded character", async () => {
+  const deps = pathDepsFor(
+    [
+      pathOutput({ pageText: "Mickey Mouse and Maya fly a kite." }),
+      pathOutput({ pageText: "Maya and her friend from Cocomelon fly a kite." }),
+    ],
+    [true, true],
+  );
+  const result = await runPathTurn("listener", 0, emptyBible, "Maya", "en", null, deps);
+  assertEquals(result.action, "none");
+});
+
 // --- runPathTurn (R-42) ---
 
 Deno.test("runPathTurn allows the kid's own non-Latin name in an 'en' story", async () => {

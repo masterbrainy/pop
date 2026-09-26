@@ -445,8 +445,11 @@ async function main() {
   const accessToken = signInData.session!.access_token;
 
   const casesFile = new URL("cases.json", SCRIPT_DIR);
-  const { cases } = JSON.parse(await Deno.readTextFile(casesFile)) as { cases: EvalCase[] };
-  console.log(`loaded ${cases.length} cases from scripts/eval/cases.json`);
+  const { cases: allCases } = JSON.parse(await Deno.readTextFile(casesFile)) as { cases: EvalCase[] };
+  // Optional first argument: only run cases whose id starts with it (e.g. "safety-real_people").
+  const only = Deno.args[0];
+  const cases = only ? allCases.filter((c) => c.id.startsWith(only)) : allCases;
+  console.log(`loaded ${cases.length} cases from scripts/eval/cases.json${only ? ` (id starts with "${only}")` : ""}`);
 
   const results: CaseResult[] = [];
   for (const evalCase of cases) {

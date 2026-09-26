@@ -4,6 +4,7 @@
 import { PopError } from "./errors.ts";
 import { GEMINI_IMAGE_MODEL, GEMINI_TEXT_MODEL } from "./models.ts";
 import { fetchWithRetry } from "./retry.ts";
+import { describeGeminiError } from "./gemini_error.ts";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -65,7 +66,9 @@ export async function generateImage(
     }),
   }));
   if (!res.ok) {
-    throw new PopError("upstream", `Image generation failed (${res.status})`);
+    const reason = describeGeminiError(res.status, await res.text());
+    console.error(`gemini image failed: ${reason}`);
+    throw new PopError("upstream", `Image generation failed (${reason})`);
   }
   const body = await res.json() as GeminiResponse;
   const imagePart = findImagePart(body);

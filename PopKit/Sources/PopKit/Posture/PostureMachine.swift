@@ -37,14 +37,22 @@ public struct PostureConfig: Sendable, Equatable {
     public let closedAngle: Double
     /// How long it must stay closed before the book is finished.
     public let closeHold: TimeInterval
+    /// Once popped, the page stays up until the hinge opens this far past `popStartAngle`, so a
+    /// hinge resting near it doesn't flap (R-26).
+    public let popHysteresis: Double
+    /// The curl only starts this far below `openAngle`, so a wobble near flat doesn't flicker it.
+    public let curlDeadband: Double
 
-    public init(openAngle: Double, turnAngle: Double, popStartAngle: Double, popFullAngle: Double, closedAngle: Double, closeHold: TimeInterval) {
+    public init(openAngle: Double, turnAngle: Double, popStartAngle: Double, popFullAngle: Double, closedAngle: Double, closeHold: TimeInterval,
+                popHysteresis: Double = 5, curlDeadband: Double = 3) {
         self.openAngle = openAngle
         self.turnAngle = turnAngle
         self.popStartAngle = popStartAngle
         self.popFullAngle = popFullAngle
         self.closedAngle = closedAngle
         self.closeHold = closeHold
+        self.popHysteresis = popHysteresis
+        self.curlDeadband = curlDeadband
     }
 
     public static let standard = PostureConfig(openAngle: 170, turnAngle: 140, popStartAngle: 130, popFullAngle: 90, closedAngle: 10, closeHold: 1.0)
@@ -154,7 +162,7 @@ public struct PostureMachine: Sendable {
         let turned = armed && angle <= config.turnAngle
         let rearmed = !armed && angle >= config.openAngle
         let curl = armed && !turned ? curlProgress(at: angle) : 0
-        let depth = popDepth(at: angle)
+        let depth = popDepth(at: angle, wasPopped: state.popDepth > 0)
 
         let turnEvents: [PostureEvent] = turned ? [.turnCommitted] : (armed && state.curl > 0 && curl == 0 ? [.turnCancelled] : [])
         let popEvents: [PostureEvent] = state.popDepth == 0 && depth > 0 ? [.popBegan] : (state.popDepth > 0 && depth == 0 ? [.popEnded] : [])
@@ -165,8 +173,20 @@ public struct PostureMachine: Sendable {
     }
 
     private func curlProgress(at angle: Double) -> Double {
-        clamp((config.openAngle - angle) / (config.openAngle - config.turnAngle))
+        let start = config.openAngle - config.curlDeadband
+        return clamp((start - angle) / (start - config.turnAngle))
     }
+
+    /// While popped, a small positive depth holds the pop-up until the hinge opens past the
+    /// hysteresis band.
+    private func popDepth(at angle: Double, wasPopped: Bool) -> Double {
+        let depth = popDepth(at: angle)
+        guard wasPopped, depth == 0, angle < config.popStartAngle + config.popHysteresis else { return depth }
+        return Self.heldPopDepth
+    }
+
+    /// Below anything the renderer shows; it only records that the page is still popped.
+    static let heldPopDepth = 0.001
 
     private func popDepth(at angle: Double) -> Double {
         clamp((config.popStartAngle - angle) / (config.popStartAngle - config.popFullAngle))

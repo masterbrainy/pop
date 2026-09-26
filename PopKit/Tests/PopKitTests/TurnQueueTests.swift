@@ -46,41 +46,21 @@ struct TurnQueueTests {
         #expect(next?.text == "there was a fox. She found a leaf. The leaf glowed.")
     }
 
-    @Test func mergedInputKeepsTheSpeakerOfTheLatestQueuedInput() async {
+    @Test func queuedInputsFromDifferentSpeakersRunOneSpeakerAtATime() async {
         let queue = TurnQueue()
         _ = await queue.submit(input("Once upon a time", speaker: .parent))
         _ = await queue.submit(input("keep going", speaker: .parent))
+        _ = await queue.submit(input("slowly", speaker: .parent))
         _ = await queue.submit(input("make it a dragon", speaker: .kid))
+        _ = await queue.submit(input("a blue one", speaker: .kid))
 
-        let next = await queue.drain()
+        let parent = await queue.drain()
+        let kid = await queue.drain()
 
-        #expect(next?.speaker == .kid)
-        #expect(next?.text == "keep going make it a dragon")
-    }
-
-    @Test func aContinueQueuedAlongsideRealTextIsDroppedAndTheTextWins() async {
-        let queue = TurnQueue()
-        _ = await queue.submit(input("Once upon a time"))
-        _ = await queue.submit(StoryEngine.continueInput(speaker: .parent))
-        _ = await queue.submit(input("she found a leaf"))
-
-        let next = await queue.drain()
-
-        #expect(next?.kind == .typed)
-        #expect(next?.text == "she found a leaf")
-    }
-
-    @Test func onlyContinueRequestsQueuedKeepsTheLatestOneAsIs() async {
-        let queue = TurnQueue()
-        _ = await queue.submit(input("Once upon a time"))
-        _ = await queue.submit(StoryEngine.continueInput(speaker: .parent))
-        _ = await queue.submit(StoryEngine.continueInput(speaker: .kid))
-
-        let next = await queue.drain()
-
-        #expect(next?.kind == .continueStory)
-        #expect(next?.speaker == .kid)
-        #expect(next?.text.isEmpty == true)
+        #expect(parent == input("keep going slowly", speaker: .parent))
+        #expect(kid == input("make it a dragon a blue one", speaker: .kid))
+        #expect(await queue.drain() == nil)
+        #expect(!(await queue.isBusy))
     }
 
     @Test func drainingAnEmptyQueueMarksItIdle() async {

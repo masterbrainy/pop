@@ -128,22 +128,26 @@ struct BookshelfView: View {
 private struct BookTile: View {
     let book: Book
 
+    private var pageCount: String { book.pages.count == 1 ? "1 page" : "\(book.pages.count) pages" }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ZStack {
-                LinearGradient(colors: [Theme.coverTop, Theme.coverBottom], startPoint: .top, endPoint: .bottom)
-                if let image = StillImageLoader.image(for: book.coverPath ?? book.pages.first?.stillPath) {
-                    Image(uiImage: image).resizable().scaledToFill()
+            // The picture fills a fixed tile; a wide page picture is cropped, never widens the tile.
+            LinearGradient(colors: [Theme.coverTop, Theme.coverBottom], startPoint: .top, endPoint: .bottom)
+                .frame(maxWidth: .infinity)
+                .frame(height: 200)
+                .overlay {
+                    if let image = StillImageLoader.image(for: book.coverPath ?? book.pages.first?.stillPath) {
+                        Image(uiImage: image).resizable().scaledToFill()
+                    }
                 }
-            }
-            .frame(height: 200)
-            .clipShape(.rect(cornerRadius: 22))
+                .clipShape(.rect(cornerRadius: 22))
             .shadow(color: .black.opacity(0.15), radius: 10, y: 6)
             Text(book.title ?? book.bible.title ?? "A new story")
                 .font(Theme.titleFont(size: 17))
                 .foregroundStyle(Theme.ink)
                 .lineLimit(2)
-            Text(book.status == .finished ? "\(book.pages.count) pages" : "Still being told · \(book.pages.count) pages")
+            Text(book.status == .finished ? pageCount : "Still being told · \(pageCount)")
                 .font(.caption)
                 .foregroundStyle(Theme.softInk)
         }

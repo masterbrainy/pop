@@ -51,10 +51,11 @@ struct PostureMachineTests {
 
     @Test func foldingFromFlatLiftsThePageInProportion() {
         var run = Run()
+        // The curl runs from 167° (flat minus the 3° deadband) down to the 140° turn.
         run.feed([180, 175, 160])
-        #expect(approx(run.state.curl, 1.0 / 3.0))
+        #expect(approx(run.state.curl, 7.0 / 27.0))
         run.feed(145)
-        #expect(approx(run.state.curl, 25.0 / 30.0))
+        #expect(approx(run.state.curl, 22.0 / 27.0))
         #expect(run.events == [.pageSettled])
     }
 
@@ -173,5 +174,35 @@ struct PostureMachineTests {
         #expect(run.state.angle == 180)
         run.feed(-5)
         #expect(run.state.angle == 0)
+    }
+}
+
+/// R-26: a hinge resting near a threshold must not flap.
+struct PostureHysteresisTests {
+    @Test func aHingeRestingNearThePopAngleDoesNotFlapBetweenPopBeganAndPopEnded() {
+        var run = Run()
+        run.feed([180, 139, 131, 129.5, 130.5, 129.5, 130.5, 129.5])
+        #expect(run.events.filter { $0 == .popBegan }.count == 1)
+        #expect(!run.events.contains(.popEnded))
+    }
+
+    @Test func thePopUpStillEndsWhenTheBookOpensClearlyPastThePopAngle() {
+        var run = Run()
+        run.feed([180, 139, 120, 136])
+        #expect(run.events.suffix(1) == [.popEnded])
+        #expect(run.state.popDepth == 0)
+    }
+
+    @Test func jitterAtTheTopOfTheFoldCancelsTheCurlAtMostOnce() {
+        var run = Run()
+        run.feed([180, 165, 171, 169, 171, 169, 171])
+        #expect(run.events.filter { $0 == .turnCancelled }.count == 1)
+    }
+
+    @Test func aTinyWobbleBelowFlatNeitherCurlsNorCancels() {
+        var run = Run()
+        run.feed([180, 169, 171, 168.5, 172])
+        #expect(!run.events.contains(.turnCancelled))
+        #expect(run.state.curl == 0)
     }
 }

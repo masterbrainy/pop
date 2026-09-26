@@ -15,14 +15,16 @@ public struct EmptyPayload: Codable, Equatable, Sendable {
 // MARK: - story-turn
 
 public enum StoryTurnMode: String, Codable, Sendable, Equatable {
-    case turn
     case title
+    /// Plan (or re-plan from `index`, following `input`) the story path, and write page `index` (P-04).
+    case path
+    /// Write page `index` along the existing path.
+    case page
 }
 
 public enum InputKind: String, Codable, Sendable, Equatable {
     case speech
     case typed
-    case continueStory = "continue"
 }
 
 public enum Speaker: String, Codable, Sendable, Equatable {
@@ -62,17 +64,6 @@ public struct StoryTurnPageRef: Codable, Sendable, Equatable {
     }
 }
 
-public struct StoryTurnCurrent: Codable, Sendable, Equatable {
-    public let index: Int
-    /// The draft so far; may be empty.
-    public let text: String
-
-    public init(index: Int, text: String) {
-        self.index = index
-        self.text = text
-    }
-}
-
 public struct StoryTurnInput: Codable, Sendable, Equatable {
     public let kind: InputKind
     public let speaker: Speaker
@@ -93,14 +84,14 @@ public struct StoryTurnRequest: Codable, Sendable, Equatable {
     public let settings: ParentSettings
     public let bible: StoryBible
     public let pages: [StoryTurnPageRef]
-    /// Present for `mode: .turn`; omitted for `mode: .title`, which only needs the finished pages.
-    public let current: StoryTurnCurrent?
-    /// Present for `mode: .turn`; omitted for `mode: .title`.
+    /// Present for `mode: .path` when it follows a direction.
     public let input: StoryTurnInput?
+    /// The page to write, for `mode: .path` and `mode: .page`.
+    public let index: Int?
 
     public init(
         mode: StoryTurnMode, bookId: UUID, kid: StoryTurnKid, brief: StoryBrief, settings: ParentSettings,
-        bible: StoryBible, pages: [StoryTurnPageRef], current: StoryTurnCurrent? = nil, input: StoryTurnInput? = nil
+        bible: StoryBible, pages: [StoryTurnPageRef], input: StoryTurnInput? = nil, index: Int? = nil
     ) {
         self.mode = mode
         self.bookId = bookId
@@ -109,16 +100,8 @@ public struct StoryTurnRequest: Codable, Sendable, Equatable {
         self.settings = settings
         self.bible = bible
         self.pages = pages
-        self.current = current
         self.input = input
-    }
-
-    /// A `mode: "turn"` request.
-    public static func turn(
-        bookId: UUID, kid: StoryTurnKid, brief: StoryBrief, settings: ParentSettings, bible: StoryBible,
-        pages: [StoryTurnPageRef], current: StoryTurnCurrent, input: StoryTurnInput
-    ) -> StoryTurnRequest {
-        StoryTurnRequest(mode: .turn, bookId: bookId, kid: kid, brief: brief, settings: settings, bible: bible, pages: pages, current: current, input: input)
+        self.index = index
     }
 
     /// A `mode: "title"` request: the whole book's finished pages, no draft or input.
@@ -133,23 +116,35 @@ public struct StoryTurnPageResult: Codable, Sendable, Equatable {
     public let index: Int
     public let text: String
     public let artPrompt: String
-    public let breakSuggested: Bool
     /// One question for the parent to ask about the page (PRD C3).
     public let question: String?
+    /// Whether this page ends the story (`path` and `page` modes).
+    public let isEnding: Bool?
 
-    public init(index: Int, text: String, artPrompt: String, breakSuggested: Bool, question: String? = nil) {
+    public init(index: Int, text: String, artPrompt: String, question: String? = nil, isEnding: Bool? = nil) {
         self.index = index
         self.text = text
         self.artPrompt = artPrompt
-        self.breakSuggested = breakSuggested
         self.question = question
+        self.isEnding = isEnding
+    }
+
+    private enum CodingKeys: String, CodingKey { case index, text, artPrompt, question, isEnding }
+
+    /// Tolerates a response that omits `question` or `isEnding`.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        index = try container.decode(Int.self, forKey: .index)
+        text = try container.decode(String.self, forKey: .text)
+        artPrompt = try container.decode(String.self, forKey: .artPrompt)
+        question = try container.decodeIfPresent(String.self, forKey: .question)
+        isEnding = try container.decodeIfPresent(Bool.self, forKey: .isEnding)
     }
 }
 
 public enum StoryTurnAction: String, Codable, Sendable, Equatable {
-    case append
-    case newPage = "new_page"
-    case reviseCurrent = "revise_current"
+    /// A page written by `path` or `page` mode.
+    case page
     case none
 }
 

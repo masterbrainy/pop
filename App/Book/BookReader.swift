@@ -12,7 +12,7 @@ final class BookReader {
     private(set) var navigator: BookNavigator
     /// Set when the phone stays closed past the hold; the book finishes and saves then (Phase 5).
     private(set) var closedAt: Date?
-    /// The next page's draft from a `new_page` turn; it appears when the parent folds (PRD S4).
+    /// The page built behind the one on screen (P-04); it appears when the parent folds.
     var pendingNext: PageContent?
     /// How deep the page now showing pops up (0…1), from the posture machine.
     private(set) var popDepth: Double = 0
@@ -54,8 +54,8 @@ final class BookReader {
     func turnForward() {
         let (next, outcome) = navigator.turningForward()
         if case let .newPage(index) = outcome {
-            // A page only follows one that has words; an empty page stays put.
-            guard !(currentPage?.text.isEmpty ?? true) else { return }
+            // A page only follows one that has words, and nothing follows the story's ending.
+            guard let current = currentPage, !current.text.isEmpty, !book.bible.isEnding(pageIndex: current.index) else { return }
             let page = pendingNext.map { $0.index == index ? $0 : PageContent(index: index, text: $0.text, artPrompt: $0.artPrompt, stillPath: $0.stillPath, question: $0.question) }
                 ?? PageContent(index: index, text: "")
             pendingNext = nil

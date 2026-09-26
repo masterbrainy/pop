@@ -65,7 +65,7 @@ struct BookView: View {
     @ViewBuilder private var content: some View {
         if hinge.state.phase == .closed {
             CoverView(book: reader.book, kid: kid)
-        } else if let maker {
+        } else if let maker, reader.book.status == .draft {
             SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,
                        curl: hinge.state.curl, popDepth: reader.popDepth, live: maker.live)
                 .overlay(alignment: .bottom) {
@@ -73,8 +73,7 @@ struct BookView: View {
                         speaker: Binding(get: { maker.speaker }, set: { maker.speaker = $0 }),
                         isListening: maker.isListening, partial: maker.partial, isWorking: maker.isWorking,
                         onToggleMic: { Task { await maker.toggleMic() } },
-                        onSubmit: { maker.submit($0) },
-                        onContinue: { maker.continueStory() }
+                        onSubmit: { maker.submit($0) }
                     )
                     .padding(.horizontal, 12)
                     .padding(.bottom, 14)
@@ -94,8 +93,14 @@ struct BookView: View {
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(.ultraThinMaterial, in: .capsule)
             }
-            if reader.pendingNext != nil, hinge.state.phase != .closed {
-                Label("Page full. Fold to turn", systemImage: "book.pages")
+            if maker?.isOnLastPage == true, hinge.state.phase != .closed {
+                Label("The end. Close the book to finish", systemImage: "book.closed")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Theme.accent, in: .capsule)
+            } else if reader.pendingNext != nil, hinge.state.phase != .closed {
+                Label("Next page ready. Fold to turn", systemImage: "book.pages")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14).padding(.vertical, 8)
@@ -113,7 +118,7 @@ struct BookView: View {
                 Image(systemName: "xmark").font(.headline).padding(12).background(.ultraThinMaterial, in: .circle)
             }
             .accessibilityLabel("Back to the bookshelf")
-            if maker != nil {
+            if maker != nil, reader.book.status == .draft {
                 Button(action: { Task { await finish() } }) {
                     Label(finishing ? "Finishing…" : "Finish", systemImage: "checkmark")
                         .font(.subheadline.weight(.semibold))

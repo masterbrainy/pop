@@ -3,7 +3,7 @@
 #   scripts/sim.sh build            generate the project and build for the simulator
 #   scripts/sim.sh run [args...]    build, install and launch (args go to the app, e.g. -probe hinge)
 #   scripts/sim.sh shot <name>      screenshot both screens into build/shots/<name>-{outer,inner}.png
-#   scripts/sim.sh log [seconds]    show the app's recent log lines
+#   scripts/sim.sh log [lines]      tail the app's own logs (Documents/*.log)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -40,10 +40,15 @@ shot() {
   echo "$ROOT/build/shots/$name-inner.png"
 }
 
+# `simctl spawn … log` fails on this Mac (ROADMAP §3), so the app writes Documents/*.log.
 log_recent() {
-  local seconds="${1:-60}"
-  xcrun simctl spawn "$(device_id)" log show --last "${seconds}s" --style compact \
-    --predicate 'subsystem == "com.masterbrainy.pop"' | grep -v '^Timestamp' || true
+  local lines="${1:-40}" docs
+  docs="$(xcrun simctl get_app_container "$(device_id)" "$BUNDLE_ID" data)/Documents"
+  for file in "$docs"/*.log; do
+    [ -f "$file" ] || continue
+    echo "== $(basename "$file")"
+    tail -n "$lines" "$file"
+  done
 }
 
 case "${1:-}" in
@@ -51,5 +56,5 @@ case "${1:-}" in
   run) shift; run "$@" ;;
   shot) shift; shot "$@" ;;
   log) shift; log_recent "$@" ;;
-  *) echo "usage: $0 build|run [args]|shot <name>|log [seconds]" >&2; exit 2 ;;
+  *) echo "usage: $0 build|run [args]|shot <name>|log [lines]" >&2; exit 2 ;;
 esac

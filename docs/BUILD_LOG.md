@@ -20,10 +20,29 @@ Keep **DeviceHub** open (`Xcode-beta.app/Contents/Applications/DeviceHub.app`); 
 | Scripted end-to-end story (live server + Orbis); log in the app's `Documents/story.log` | `xcrun simctl launch booted com.masterbrainy.pop -screen create -debugHinge YES -storyTurns "a fox finds a leaf\|wait\|fold\|you continue\|wait\|finish"` |
 | Open the newest saved book (replays clips, no generation) | `xcrun simctl launch booted com.masterbrainy.pop -screen latest` (add `-debugHinge YES -hingeAngle 92` to hold the pop-up) |
 | Log real hinge readings to `Documents/hinge.log` | add `-logHinge YES` |
-| Story eval set (42 sessions against the deployed `story-turn`) | `deno run --allow-net --allow-read --allow-env --allow-write scripts/eval/run.ts` |
+| Story eval set (80 sessions against the deployed `story-turn`) | `deno run --allow-net --allow-read --allow-env --allow-write scripts/eval/run.ts` |
+| Back up / put back the golden demo book | `scripts/golden-book.sh save [book-id]` / `restore` / `show` |
 | Server tests | `cd supabase/functions && deno test --allow-env` |
 
 Keys stay in `supabase/functions/.env`. The scripts read them into shell variables, pass them to `curl` through a header file, and print only HTTP statuses.
+
+## 2026-09-26 (late): the story path (P-04)
+
+- **The story now writes itself along a path to an ending.** From the brief, `story-turn` `path` plans 6–8 beats and writes page 1. The next page is always built behind the one on screen: its words, picture, pop-up layers and motion prompt. Folding shows it at once, and the one after starts building.
+- **Directions steer the page behind.** A direction re-plans the path from the page behind and rebuilds it. The page on screen never changes. If the parent folds before the rebuild's words land, the old page behind shows and the direction moves to the next page (R-35, R-40). A direction on the last page gets a note to close the book.
+- **Removed:** "You continue", revise-current, speech page breaks and PopKit's `mode: "turn"` code (the server drops it once the eval passes on the new modes). Directions from a parent and a kid are never merged (R-37).
+- **Verified in the simulator (two scripted runs):**
+  - 8-page books from brief to saved book, 4 minutes each.
+  - p50/p90: story-turn 2.5/4.4 s, art 10.4/10.9 s, motion prompt 6.0/6.4 s.
+  - Every fold showed a page with its picture ready.
+  - A direction rebuilt the page behind in 3.5–4.4 s.
+  - Fold mid-rebuild, a fold past the ending and a direction on the ending all behaved as specified.
+  - All clips recorded, 0 frames flagged, 0 Reactor sessions left open.
+- **Golden book:** "Maya and the Star Stone", 8 pages, 54 MB (`scripts/golden-book.sh restore`).
+- **Fixed on the way:**
+  - Layers made in the first seconds could be turned away by the image service, so they now retry once.
+  - A finished book no longer shows the creation bar.
+  - A Russian word slipped into English page text once; the server now rejects other scripts and gets one rewrite.
 
 ## 2026-09-26
 

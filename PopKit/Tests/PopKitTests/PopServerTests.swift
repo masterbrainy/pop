@@ -23,20 +23,20 @@ struct PopServerTests {
             #expect(request.value(forHTTPHeaderField: "apikey") == "pub-key")
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer tok-0")
             let body = try JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any]
-            #expect(body?["mode"] as? String == "turn")
+            #expect(body?["mode"] as? String == "path")
             return (Data(#"""
-            {"ok":true,"data":{"action":"append","page":{"index":0,"text":"Once upon a time","artPrompt":"a fox","breakSuggested":false},
+            {"ok":true,"data":{"action":"page","page":{"index":0,"text":"Once upon a time","artPrompt":"a fox"},
             "bible":{"title":null,"setting":"","characters":[],"directions":[]},"parentNote":null,"timings":{"modelMs":1,"safetyMs":1}}}
             """#.utf8), .fake(status: 200, url: request.url!))
         }
         let server = HTTPPopServer(supabaseURL: baseURL, publishableKey: "pub-key", transport: transport, auth: auth())
-        let request = StoryTurnRequest.turn(
-            bookId: UUID(), kid: StoryTurnKid(firstName: "Maya", readingLevel: .listener, interests: []),
+        let request = StoryTurnRequest(
+            mode: .path, bookId: UUID(), kid: StoryTurnKid(firstName: "Maya", readingLevel: .listener, interests: []),
             brief: StoryBrief(interests: []), settings: ParentSettings(), bible: .empty, pages: [],
-            current: StoryTurnCurrent(index: 0, text: ""), input: StoryTurnInput(kind: .typed, speaker: .parent, text: "begin")
+            input: StoryTurnInput(kind: .typed, speaker: .parent, text: "begin"), index: 0
         )
         let response = try await server.storyTurn(request)
-        #expect(response.action == .append)
+        #expect(response.action == .page)
         #expect(response.page?.text == "Once upon a time")
     }
 

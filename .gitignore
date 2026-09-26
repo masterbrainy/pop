@@ -1,0 +1,20 @@
+# Secrets — API keys live only in these local files and in Supabase secrets
+.env
+.env.*
+*.env
+supabase/functions/.env
+supabase/.temp/
+
+# Xcode / Swift
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+.build/
+
+# Node (web/live-scene bundle)
+node_modules/
+
+# macOS
+.DS_Store

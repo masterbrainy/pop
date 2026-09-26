@@ -6,6 +6,7 @@
 import type { ReadingLevel } from "./reading_levels.ts";
 import { withinWordLimit } from "./reading_levels.ts";
 import { gentleParentNote, runSafetyGate, type SafetyDeps } from "./safety.ts";
+import { checkInputSafety, type InputSafetyDeps } from "./input_safety.ts";
 import type { Character, StoryBible } from "./schemas.ts";
 import type { StoryModelOutput } from "./story_schema.ts";
 
@@ -55,19 +56,23 @@ export function mergeBibleCharacters(
   }));
 }
 
-function bibleFromOutput(output: StoryModelOutput, existingCharacters: Character[]): StoryBible {
+// `turn` (and `title`, via the shared bible schema) don't plan or touch the
+// story path (P-04) — only `path` mode replans it and `page` mode reads it —
+// so the existing bible's path always comes back unchanged here.
+function bibleFromOutput(output: StoryModelOutput, existingBible: StoryBible): StoryBible {
   return {
     title: output.bibleTitle,
     setting: output.bibleSetting,
-    characters: mergeBibleCharacters(existingCharacters, output.bibleCharacters),
+    characters: mergeBibleCharacters(existingBible.characters, output.bibleCharacters),
     directions: output.bibleDirections,
+    path: existingBible.path,
   };
 }
 
 function toResponseData(
   output: StoryModelOutput,
   pageIndex: number,
-  existingCharacters: Character[],
+  existingBible: StoryBible,
   timings: { modelMs: number; safetyMs: number },
 ): StoryTurnResponseData {
   return {
@@ -79,7 +84,7 @@ function toResponseData(
       breakSuggested: output.breakSuggested,
       question: output.readingQuestion.trim(),
     },
-    bible: bibleFromOutput(output, existingCharacters),
+    bible: bibleFromOutput(output, existingBible),
     parentNote: output.parentNote,
     timings,
   };
@@ -113,7 +118,7 @@ export function fitToPage(output: StoryModelOutput, currentText: string, level: 
   return { ...output, pageText: trimToLimit(output.pageText, level) };
 }
 
-function trimToLimit(text: string, level: ReadingLevel): string {
+export function trimToLimit(text: string, level: ReadingLevel): string {
   if (withinWordLimit(text, level)) return text.trim();
   const sentences = text.trim().split(/(?<=[.!?])\s+/);
   let kept = "";
@@ -132,11 +137,10 @@ function trimToLimit(text: string, level: ReadingLevel): string {
 /**
  * The model sometimes starts a page by retelling the pages before it. Strip earlier pages'
  * words from the front of the new text (in order, ignoring case, spacing and punctuation),
- * unless that would leave the page empty.
+ * unless that would leave the page empty. Shared by every mode's output gate (turn, path, page).
  */
-export function dropRepeatedEarlierText(output: StoryModelOutput, earlierTexts: string[]): StoryModelOutput {
-  if (output.action === "none") return output;
-  const words = output.pageText.trim().split(/\s+/).filter(Boolean);
+export function stripRepeatedEarlierText(pageText: string, earlierTexts: string[]): string {
+  const words = pageText.trim().split(/\s+/).filter(Boolean);
   const bare = (word: string) => word.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
   let start = 0;
   for (const earlier of earlierTexts) {
@@ -147,22 +151,32 @@ export function dropRepeatedEarlierText(output: StoryModelOutput, earlierTexts: 
       start += earlierWords.length;
     }
   }
-  if (start === 0 || start >= words.length) return output;
-  return { ...output, pageText: words.slice(start).join(" ") };
+  if (start === 0 || start >= words.length) return pageText;
+  return words.slice(start).join(" ");
 }
 
-/** The safe fallback when even the rewrite fails the gate (PRD §8.6 responses). */
+export function dropRepeatedEarlierText(output: StoryModelOutput, earlierTexts: string[]): StoryModelOutput {
+  if (output.action === "none") return output;
+  return { ...output, pageText: stripRepeatedEarlierText(output.pageText, earlierTexts) };
+}
+
+/**
+ * The safe fallback when even the rewrite fails the gate (PRD §8.6 responses),
+ * or when the input itself was blocked before any model call (R-37). `parentNote`
+ * defaults to the generic gentle redirect; a blocked input passes its own note.
+ */
 function noneResponse(
   currentIndex: number,
   currentText: string,
   existingBible: StoryBible,
   timings: { modelMs: number; safetyMs: number },
+  parentNote: string = gentleParentNote(),
 ): StoryTurnResponseData {
   return {
     action: "none",
     page: { index: currentIndex, text: currentText, artPrompt: "", breakSuggested: false, question: "" },
     bible: existingBible,
-    parentNote: gentleParentNote(),
+    parentNote,
     timings,
   };
 }
@@ -197,7 +211,7 @@ export async function runStoryTurn(
   const first = keepPage(await deps.callModel(null));
   const firstGate = await passesGate(first.output, readingLevel, deps.safety);
   if (firstGate.safe) {
-    return toResponseData(first.output, currentIndex, existingBible.characters, {
+    return toResponseData(first.output, currentIndex, existingBible, {
       modelMs: first.modelMs,
       safetyMs: firstGate.safetyMs,
     });
@@ -212,11 +226,38 @@ export async function runStoryTurn(
   const safetyMs = firstGate.safetyMs + secondGate.safetyMs;
 
   if (secondGate.safe) {
-    return toResponseData(second.output, currentIndex, existingBible.characters, {
+    return toResponseData(second.output, currentIndex, existingBible, {
       modelMs,
       safetyMs,
     });
   }
 
   return noneResponse(currentIndex, currentText, existingBible, { modelMs, safetyMs });
+}
+
+export interface StoryTurnDepsWithInputSafety extends StoryTurnDeps {
+  inputSafety: InputSafetyDeps;
+}
+
+/**
+ * Wraps `runStoryTurn` with the input-safety check (R-37, PRD §8.6): moderates
+ * `input.text` (plus, for a kid speaker, the cheap real-harm rubric) before any
+ * model call. A blocked input never reaches the model and comes back as
+ * `action: "none"` with the input check's own calm `parentNote`.
+ */
+export async function runStoryTurnWithInputGate(
+  readingLevel: ReadingLevel,
+  currentIndex: number,
+  currentText: string,
+  existingBible: StoryBible,
+  input: { text: string; speaker: "parent" | "kid" },
+  kidFirstName: string,
+  deps: StoryTurnDepsWithInputSafety,
+  earlierTexts: string[] = [],
+): Promise<StoryTurnResponseData> {
+  const verdict = await checkInputSafety(input.text, input.speaker, kidFirstName, deps.inputSafety);
+  if (verdict.blocked) {
+    return noneResponse(currentIndex, currentText, existingBible, { modelMs: 0, safetyMs: 0 }, verdict.parentNote ?? gentleParentNote());
+  }
+  return runStoryTurn(readingLevel, currentIndex, currentText, existingBible, deps, earlierTexts);
 }

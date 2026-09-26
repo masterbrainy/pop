@@ -38,6 +38,10 @@ export const storyBibleSchema = z.object({
   setting: z.string().trim().max(1000).default(""),
   characters: z.array(characterSchema).max(10).default([]),
   directions: z.array(z.string().trim().min(1).max(300)).max(100).default([]),
+  // The story path (P-04, docs/CONTRACTS.md "story-turn modes path and page"):
+  // one short beat per planned page, index 0 first. Optional and defaulting to
+  // [] so a bible sent by an app build that predates the path stays valid.
+  path: z.array(z.string().trim().max(300)).max(12).default([]),
 });
 
 export const pageRefSchema = z.object({
@@ -56,12 +60,21 @@ export const storyInputSchema = z.object({
   text: z.string().max(4000).default(""),
 });
 
+// The `path` and `page` modes' input (docs/CONTRACTS.md): a direction only,
+// never "continue" (there's no page to continue — the path always has one).
+export const directionInputSchema = z.object({
+  kind: z.enum(["speech", "typed"]),
+  speaker: z.enum(["parent", "kid"]),
+  text: z.string().max(4000).default(""),
+});
+
 export type Kid = z.infer<typeof kidSchema>;
 export type StoryBrief = z.infer<typeof storyBriefSchema>;
 export type ParentSettings = z.infer<typeof parentSettingsSchema>;
 export type Character = z.infer<typeof characterSchema>;
 export type StoryBible = z.infer<typeof storyBibleSchema>;
 export type StoryInput = z.infer<typeof storyInputSchema>;
+export type DirectionInput = z.infer<typeof directionInputSchema>;
 
 /** Turns a ZodError into the single bad_request message our envelope wants. */
 export function zodIssueSummary(error: z.ZodError): string {

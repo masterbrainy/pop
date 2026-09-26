@@ -23,3 +23,19 @@ Read the CONTENT the user provides and reply with only a JSON object:
 {"safe": boolean, "reason": string}
 "reason" must be empty when safe is true, and a short (under 20 words) plain-English reason when safe is false.`;
 }
+
+/**
+ * The prompt for the input-side real-harm check (R-37, PRD §8.6): a cheap,
+ * fast classification of a kid's own turn input, run before it ever reaches
+ * the story engine. Separate from `rubricCheckPrompt` because it judges the
+ * child's real-life words, not the model's story output.
+ */
+export function realHarmCheckPrompt(): string {
+  return `You check a child's own words, said while making a picture book with a parent, for signs of real harm happening to them in real life — for example abuse, being hurt by someone, neglect, or a real danger they're describing about themselves or their home, not something they're imagining for the story.
+Ordinary play, made-up story ideas, silly or scary-sounding pretend, and unrelated chatter are all safe.
+
+Read the CHILD'S WORDS and reply with only a JSON object:
+{"safe": boolean, "reason": string}
+"safe" is false only when the words sound like the child may be describing real harm to themselves; true otherwise.
+"reason" must be empty when safe is true, and a short (under 20 words) plain-English reason when safe is false.`;
+}

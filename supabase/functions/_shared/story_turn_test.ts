@@ -1,5 +1,14 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { dropRepeatedEarlierText, fitToPage, mergeBibleCharacters, runStoryTurn, type StoryTurnDeps } from "./story_turn.ts";
+import {
+  dropRepeatedEarlierText,
+  fitToPage,
+  mergeBibleCharacters,
+  runStoryTurn,
+  runStoryTurnWithInputGate,
+  type StoryTurnDeps,
+  type StoryTurnDepsWithInputSafety,
+} from "./story_turn.ts";
+import { gentleParentNote } from "./safety.ts";
 import type { StoryBible } from "./schemas.ts";
 import type { StoryModelOutput } from "./story_schema.ts";
 
@@ -19,7 +28,7 @@ function output(overrides: Partial<StoryModelOutput> = {}): StoryModelOutput {
   };
 }
 
-const emptyBible: StoryBible = { title: null, setting: "", characters: [], directions: [] };
+const emptyBible: StoryBible = { title: null, setting: "", characters: [], directions: [], path: [] };
 
 function depsFor(outputs: StoryModelOutput[], safe: boolean[]): StoryTurnDeps {
   let modelCall = 0;
@@ -96,6 +105,7 @@ Deno.test("runStoryTurn maps bibleCharacters and preserves existing referencePat
     setting: "",
     characters: [{ id: "c1", name: "Rex", description: "a dinosaur", referencePath: "u/b/character-c1-v1.png" }],
     directions: [],
+    path: [],
   };
   const deps = depsFor(
     [output({
@@ -211,4 +221,64 @@ Deno.test("runStoryTurn returns the page's reading question and runs it past the
   const result = await runStoryTurn("early_reader", 0, "", emptyBible, deps);
   assertEquals(result.page.question, "Who shares the cookie?");
   assertEquals(checked.some((text) => text.includes("Who shares the cookie?")), true);
+});
+
+Deno.test("runStoryTurn carries the bible's story path through unchanged (turn mode never plans or touches it)", async () => {
+  const bible: StoryBible = { title: null, setting: "", characters: [], directions: [], path: ["Beat 0", "Beat 1"] };
+  const deps = depsFor([output()], [true]);
+  const result = await runStoryTurn("early_reader", 0, "", bible, deps);
+  assertEquals(result.bible.path, ["Beat 0", "Beat 1"]);
+});
+
+function inputSafetyDepsFor(overrides: Partial<StoryTurnDepsWithInputSafety["inputSafety"]> = {}) {
+  return {
+    moderateText: async () => ({ flagged: false, categories: [] }),
+    checkRealHarm: async () => ({ safe: true, reason: "" }),
+    ...overrides,
+  };
+}
+
+Deno.test("runStoryTurnWithInputGate calls the model when the input passes the input-safety check", async () => {
+  const deps: StoryTurnDepsWithInputSafety = {
+    ...depsFor([output()], [true]),
+    inputSafety: inputSafetyDepsFor(),
+  };
+  const result = await runStoryTurnWithInputGate(
+    "early_reader",
+    0,
+    "",
+    emptyBible,
+    { text: "add a puppy", speaker: "parent" },
+    "Maya",
+    deps,
+  );
+  assertEquals(result.action, "append");
+});
+
+Deno.test("runStoryTurnWithInputGate blocks a flagged input before any model call, returning none with its own note", async () => {
+  let modelCalled = false;
+  const deps: StoryTurnDepsWithInputSafety = {
+    callModel: async () => {
+      modelCalled = true;
+      return { output: output(), modelMs: 10 };
+    },
+    safety: {
+      moderateText: async () => ({ flagged: false, categories: [] }),
+      checkRubric: async () => ({ safe: true, reason: "" }),
+    },
+    inputSafety: inputSafetyDepsFor({ moderateText: async () => ({ flagged: true, categories: ["violence"] }) }),
+  };
+  const result = await runStoryTurnWithInputGate(
+    "early_reader",
+    0,
+    "prior draft",
+    emptyBible,
+    { text: "something unsafe", speaker: "kid" },
+    "Maya",
+    deps,
+  );
+  assertEquals(result.action, "none");
+  assertEquals(result.page.text, "prior draft");
+  assertEquals(modelCalled, false);
+  assertEquals(result.parentNote !== null && result.parentNote !== gentleParentNote(), true);
 });

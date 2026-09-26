@@ -2,8 +2,11 @@
 // §3 `art`, PRD P2). Pure functions so the picking logic is unit-testable
 // without any network call; index.ts does the actual Gemini call and Storage
 // download/upload.
-import { ART_STYLE, CUTOUT_BACKGROUND_INSTRUCTION, PLATE_INSTRUCTION } from "./art_style.ts";
+import { decodeBase64 } from "jsr:@std/encoding@1/base64";
+import { ART_STYLE, CUTOUT_BACKGROUND_INSTRUCTION, DRAWING_INSTRUCTION, PLATE_INSTRUCTION } from "./art_style.ts";
 import type { ArtKind } from "./art_style.ts";
+import type { InlineImage } from "./gemini_client.ts";
+import { sniffImageMimeType } from "./image_format.ts";
 import type { Character } from "./schemas.ts";
 
 /** Declared placeholder dimensions when moderation blocks both attempts (no picture is generated). */
@@ -34,8 +37,28 @@ export function referencePathsFor(
     case "cover":
       return characters.filter((c) => c.referencePath).map((c) => c.referencePath as string);
     case "plate":
+    case "drawing":
+      // `plate` draws no characters at all; `drawing`'s only "reference" is
+      // the kid's own drawing, attached separately by drawingInlineImage —
+      // there's no existing character reference to look up yet.
       return [];
   }
+}
+
+/**
+ * For `kind: "drawing"` only: decodes the kid's drawing and sniffs its image
+ * format, ready to attach to the Gemini request as an inline image part
+ * alongside (or instead of) any stored character references. Pure and
+ * network-free so it's unit-testable; `index.ts` pushes the result onto the
+ * same `referenceImages` array `loadReferenceImages` builds from storage.
+ * Returns `undefined` for every other kind, or when no drawing was sent
+ * (schema validation already guarantees a valid one is present for `drawing`).
+ */
+export function drawingInlineImage(kind: ArtKind, drawing?: string | null): InlineImage | undefined {
+  if (kind !== "drawing" || !drawing) return undefined;
+  const bytes = decodeBase64(drawing);
+  const mimeType = sniffImageMimeType(bytes) ?? "image/png";
+  return { mimeType, data: drawing };
 }
 
 /** Builds the full Gemini prompt: the locked style, kind-specific instructions, character notes, then the caller's own prompt. */
@@ -49,6 +72,7 @@ export function buildArtPrompt(
 
   if (kind === "cutout") lines.push(CUTOUT_BACKGROUND_INSTRUCTION);
   if (kind === "plate") lines.push(PLATE_INSTRUCTION);
+  if (kind === "drawing") lines.push(DRAWING_INSTRUCTION);
 
   if (kind === "cutout" || kind === "character") {
     const character = characters.find((c) => c.id === characterId);

@@ -57,3 +57,14 @@ Deno.test("artObjectPath rejects a cutout kind missing either id", () => {
   assertThrows(() => artObjectPath({ ...base, kind: "cutout", pageIndex: 1 }), PopError);
   assertThrows(() => artObjectPath({ ...base, kind: "cutout", characterId: "rex" }), PopError);
 });
+
+Deno.test("artObjectPath builds a drawing path from characterId, with no page index", () => {
+  assertEquals(
+    artObjectPath({ ...base, kind: "drawing", characterId: "rex" }),
+    "user-1/book-1/drawing-rex-v2.png",
+  );
+});
+
+Deno.test("artObjectPath rejects a drawing kind with no characterId", () => {
+  assertThrows(() => artObjectPath({ ...base, kind: "drawing" }), PopError);
+});

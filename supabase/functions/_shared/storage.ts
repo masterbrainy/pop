@@ -47,6 +47,8 @@ export function artObjectPath(input: ArtObjectPathInput): string {
       return `${prefix}/cutout-${requireField(input.characterId, "characterId", input.kind)}-${
         requireField(input.pageIndex, "pageIndex", input.kind)
       }-v${input.version}.png`;
+    case "drawing":
+      return `${prefix}/drawing-${requireField(input.characterId, "characterId", input.kind)}-v${input.version}.png`;
   }
 }
 

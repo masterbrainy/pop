@@ -62,12 +62,12 @@ struct DomainTests {
 struct MotionPromptBuilderTests {
     @Test func buildsTheFixedTemplateWithOneGentleClause() {
         let prompt = MotionPromptBuilder.prompt(scene: "sunny meadow with a small red fox under a big oak tree", motion: "The fox's tail swishes slowly")
-        #expect(prompt == "The same sunny meadow with a small red fox under a big oak tree, the same locked-off, still camera. The fox's tail swishes slowly. Nothing new enters the scene. Continuous slow motion, no cuts.")
+        #expect(prompt == "The same sunny meadow with a small red fox under a big oak tree, the same locked-off, still camera. The fox's tail swishes slowly. Nothing new enters the scene. Continuous slow motion, no cuts. \(MotionPromptBuilder.styleHold)")
     }
 
     @Test func tidiesPunctuationAndLeadingArticles() {
         let prompt = MotionPromptBuilder.prompt(scene: "  The quiet pond at dusk. ", motion: "ripples spread gently across the water.")
-        #expect(prompt == "The same quiet pond at dusk, the same locked-off, still camera. Ripples spread gently across the water. Nothing new enters the scene. Continuous slow motion, no cuts.")
+        #expect(prompt == "The same quiet pond at dusk, the same locked-off, still camera. Ripples spread gently across the water. Nothing new enters the scene. Continuous slow motion, no cuts. \(MotionPromptBuilder.styleHold)")
     }
 
     @Test func fallsBackToAGentleDefaultWhenMotionIsEmpty() {

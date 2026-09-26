@@ -3,7 +3,14 @@
 // without any network call; index.ts does the actual Gemini call and Storage
 // download/upload.
 import { decodeBase64 } from "jsr:@std/encoding@1/base64";
-import { ART_STYLE, CUTOUT_BACKGROUND_INSTRUCTION, DRAWING_INSTRUCTION, PLATE_INSTRUCTION } from "./art_style.ts";
+import {
+  ART_STYLE,
+  ART_STYLE_ENFORCEMENT,
+  CUTOUT_BACKGROUND_INSTRUCTION,
+  DRAWING_INSTRUCTION,
+  PLATE_INSTRUCTION,
+  withoutStyleDrift,
+} from "./art_style.ts";
 import type { ArtKind } from "./art_style.ts";
 import type { InlineImage } from "./gemini_client.ts";
 import { sniffImageMimeType } from "./image_format.ts";
@@ -84,7 +91,9 @@ export function buildArtPrompt(
     );
   }
 
-  lines.push(prompt);
+  // The scene, with any medium or rendering words the story model slipped in cut out, then
+  // the style once more so it's the last thing the image model reads.
+  lines.push(withoutStyleDrift(prompt), ART_STYLE_ENFORCEMENT);
   return lines.join("\n\n");
 }
 

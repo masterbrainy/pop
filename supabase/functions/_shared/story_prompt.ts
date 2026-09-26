@@ -173,6 +173,7 @@ export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string 
     "Never use surnames, home addresses, school names, or phone numbers anywhere in the story text.",
     KID_SAFETY_RUBRIC,
     `One locked illustration style is used for every picture: ${ART_STYLE}. Write art prompts that fit this style and depict only what is safe to show this child.`,
+    "In artPrompt describe only the scene: who is there, where, doing what, and the mood. Never name a medium, camera, rendering technique or visual style (no 'photorealistic', '3D', 'anime', 'cartoon', 'sketch', 'cinematic' or the like): the illustration style is fixed and added separately.",
     ART_PROMPT_NAMES_INSTRUCTION,
     ...describeBible(input.bible),
   );
@@ -258,6 +259,7 @@ export function buildStoryPageSystemPrompt(input: StoryPagePromptInput): string 
     "Never use surnames, home addresses, school names, or phone numbers anywhere in the story text.",
     KID_SAFETY_RUBRIC,
     `One locked illustration style is used for every picture: ${ART_STYLE}. Write an art prompt that fits this style and depicts only what is safe to show this child.`,
+    "In artPrompt describe only the scene: who is there, where, doing what, and the mood. Never name a medium, camera, rendering technique or visual style (no 'photorealistic', '3D', 'anime', 'cartoon', 'sketch', 'cinematic' or the like): the illustration style is fixed and added separately.",
     ART_PROMPT_NAMES_INSTRUCTION,
     ...describeBible(input.bible),
     ...brandInstruction([...briefTexts(input.kid, input.brief), ...bibleTexts(input.bible)], input.kid.firstName),

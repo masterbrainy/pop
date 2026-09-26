@@ -5,12 +5,15 @@ import Foundation
 /// the teammate's continuity lesson: nothing new enters, no cuts.
 public enum MotionPromptBuilder {
     static let defaultMotion = "Everything sways very gently"
+    /// Closes every Orbis prompt: the live video drifts toward a photoreal look the longer it
+    /// runs, so the locked picture-book style is restated as the last thing it reads.
+    static let styleHold = "Keep the soft watercolor and colored pencil picture-book look the whole time, exactly as in the picture: never photoreal, never 3D, the same colours and outlines."
 
     public static func prompt(scene: String, motion: String) -> String {
         let sceneText = withoutLeadingArticle(tidy(scene))
         let motionText = tidy(motion)
         let clause = sentence(motionText.isEmpty ? defaultMotion : motionText)
-        return "The same \(sceneText.isEmpty ? "scene" : sceneText), the same locked-off, still camera. \(clause) Nothing new enters the scene. Continuous slow motion, no cuts."
+        return "The same \(sceneText.isEmpty ? "scene" : sceneText), the same locked-off, still camera. \(clause) Nothing new enters the scene. Continuous slow motion, no cuts. \(styleHold)"
     }
 
     public static func prompt(_ parts: MotionParts) -> String {

@@ -49,8 +49,13 @@ final class StoryMaker {
         self.services = services
         self.heroDrawing = heroDrawing
         live.onClip = { [weak self] pageId, url in self?.attachClip(url, to: pageId) }
-        live.onFrameFlagged = { [weak self] _ in
-            self?.note("The moving picture drifted off, so this page keeps its still picture.")
+        live.onFrameFlagged = { [weak self] pageId in
+            guard let self else { return }
+            // A clip saved before the flag must not replay in the finished book (R-38).
+            if let page = self.reader.page(id: pageId), page.clipPath != nil {
+                self.reader.updatePage(index: page.index) { $0.with(clipPath: nil) }
+            }
+            self.note("The moving picture drifted off, so this page keeps its still picture.")
         }
         reader.onPageChange = { [weak self] page in self?.pageChanged(to: page) }
     }

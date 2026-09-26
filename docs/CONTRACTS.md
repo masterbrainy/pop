@@ -99,6 +99,7 @@ Response `data`:
   "page": { "index": 1, "text": "…", "artPrompt": "…", "question": "…", "isEnding": false },
   "bible": { "title": "…", "setting": "…", "characters": [ … ], "directions": [ … ], "path": [ "…" ] },
   "parentNote": null,
+  "refusal": "real_harm | unsafe | null",
   "timings": { "modelMs": 0, "safetyMs": 0 }
 }
 ```
@@ -106,6 +107,7 @@ Response `data`:
 - **Input safety (R-37, PRD §8.6):** `input.text` is moderated before it reaches the model. If it's flagged, or it sounds like the child describing real harm, the reply is `action: "none"` with the unchanged bible and a calm `parentNote`, and the words never enter the story.
 - The page goes through the same output gate as before: moderation plus the rubric at the reading level, with one rewrite, then `none`. Its text is kept within the level's word limit (cut to whole sentences, never refused for length), and it never retells earlier pages.
 - `page.question` is one short question for the parent to ask about the page (C3).
+- `refusal` (R-41) is set only on `action: "none"` and only for a safety refusal, never for reaching the path's end: `"real_harm"` when a kid's own words sounded like real harm (input moderation or the real-harm rubric, R-37), `"unsafe"` when an input or the output failed moderation or the rubric for any other reason, and `null` otherwise (a safe page, or `page` mode past the path's end). `parentNote` stays the calm, non-alarming text either way; `refusal` is for the app to tell the two cases apart without parsing the note.
 
 ### `art`: one picture (S6, P2, pop-up layers, cover, kid's drawing as the hero)
 Request: `{ "bookId", "kind": "page | cover | character | plate | cutout | drawing", "pageIndex": 0, "version": 1, "prompt": "…", "characters": [ Character ], "characterId": null, "drawing": null }`.

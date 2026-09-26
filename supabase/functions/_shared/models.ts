@@ -1,5 +1,5 @@
 // Model choices, pinned after checking what each key can actually use
-// (see the deploy report for the OpenAI GET /v1/models check on 2026-09-25).
+// (see the deploy report for the OpenAI GET /v1/models check on 2026-09-26).
 
 // Story engine: creative structured-output writing at low latency.
 export const STORY_MODEL = "gpt-5.4-mini";

@@ -6,7 +6,7 @@
 
 ---
 
-## 1. Where we are (Day 0, done 2026-09-25)
+## 1. Where we are (Day 0, done 2026-09-26)
 
 | Item | Status |
 |---|---|
@@ -16,7 +16,7 @@
 | Duo APIs checked in the SDK (see §3) | ✅ |
 | Supabase CLI logged in and linked to the project | ✅ |
 | API keys (Reactor, Gemini, OpenAI): each returns HTTP 200, stored in Supabase secrets and the git-ignored `supabase/functions/.env` | ✅ |
-| Billing on for the Gemini key's Google project (its image models have no free tier). A test picture from `gemini-2.5-flash-image` returned HTTP 200 on 2026-09-25 | ✅ |
+| Billing on for the Gemini key's Google project (its image models have no free tier). A test picture from `gemini-2.5-flash-image` returned HTTP 200 on 2026-09-26 | ✅ |
 | App-side Supabase URL and publishable key in git-ignored `config/Supabase.local.xcconfig` | ✅ |
 | Private GitHub repo `masterbrainy/pop` | ✅ |
 | Claude Code ↔ Xcode tools (`xcrun mcpbridge`) | ✅ |
@@ -72,7 +72,7 @@
 
 ### iPhone Duo APIs, verified in the iOS 27.1 SDK
 
-These were checked by reading the SDK's `SwiftUICore` interface file on 2026-09-25.
+These were checked by reading the SDK's `SwiftUICore` interface file on 2026-09-26.
 
 | API | Signature | Use in Pop! |
 |---|---|---|
@@ -97,12 +97,12 @@ These were checked by reading the SDK's `SwiftUICore` interface file on 2026-09-
 ### Other facts that affect the design
 
 - **Xcode 27.1 has no Simulator.app.** `DeviceHub.app` (in `Xcode-beta.app/Contents/Applications`, bundle `com.apple.dt.Devices`) shows the simulators. Xcode's foldable-device plugin (`CoreDevicePopDeviceKitExtension`) adds a hinge slider to the Duo's window there. By default it sweeps through the fold instead of jumping, and a "Disable Hinge Interpolation" setting sends a single angle instead. (Found in the plugin's code; 0.1 confirms it on screen.) A Duo booted without DeviceHub open stays on the Apple logo (REVIEW R-21).
-- Gemini's image models (2.5 Flash Image, 3.1 Flash Image, 3 Pro Image) have **no free tier**. On the paid tier they cost about $0.04–0.13 per image, and prompts aren't used to improve Google's products (Google's pricing and billing pages, checked 2026-09-25). With no shape requested, `gemini-2.5-flash-image` returns a square 1024×1024 PNG (test picture, 2026-09-25), so 0.4 asks for the page's shape.
+- Gemini's image models (2.5 Flash Image, 3.1 Flash Image, 3 Pro Image) have **no free tier**. On the paid tier they cost about $0.04–0.13 per image, and prompts aren't used to improve Google's products (Google's pricing and billing pages, checked 2026-09-26). With no shape requested, `gemini-2.5-flash-image` returns a square 1024×1024 PNG (test picture, 2026-09-26), so 0.4 asks for the page's shape.
 - Apple's Vision background removal (`VNGenerateForegroundInstanceMaskRequest`) reportedly **doesn't run in the Simulator** (Apple Developer Forums). So pop-up layers are generated directly: a background plate plus character cutouts on a flat colour that Core Image keys out.
 - OpenAI text-to-speech **returns no word timings**, so read-along uses `AVSpeechSynthesizer`'s `willSpeakRangeOfSpeechString` callback. OpenAI's `tts` is used only for talking characters and video export.
 - OpenAI Realtime supports transcription-only sessions, with **short-lived client secrets minted by our server**, so the app never holds the key.
 
-### Phase 0 probe results (Duo simulator, iOS 27.1, 2026-09-25)
+### Phase 0 probe results (Duo simulator, iOS 27.1, 2026-09-26)
 
 - **0.1 Hinge.** `onHingeChange` fires once on appear with the current state (closed, 0.00°, about 0.5 s after launch), so the app needs no separate first read. When the Duo is closed, the app runs on the outer screen (466×678 pt) and the inner screen stays black. `devicectl device motion hinge-angle` reports 0–180°. Only DeviceHub's slider moves the hinge: `simctl` and `devicectl` can't set it, and computer control is off on this Mac. So posture logic is built and tested against a scripted `HingeSource` and the in-app debug slider, and the real hinge is a manual check for Brian.
 - **0.2 Spread (outer screen).** On the closed Duo's portrait outer screen, `ArrangementView(.split)` stacks the two panes top and bottom, 466×339 pt each. There is no `.division` region there, and there are two active `.occlusion` regions at the top right: the camera [399,29 37×37] and its housing [382,0 84×170]. The inner spread (expected 2 × about 475×669 pt) is measured when the hinge is opened by hand.
@@ -277,9 +277,9 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 | D1 | Gesture model for turning vs popping up: the model is recommended in PRD §13, and G0 sets its angles and hold time | G0 |
 | D2 | What the latency target means | G0 |
 | D3 | Orbis Stable vs Dynamic | G0 |
-| D4 | Record per-page clips | ✅ Resolved 2026-09-25 by P-01: required (saved books replay exactly). How, the minimum clip length, looping, and what Save does with incomplete clips: G0 |
-| D7 | Gemini: images and animation prompts. OpenAI: speech-to-text, story, moderation, and `tts` for talking characters and video export. Read-along narration uses Apple's on-device voice | ✅ Confirmed by Brian 2026-09-25 |
-| D8 | Demo date → cut line | ✅ Resolved 2026-09-25: no deadline; build the full scope, including talking characters |
+| D4 | Record per-page clips | ✅ Resolved 2026-09-26 by P-01: required (saved books replay exactly). How, the minimum clip length, looping, and what Save does with incomplete clips: G0 |
+| D7 | Gemini: images and animation prompts. OpenAI: speech-to-text, story, moderation, and `tts` for talking characters and video export. Read-along narration uses Apple's on-device voice | ✅ Confirmed by Brian 2026-09-26 |
+| D8 | Demo date → cut line | ✅ Resolved 2026-09-26: no deadline; build the full scope, including talking characters |
 | D9 | How the 16:9 animation fills a portrait page (§3 options) | G0 |
 
 *D5 and D6 were removed on 2026-09-26 (P-02): everything is free.*

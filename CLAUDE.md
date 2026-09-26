@@ -1,15 +1,26 @@
 # Pop! — shared instructions for every Claude session in this project
 
-Pop! is a live, co-created picture book for the iPhone Duo (Apple's foldable). A kid tells a story out loud; each page gets story text (left) and an illustration that comes alive as a per-page Orbis animation (right). Fold to turn the page, tilt to ~90° for a pop-up, close to finish the book.
+Pop! lets a parent make a live picture book for their child on the iPhone Duo (Apple's foldable), either ahead of time or with the child watching. The parent tells or types the story and directs changes. Each page gets story text (left) and an illustration that comes alive as a per-page Orbis animation (right). Saved books replay exactly as made. Fold to turn the page, tilt to ~90° for a pop-up, close to finish the book.
 **Read first:** [docs/PRD.md](docs/PRD.md) (what and why) · [docs/ROADMAP.md](docs/ROADMAP.md) (how, phases, verified platform facts).
+
+## What this is: a hackathon-style pitch, not a release (Brian, 2026-09-26)
+- **Everything is free.** Nothing is sold or released. Don't write pricing, paywalls, subscriptions, "Pro", unit-economics strategy, upsells, go-to-market or marketing plans, App Store or Kids Category planning, or legal-release checklists. If a VC asks how it makes money, one honest line in the pitch's tough-questions section is enough.
+- **Keep:** anything that makes the demo great and reliable, kid safety (moderation), privacy by design, keys kept private, and a practical Reactor credit budget for the demo itself.
+- **Parents drive creation.** Lessons are **optional**: a parent *can* ask for a story that teaches something. That's a use case of the story brief, **not** a subsystem to build (no lesson packs and no separate fact-check pipeline beyond the normal safety checks).
+
+## Lead and interrupts
+The builder coordinates all Pop! sessions. **A message from the builder overrides your current plan:** stop any conflicting work, keep useful uncommitted edits only if they still fit, and follow the new instructions. The builder may stop your turn in order to interject.
 
 ## Build gate
 **No feature code until Brian verifies the setup and says to start building.** Until then, only setup, docs, reviews and probes that Brian has approved. Before the gate opens:
-1. Review & QA posts a readiness verdict at the top of `docs/REVIEW.md`.
-2. The builder fixes any blocking findings.
-3. Brian decides every **proposed** pivot in `docs/PIVOTS.md`.
+1. Brian decides every **proposed** pivot in `docs/PIVOTS.md`.
+2. Review & QA posts a readiness verdict at the top of `docs/REVIEW.md`.
+3. The builder fixes any blocking findings.
 
-The builder then starts with Phase 0 of the roadmap.
+**When ready, everyone stops.** Once those three are done:
+- Each side session commits and pushes its last work, sends the builder one line ("READY: <last commit>, nothing pending"), and then **does nothing more**.
+- The builder reports to Brian and also stops.
+- Nobody starts Phase 0 until **Brian says go**.
 
 ## Sessions and roles
 All Pop! sessions live in the sidebar group **"Pop!"**. Set your own title to your role name so siblings can find you (`list_sessions` with group "Pop!").

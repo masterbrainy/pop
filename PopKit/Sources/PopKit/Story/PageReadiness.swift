@@ -56,22 +56,22 @@ public enum PageReadiness: Equatable, Sendable {
     }
 }
 
-/// How long a page's picture is waited for. The `art` function spends at most
-/// `serverArtBudget` on one picture (R-49), and a failed call is tried once more after
-/// `artRetryDelay`. Page 1 fits one full call plus storing the still; the page behind (the
-/// parent is still reading) fits the call and its retry. Past these the page shows with the
-/// imagine card, and a still that lands later still shows.
+/// How long a page's picture is waited for. One `art` call takes about 13-14 s (OpenAI, P-05),
+/// or about 30 s when moderation flags it and it's redone; each call waits at most
+/// `PopServerTimeouts.art`, and a failed call is tried once more after `artRetryDelay`. Past
+/// these deadlines the page shows with the imagine card, and a still that lands later still shows.
 public enum PaintDeadlines {
-    public static let serverArtBudget: TimeInterval = 40
+    public static let typicalPicture: TimeInterval = 14
+    public static let redonePicture: TimeInterval = 30
     public static let artRetryDelay: TimeInterval = 2
     /// Page 1, counted from its words landing.
-    public static let firstPage: TimeInterval = 50
+    public static let firstPage: TimeInterval = 45
     /// The page behind, counted from when it starts painting (after the page on screen shows).
-    public static let pageBehind: TimeInterval = 90
+    public static let pageBehind: TimeInterval = 60
     /// The page behind waits this long after its still for its motion prompt.
     public static let motionGrace: TimeInterval = 8
     /// A scripted fold waits this long for the page behind (past its own deadline).
-    public static let waitForPageBehind: TimeInterval = 100
+    public static let waitForPageBehind: TimeInterval = 90
     /// Page 1's left page adds "Almost there…" after this long.
     public static let firstPageSlow: TimeInterval = 20
 }

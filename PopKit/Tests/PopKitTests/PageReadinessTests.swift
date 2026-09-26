@@ -56,12 +56,15 @@ struct PageReadinessTests {
         #expect(readiness(painted, picture: .gaveUp, storedAt: stored) == .ready(picture: true))
     }
 
-    @Test func theDeadlinesLeaveRoomForTheServersArtBudget() {
-        // Page 1 fits one full art call; the page behind fits the call and its one retry (R-49).
-        #expect(PaintDeadlines.firstPage > PaintDeadlines.serverArtBudget)
-        #expect(PaintDeadlines.pageBehind > 2 * PaintDeadlines.serverArtBudget + PaintDeadlines.artRetryDelay)
+    @Test func theDeadlinesLeaveRoomForAPictureAndItsRetry() {
+        // Page 1 fits a picture redone after a moderation flag, or a quick failure and its retry.
+        #expect(PaintDeadlines.firstPage >= PaintDeadlines.redonePicture + PaintDeadlines.artRetryDelay)
+        #expect(PaintDeadlines.firstPage >= 2 * PaintDeadlines.typicalPicture + PaintDeadlines.artRetryDelay)
+        // The page behind (the parent is still reading) fits a redone picture and its retry.
+        #expect(PaintDeadlines.pageBehind >= PaintDeadlines.redonePicture + PaintDeadlines.artRetryDelay + PaintDeadlines.typicalPicture)
         #expect(PaintDeadlines.waitForPageBehind > PaintDeadlines.pageBehind)
-        #expect(PaintDeadlines.serverArtBudget < PopServerTimeouts.art)
+        // The retry waits less than a whole call may take, so it never outlasts the app's art timeout by much.
+        #expect(PaintDeadlines.artRetryDelay < PopServerTimeouts.art)
     }
 }
 

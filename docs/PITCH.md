@@ -120,7 +120,7 @@ The **kid's turn / parent's turn** toggle (PRD S2, a must-have) tells the story 
 
 ### Business model
 
-- **3 free books, then Pro** (K5). The Pro price is **TBD**, set after measuring the real cost per book (D5, after Phase 5).
+- **3 free books, then Pro** (K5). **Depends on P-02 / D5.** The Pro price is **TBD**, set after measuring the real cost per book (D5, after Phase 5). Whether Pro stays "unlimited" is Brian's call (P-02, proposed).
 - Possible add-ons (printed book, gifting) are in the [Ideas inbox](#10-ideas-inbox). They're not in the plan.
 
 ### Unit economics (honest version)
@@ -140,7 +140,7 @@ The biggest cost is live animation. Orbis Stable is billed per second at **$0.58
 
 **What that means, unmitigated:**
 - Three free books can cost **~$26** in animation alone (3 × $8.73) for each family that uses all three, before we earn anything.
-- A family making one book a week (four a month) costs **~$35 a month** in animation alone (4 × $8.73). "Unlimited" Pro can't carry that, so the mitigations below are part of the business model, not polish.
+- A family making one book a week (four a month) costs **~$35 a month** in animation alone (4 × $8.73). Pro as "unlimited" can't carry that without the mitigations below, which is why P-02 asks whether to keep "unlimited". The mitigations are part of the business model, not polish.
 
 **Mitigations:**
 1. **Record once, replay for free.** Save each page's clip (D4, pending the Phase 0.3 recording test). Rereads, PDF sharing and video export then cost $0 in Orbis time. *Hypothesis:* rereads are where a picture book gets most of its use.
@@ -148,7 +148,7 @@ The biggest cost is live animation. Orbis Stable is billed per second at **$0.58
 3. **Stable, not Dynamic:** under half the price per minute (D3).
 4. **Cap live seconds per page** *(proposal)*: animate live for a short while, then loop the recorded clip.
 5. **Tiered free books** *(proposal)*: free books use the still-image pan (the existing fallback) on most pages and live animation on the first page.
-6. **Price Pro on measured cost** (D5). A fair-use allowance may beat "unlimited"; suggested to the builder, since PRD K5 still says unlimited.
+6. **Price Pro on measured cost** (*depends on P-02 / D5*). A fair-use allowance may beat "unlimited". PRD K5 still says unlimited, and the change is logged as P-02 (proposed) for Brian to decide.
 7. **Prices may fall.** Per-minute prices for generative video may drop over time. We don't bank on it.
 
 **North-star cost metric:** cost per finished book, TBD (measured after Phase 5). It's already a tracked product metric (PRD §5).
@@ -167,7 +167,7 @@ We rent the models, and anyone can call them. What we can defend is what we buil
 
 | Risk | Why it matters | What we do |
 |---|---|---|
-| Cost per book (~$9 unmitigated) | Unit economics | The mitigations above; price after measuring (D5) |
+| Cost per book (~$9 unmitigated) | Unit economics | The mitigations above; price after measuring (depends on P-02 / D5) |
 | Orbis warps faces or drifts off the page | The magic breaks | Gentle motion, locked camera, drift guard. Fallback: animate only the background and keep the characters as crisp cutouts |
 | Orbis takes minutes to warm up | The family waits | Warm up when the book starts; show text and stills first |
 | One live-video vendor | An outage or a price change | Orbis is one implementation of `LiveScene`, and the still-pan fallback always works (TN-009) |
@@ -225,7 +225,7 @@ We rent the models, and anyone can call them. What we can defend is what we buil
 |---|---|
 | **"Isn't this just more screen time?"** | It's built for two people: the parent sets up and guides the book, the kid tells it, and it ends with a book you keep. We measure books finished together, not minutes on screen. |
 | **"Who's the customer, the parent or the kid?"** | The parent. They pay, own the account, pick the mode and guide the story. The kid is the co-author. |
-| **"$9 of video per book. How is this a business?"** | $9 is the unmitigated case of 15 live minutes. We record each clip once so rereads are free, animate only the open page, use Stable, and price Pro on the measured cost after Phase 5. We'll show the real number, not a guess. |
+| **"$9 of video per book. How is this a business?"** | $9 is the unmitigated case of 15 live minutes. We record each clip once so rereads are free, animate only the open page, use Stable, and price Pro on the measured cost after Phase 5. Whether Pro stays unlimited is an open decision (P-02 / D5). We'll show the real number, not a guess. |
 | **"What stops OpenAI, Google or Apple from doing this?"** | Nothing stops them from building a story generator. What's hard is the co-creation loop between a parent and a five-year-old, the fold interactions, and safety you can trust. Big platforms build general tools; we build one narrow thing very well. Early on, speed and craft are the moat. |
 | **"Is it safe for a four-year-old?"** | Every page's text, art prompt, animation prompt and picture passes a kid-safe check before the child sees it. Animation prompts come only from checked content, and sampled frames act as a tripwire back to the still. Our gate is 0 unsafe outputs in a 30-transcript red-team set. A failure looks like "the illustrator is still painting…" |
 | **"You're recording kids' voices?"** | No. Audio is streamed for transcription and discarded. We keep a first name and nothing else personal. There's a legal (COPPA) review before any public release. |

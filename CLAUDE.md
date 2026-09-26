@@ -19,7 +19,7 @@ All Pop! sessions live in the sidebar group **"Pop!"**. Set your own title to yo
 The builder's session id is `local_fd25db33-d66a-47cc-9fb4-4c2fbee2e46a`.
 
 ## How sessions work together
-- **Git.** Side sessions run in their own worktrees on their own branches. Integrate through `main`: commit only your own files by path (never `git add -A`), then `git fetch origin && git rebase origin/main && git push origin HEAD:main`. If the push is rejected, rebase and retry. The builder works directly on `main` in `/Users/brianhuang/Pop!` and runs `git pull --rebase` before each commit.
+- **Git.** Side sessions run in their own worktrees on their own branches. Integrate through `main`: commit only your own files by path (never `git add -A`), then `git fetch origin && git rebase origin/main && git push origin HEAD:main`. If the push is rejected, rebase and retry. The builder works directly on `main` in `/Users/brianhuang/Pop!`: commit, then `git pull --rebase` and push.
 - **Messages.** Use `send_message` (or `SendMessage`) to another session's id for hand-offs: the builder pings QA after each commit batch or milestone, pings Pitch & Tech Log after anything demo-worthy, and Pivots pings the builder when Brian accepts a pivot. Keep messages short: what changed, which commits, and what you need.
 - **Don't edit another session's files.** Propose the change to the owner instead.
 

@@ -24,7 +24,7 @@
 
 ## Log
 
-### P-01 · Parents drive creation (lessons optional) · 2026-09-25 · Status: accepted, refined 2026-09-26
+### P-01 · Parents drive creation (lessons optional) · 2026-09-26 · Status: accepted, refined 2026-09-26
 - **Idea (Brian's words):** "The product is not simply for kids to imagine some stories. A core part of it is for PARENTS to actually be able to create these stories for their kids. For instance, they can tie in educational lessons inside of stories that their kids may like. Of course, it's also cool if the parents and kids can collaborate together to make the story, but don't forget that a major part of it is the parents actually driving this creation."
 - **Brian's clarification:** "I should be able to create the story ahead of time and save it or create the story with the child. These are both technically the same thing… I can tell it what I want it to add or change, and then it'll generate the next pages like that. When I'm satisfied, I can save this story then show to my child exactly the way I recorded it… Don't think of it as two entirely separate things."
 - **Changes (as applied):**
@@ -33,11 +33,11 @@
   - PRD §11–13: new assumption and risks for clip recording and wrong lessons; D4 (record clips) resolved as required.
   - Roadmap: Phase 0.3 must answer how to record clips. Phase 2 becomes parent-driven (brief, profile, typed input, directions, "You continue", lesson packs). Phase 3 records clips. The new **Phase 5, "Save and show"**, is above the MVP line. Phase 6 shrinks to lesson extras and parent controls. `BookStore` and `ClipReplayScene` are new units. Cut lines, tests, eval set and run-book are updated.
 - **Cost (final):** the MVP line moves from about 60 h to about 78 h, and the total from 109 h to 118 h (+9 h net). v1 said 119 h, but its phases summed to 109 h. That's more than my first estimate of +3–4 h, because showing a saved book exactly makes saving, the bookshelf and clip recording must-haves. No new vendors. Orbis cost per book is unchanged, and showing a saved book is now free. Risks: recording clips from the web view is unproven (Phase 0.3), and lessons need to be accurate (curated packs first).
-- **Recommendation:** Do it (given 2026-09-25).
-- **Decision:** 2026-09-25, Brian accepted. Applied in `5c22f0d` (PRD v2, ROADMAP v2).
+- **Recommendation:** Do it (given 2026-09-26).
+- **Decision:** 2026-09-26, Brian accepted. Applied in `5c22f0d` (PRD v2, ROADMAP v2).
 - **Refinement (2026-09-26, Brian, relayed by the builder and recorded in CLAUDE.md "What this is"):** parents drive creation, and that stays. Lessons are **optional**: a use case of the story brief, not a subsystem. Removed: curated lesson packs, lesson fact-checking (K2), and lesson extras (S9, S10, word of the story, remember-when questions). The brief keeps an optional free-text "Anything you'd like this story to teach?". Normal kid-safety moderation (K1) stays P0. New totals: MVP about 75 h, total about 109 h. Applied in PRD v3 and ROADMAP v3 (commit below, under P-02).
 
-### P-02 · Pro as a monthly allowance of new books, not "unlimited" · 2026-09-25 · Status: rejected (superseded: everything is free)
+### P-02 · Pro as a monthly allowance of new books, not "unlimited" · 2026-09-26 · Status: rejected (superseded: everything is free)
 - **Idea (source: the former Pitch & Tech Log session, relayed by the builder; not Brian's words):** "A fair-use allowance may beat 'unlimited'. PRD K5 still says unlimited."
 - **Why it comes up:** making a book costs about $8.73 of Orbis time (15 live minutes). A family making four books a month costs about $35 a month in animation alone, so an "unlimited" Pro can lose money on exactly the families who love it most. Since P-01, showing a saved book costs nothing; only making new books costs money.
 - **Changes:** PRD K5 ("Pro for unlimited" becomes "Pro includes N new books a month; showing saved books is always unlimited"), with N and the price set at D5 after measuring. Roadmap Phase 7: a monthly counter in the paywall (+0.5 h).

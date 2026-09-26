@@ -102,6 +102,140 @@ export function buildStoryTurnSystemPrompt(input: StoryTurnPromptInput): string 
   return lines.join("\n\n");
 }
 
+export interface StoryPathPromptInput {
+  kid: Kid;
+  brief: StoryBrief;
+  settings: ParentSettings;
+  bible: StoryBible;
+  pages: { index: number; text: string }[];
+  index: number;
+  /** null at the very start (index 0, no direction yet); a direction otherwise. */
+  input: { kind: string; speaker: "parent" | "kid"; text: string } | null;
+  /** Set only on a rewrite attempt, after the first pass failed the safety gate. */
+  rewriteReason?: string | null;
+}
+
+const PATH_PLANNING_GUIDE = [
+  "Plan the whole story as a path of about 5 to 8 page beats in total, each one short sentence describing that page's moment.",
+  "The path's last beat must clearly end the story: something gentle and reassuring that closes it, never a cliffhanger.",
+  "Each page is one still moment that suits a gentle, repeating animation (for example, a dragon that flew into a tree lying knocked out, bobbing gently) — it never itself moves the plot on; the next page does.",
+].join("\n");
+
+/** `mode: "path"` (docs/CONTRACTS.md): plans/replans the path from `index` on, then writes page `index`. */
+export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string {
+  const level = input.kid.readingLevel as ReadingLevel;
+  const interests = Array.from(new Set([...input.kid.interests, ...input.brief.interests]));
+  const keptBeats = input.bible.path.slice(0, input.index);
+
+  const lines: string[] = [
+    `You are Pop!'s story engine, planning a live picture book's story path for a parent and their child ${input.kid.firstName}.`,
+    describeReadingLevelForPrompt(level),
+  ];
+
+  if (interests.length > 0) {
+    lines.push(`${input.kid.firstName} loves: ${interests.join(", ")}.`);
+  }
+  if (input.brief.realMoment) {
+    lines.push(
+      `This story gently helps with a real moment: ${input.brief.realMoment}. Keep the tone calm and hopeful, and end reassuringly.`,
+    );
+  }
+  if (input.brief.teach) {
+    lines.push(`If it fits naturally, let the story help teach: ${input.brief.teach}.`);
+  }
+  if (input.settings.avoidTopics.length > 0) {
+    lines.push(`Never include these topics: ${input.settings.avoidTopics.join(", ")}.`);
+  }
+
+  lines.push(
+    "Never use surnames, home addresses, school names, or phone numbers anywhere in the story text.",
+    KID_SAFETY_RUBRIC,
+    `One locked illustration style is used for every picture: ${ART_STYLE}. Write art prompts that fit this style and depict only what is safe to show this child.`,
+    ...describeBible(input.bible),
+  );
+
+  if (keptBeats.length > 0) {
+    lines.push(`Beats already fixed and shown (page 0 to ${input.index - 1}) — never change these, and do not repeat them in your answer:`);
+    keptBeats.forEach((beat, i) => lines.push(`Page ${i}: ${beat}`));
+  }
+  if (input.pages.length > 0) {
+    lines.push("Pages already written and shown:");
+    for (const page of input.pages) lines.push(`Page ${page.index}: ${page.text}`);
+  }
+
+  lines.push(PATH_PLANNING_GUIDE);
+
+  if (input.input && input.input.text.trim() !== "") {
+    lines.push(
+      `A direction just came in — kind: ${input.input.kind}, speaker: ${input.input.speaker}: "${input.input.text}"`,
+      `Fold this direction into the bible's directions so it carries into every later page, and re-plan the path from page ${input.index} on. The ending may change, but the path must still reach one.`,
+    );
+  } else {
+    lines.push("Plan the path from the brief above.");
+  }
+
+  lines.push(
+    `Return only the beats for page ${input.index} onward as "path" (never the beats already fixed above), plus "isEnding": true only if page ${input.index} is the last beat of the full path.`,
+    `Then write page ${input.index} itself: "pageText" at this reading level, "artPrompt" for its picture, and "readingQuestion": one short, warm question a parent can ask ${input.kid.firstName} about this page's words or picture, never about ${input.kid.firstName}'s own address, school or family details.`,
+    "Respond with only the JSON object the response schema describes.",
+  );
+
+  if (input.rewriteReason) {
+    lines.push(
+      `Your previous attempt at this page was rejected: ${input.rewriteReason} Write it again, gentler and within the word limit, keeping the same path.`,
+    );
+  }
+
+  return lines.join("\n\n");
+}
+
+export interface StoryPagePromptInput {
+  kid: Kid;
+  brief: StoryBrief;
+  settings: ParentSettings;
+  bible: StoryBible;
+  pages: { index: number; text: string }[];
+  index: number;
+  /** Set only on a rewrite attempt, after the first pass failed the safety gate. */
+  rewriteReason?: string | null;
+}
+
+/** `mode: "page"` (docs/CONTRACTS.md): writes page `index` from `bible.path[index]`, with no re-planning. */
+export function buildStoryPageSystemPrompt(input: StoryPagePromptInput): string {
+  const level = input.kid.readingLevel as ReadingLevel;
+  const beat = input.bible.path[input.index] ?? "";
+
+  const lines: string[] = [
+    `You are Pop!'s story engine, writing one page of a live picture book for ${input.kid.firstName}.`,
+    describeReadingLevelForPrompt(level),
+    "Never use surnames, home addresses, school names, or phone numbers anywhere in the story text.",
+    KID_SAFETY_RUBRIC,
+    `One locked illustration style is used for every picture: ${ART_STYLE}. Write an art prompt that fits this style and depicts only what is safe to show this child.`,
+    ...describeBible(input.bible),
+  ];
+
+  if (input.pages.length > 0) {
+    lines.push("Pages already written and shown:");
+    for (const page of input.pages) lines.push(`Page ${page.index}: ${page.text}`);
+  }
+
+  lines.push(
+    `This page's planned beat: ${beat}`,
+    "Write only this page from that beat — do not invent a different moment or change the story path. Never retell an earlier page's words.",
+    "This page is one still moment that suits a gentle, repeating animation; it never itself moves the plot on.",
+    `Write: "pageText" at this reading level, "artPrompt" for its picture, and "readingQuestion": one short, warm question a parent can ask ${input.kid.firstName} about this page's words or picture, never about ${input.kid.firstName}'s own address, school or family details.`,
+    "Respond with only the JSON object the response schema describes.",
+  );
+
+  if (input.rewriteReason) {
+    lines.push(
+      `Your previous attempt at this page was rejected: ${input.rewriteReason} Write it again, gentler and within the word limit.`,
+    );
+  }
+
+  return lines.join("\n\n");
+}
+
 export function buildTitlePrompt(
   bible: StoryBible,
   pages: { index: number; text: string }[],

@@ -1,8 +1,10 @@
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
 import {
   characterSchema,
+  directionInputSchema,
   kidSchema,
   readingLevelSchema,
+  storyBibleSchema,
   storyBriefSchema,
   storyInputSchema,
   uuidSchema,
@@ -61,6 +63,35 @@ Deno.test("storyInputSchema restricts kind and speaker to known enums", () => {
     storyInputSchema.safeParse({ kind: "sung", speaker: "parent", text: "hi" })
       .success,
   );
+});
+
+Deno.test("storyBibleSchema defaults path to an empty array (backward compatible with a bible sent before P-04)", () => {
+  const result = storyBibleSchema.parse({ setting: "", characters: [], directions: [] });
+  assertEquals(result.path, []);
+});
+
+Deno.test("storyBibleSchema accepts a path of beats up to the 12-beat cap", () => {
+  const path = Array.from({ length: 12 }, (_, i) => `Beat ${i}`);
+  const result = storyBibleSchema.safeParse({ setting: "", characters: [], directions: [], path });
+  assert(result.success);
+});
+
+Deno.test("storyBibleSchema rejects more than 12 path beats", () => {
+  const path = Array.from({ length: 13 }, (_, i) => `Beat ${i}`);
+  const result = storyBibleSchema.safeParse({ setting: "", characters: [], directions: [], path });
+  assertFalse(result.success);
+});
+
+Deno.test("storyBibleSchema rejects a path beat over 300 characters", () => {
+  const path = ["a".repeat(301)];
+  const result = storyBibleSchema.safeParse({ setting: "", characters: [], directions: [], path });
+  assertFalse(result.success);
+});
+
+Deno.test("directionInputSchema accepts speech and typed but not continue", () => {
+  assert(directionInputSchema.safeParse({ kind: "typed", speaker: "parent", text: "wake the dragon up" }).success);
+  assert(directionInputSchema.safeParse({ kind: "speech", speaker: "kid", text: "add a puppy" }).success);
+  assertFalse(directionInputSchema.safeParse({ kind: "continue", speaker: "parent", text: "" }).success);
 });
 
 Deno.test("zodIssueSummary produces a readable path: message string", () => {

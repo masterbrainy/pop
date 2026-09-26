@@ -7,8 +7,9 @@ import { RUBRIC_MODEL } from "./models.ts";
 import { chatJSON, parseModelJSON } from "./openai_chat.ts";
 import { moderateText } from "./openai_moderation.ts";
 import { describeReadingLevelForPrompt } from "./reading_levels.ts";
-import { rubricCheckPrompt } from "./safety_rubric.ts";
+import { realHarmCheckPrompt, rubricCheckPrompt } from "./safety_rubric.ts";
 import type { SafetyDeps } from "./safety.ts";
+import type { InputSafetyDeps } from "./input_safety.ts";
 import { RUBRIC_JSON_SCHEMA, rubricModelOutputSchema } from "./story_schema.ts";
 
 export function buildSafetyDeps(openaiApiKey: string): SafetyDeps {
@@ -19,6 +20,22 @@ export function buildSafetyDeps(openaiApiKey: string): SafetyDeps {
         model: RUBRIC_MODEL,
         system: rubricCheckPrompt(describeReadingLevelForPrompt(level)),
         user: combinedText,
+        jsonSchema: RUBRIC_JSON_SCHEMA,
+      });
+      return parseModelJSON(raw, rubricModelOutputSchema);
+    },
+  };
+}
+
+/** The real (network-backed) InputSafetyDeps (R-37): moderation plus the fast real-harm rubric check. */
+export function buildInputSafetyDeps(openaiApiKey: string): InputSafetyDeps {
+  return {
+    moderateText: (text) => moderateText(openaiApiKey, text),
+    checkRealHarm: async (text) => {
+      const raw = await chatJSON(openaiApiKey, {
+        model: RUBRIC_MODEL,
+        system: realHarmCheckPrompt(),
+        user: text,
         jsonSchema: RUBRIC_JSON_SCHEMA,
       });
       return parseModelJSON(raw, rubricModelOutputSchema);

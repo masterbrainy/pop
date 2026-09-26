@@ -18,6 +18,7 @@ import { enforceStandardRateLimit } from "../_shared/rate_limit.ts";
 import { parseRequest } from "../_shared/request.ts";
 import { createServiceClient } from "../_shared/service_client.ts";
 import { requestSchema } from "./schema.ts";
+import { tokenExpiresAt } from "./expiry.ts";
 
 const REACTOR_TOKEN_TTL_SECONDS = 3600;
 
@@ -71,7 +72,7 @@ Deno.serve((req) =>
       await endThisUsersOpenSessions(serviceClient, userId, apiKey);
       const { jwt } = await mintReactorToken(apiKey);
       return {
-        data: { jwt, expiresAt: Date.now() + REACTOR_TOKEN_TTL_SECONDS * 1000 },
+        data: { jwt, expiresAt: tokenExpiresAt(Date.now(), REACTOR_TOKEN_TTL_SECONDS) },
       };
     }
 

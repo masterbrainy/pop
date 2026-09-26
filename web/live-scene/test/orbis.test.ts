@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { chunkIndexOf, describeMessage, unwrapOrbisMessage } from "../src/orbis.ts";
+import { DELIVERY_COMMANDS, chunkIndexOf, describeMessage, unwrapOrbisMessage } from "../src/orbis.ts";
 import { MessageWaiters } from "../src/waiters.ts";
 
 test("unwrap flattens a { type, data } envelope", () => {
@@ -61,4 +61,11 @@ test("rejectAll fails every pending waiter", async () => {
   await assert.rejects(first, /disconnected/);
   await assert.rejects(second, /disconnected/);
   assert.equal(waiters.count, 0);
+});
+
+test("after connect Pop! asks for 1080p delivery and no audio", () => {
+  assert.deepEqual(DELIVERY_COMMANDS, [
+    { name: "set_resolution", data: { resolution: "1080p" } },
+    { name: "set_audio_enabled", data: { audio_enabled: false } },
+  ]);
 });

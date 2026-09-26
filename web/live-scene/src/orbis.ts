@@ -9,6 +9,18 @@ export const ORBIS_TRACKS = [
   { name: "main_audio", kind: "audio", direction: "recvonly" },
 ] as const;
 
+/**
+ * Delivery settings sent once after connect; Orbis reads them at each `start` and keeps
+ * them across `reset`. A page shows 832x480 content, so 1080p is plenty (the default "2k"
+ * streamed 2560x1440), and Pop! never plays the audio, so it isn't computed.
+ * Names and fields: Reactor's Orbis browser-session options, as documented in
+ * TanStack/ai docs/adapters/reactor.md and the Visko-Platform starter.
+ */
+export const DELIVERY_COMMANDS: readonly { readonly name: string; readonly data: Readonly<Record<string, unknown>> }[] = [
+  { name: "set_resolution", data: { resolution: "1080p" } },
+  { name: "set_audio_enabled", data: { audio_enabled: false } },
+];
+
 export type OrbisMessage = {
   type?: string;
   command?: string;

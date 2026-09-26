@@ -56,7 +56,8 @@ struct StoryInputBar: View {
                 .foregroundStyle(Theme.ink)
                 .accessibilityLabel(speaker == .parent ? "Parent is talking. Switch to kid" : "Kid is talking. Switch to parent")
 
-                if isWorking {
+                // Another direction can always be sent; the spinner shows only while nothing is typed.
+                if isWorking, typed.isEmpty {
                     ProgressView().controlSize(.small).frame(width: 36, height: 36)
                 } else {
                     Button(action: send) {

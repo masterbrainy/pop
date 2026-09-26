@@ -15,11 +15,21 @@ final class MicrophoneStream: @unchecked Sendable {
         await AVAudioApplication.requestRecordPermission()
     }
 
-    /// Starts capturing; `onPCM` receives little-endian Int16 samples from the audio thread.
-    func start(onPCM: @escaping @Sendable (Data) -> Void) throws {
+    /// The one audio setup both transcribers use, so switching between them never fights over
+    /// the session. The live page's video is muted, so recording doesn't disturb it.
+    static func activateSession() throws {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .allowBluetoothHFP])
         try session.setActive(true, options: .notifyOthersOnDeactivation)
+    }
+
+    static func deactivateSession() {
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    /// Starts capturing; `onPCM` receives little-endian Int16 samples from the audio thread.
+    func start(onPCM: @escaping @Sendable (Data) -> Void) throws {
+        try Self.activateSession()
 
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
@@ -51,10 +61,12 @@ final class MicrophoneStream: @unchecked Sendable {
         try engine.start()
     }
 
+    /// Safe to call more than once.
     func stop() {
+        guard converter != nil else { return }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         converter = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        Self.deactivateSession()
     }
 }

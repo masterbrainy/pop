@@ -5,15 +5,17 @@ import { ORBIS_MODEL_NAME, ORBIS_TRACKS, chunkIndexOf, describeMessage, unwrapOr
 import { ClipRecorder, type ClipResult } from "./clip.ts";
 import { MessageWaiters } from "./waiters.ts";
 import { type FrameResult, sampleFrame } from "./frame.ts";
+import { FirstFrameWatch, GenerationGate, conditionsReadyTimeoutMs } from "./gate.ts";
+import { DELIVERY_COMMANDS } from "./orbis.ts";
 
 const IMAGE_READY_TIMEOUT_MS = 30_000;
-/** Session start-up is measured in minutes; the starter's 15 s ceiling fired too early. */
-const CONDITIONS_READY_TIMEOUT_MS = 300_000;
 const COMMAND_EVENT_TIMEOUT_MS = 20_000;
 
 export type ConnectResult = { sessionId: string | null; connectMs: number };
-export type PrepareArgs = { imageUrl: string; prompt: string; seed?: number };
-export type PrepareResult = { width: number | null; height: number | null; prepareMs: number };
+/** `generation` numbers page flows (newest wins); Swift passes one, the probe may not. */
+export type PrepareArgs = { imageUrl: string; prompt: string; seed?: number; generation?: number };
+export type PrepareResult = { width: number | null; height: number | null; prepareMs: number; generation: number };
+export type StartArgs = { generation?: number };
 export type VideoFit = "cover" | "contain" | "fill";
 
 type Match = (message: OrbisMessage) => boolean;
@@ -45,10 +47,17 @@ async function fetchStill(url: string): Promise<Blob> {
 export class LiveSceneController {
   private reactor: Reactor | null = null;
   private readonly waiters = new MessageWaiters();
+  /** A newer page flow ends the older one's waits at once, so their events can't cross. */
+  private readonly gate = new GenerationGate((superseded) => this.waiters.rejectAll(superseded));
+  private readonly firstFrames = new FirstFrameWatch();
+  private frameLoopActive = false;
   private started = false;
   private hasImage = false;
+  /** Set once anything page-specific was sent; the next page resets first even if no state echoed it yet. */
+  private sessionDirty = false;
+  /** The first page on a connection may wait for the model to warm; later ones get a short timeout. */
+  private preparedOnSession = false;
   private startedAt: number | null = null;
-  private watchingForFirstFrame = false;
   private readonly clips = new ClipRecorder();
 
   constructor(private readonly video: HTMLVideoElement) {}
@@ -67,31 +76,65 @@ export class LiveSceneController {
       await reactor.disconnect().catch((cleanup: unknown) => log(`disconnect after failed connect: ${String(cleanup)}`));
       throw error;
     }
+    this.preparedOnSession = false;
+    this.sessionDirty = false;
+    await this.configureDelivery();
     return { sessionId: reactor.getSessionId() ?? null, connectMs: Math.round(performance.now() - begin) };
   }
 
-  async prepare(args: PrepareArgs): Promise<PrepareResult> {
-    const reactor = this.requireReactor();
-    const begin = performance.now();
-    const still = await fetchStill(args.imageUrl);
-    if (this.started || this.hasImage) await this.reset();
-    if (args.seed !== undefined) await this.command("set_seed", { seed: args.seed });
-    const file = await reactor.uploadFile(still, { name: still.type === "image/png" ? "page.png" : "page.jpg" });
-    const accepted = await this.commandThenEvent("set_image", { image: file }, isImageReady, IMAGE_READY_TIMEOUT_MS, "state.has_image");
-    await this.commandThenEvent("set_prompt", { prompt: args.prompt }, isConditionsReady, CONDITIONS_READY_TIMEOUT_MS, "conditions_ready");
-    return {
-      width: numberOrNull(accepted?.width),
-      height: numberOrNull(accepted?.height),
-      prepareMs: Math.round(performance.now() - begin),
-    };
+  /**
+   * reset (if needed) → set_image(page still) → set_prompt → conditions_ready, as page flow
+   * `generation`. A newer prepare supersedes this one: its waits end and it throws
+   * "superseded: …" at its next step, before it sends anything else.
+   */
+  prepare(args: PrepareArgs): Promise<PrepareResult> {
+    const generation = args.generation ?? this.gate.next();
+    // A stale prepare is rejected by claim() and must not disturb the current page's watch.
+    if (generation > this.gate.latest) this.firstFrames.cancel();
+    return this.gate.claim(generation, async (guard) => {
+      const reactor = this.requireReactor();
+      const begin = performance.now();
+      const still = await fetchStill(args.imageUrl);
+      guard();
+      this.video.classList.remove("live");
+      if (this.started || this.hasImage || this.sessionDirty) await this.reset();
+      guard();
+      this.sessionDirty = true;
+      if (args.seed !== undefined) await this.command("set_seed", { seed: args.seed });
+      guard();
+      const file = await reactor.uploadFile(still, { name: still.type === "image/png" ? "page.png" : "page.jpg" });
+      guard();
+      const accepted = await this.commandThenEvent("set_image", { image: file }, isImageReady, IMAGE_READY_TIMEOUT_MS, "state.has_image");
+      guard();
+      const readyTimeout = conditionsReadyTimeoutMs({ firstPageOnSession: !this.preparedOnSession });
+      await this.commandThenEvent("set_prompt", { prompt: args.prompt }, isConditionsReady, readyTimeout, "conditions_ready");
+      guard();
+      this.preparedOnSession = true;
+      return {
+        width: numberOrNull(accepted?.width),
+        height: numberOrNull(accepted?.height),
+        prepareMs: Math.round(performance.now() - begin),
+        generation,
+      };
+    });
   }
 
-  async start(): Promise<{ startMs: number }> {
-    const begin = performance.now();
-    this.startedAt = begin;
-    this.watchFirstFrame();
-    await this.commandThenEvent("start", {}, isGenerationStarted, COMMAND_EVENT_TIMEOUT_MS, "generation_started");
-    return { startMs: Math.round(performance.now() - begin) };
+  /** Starts page flow `generation` (the newest prepared one); its first frame is reported with it. */
+  start(args: StartArgs = {}): Promise<{ startMs: number; generation: number }> {
+    const generation = args.generation ?? this.gate.latest;
+    return this.gate.follow(generation, async (guard) => {
+      const begin = performance.now();
+      this.startedAt = begin;
+      this.watchFirstFrame(generation);
+      try {
+        await this.commandThenEvent("start", {}, isGenerationStarted, COMMAND_EVENT_TIMEOUT_MS, "generation_started");
+        guard();
+      } catch (error) {
+        if (this.gate.isCurrent(generation)) this.firstFrames.cancel();
+        throw error;
+      }
+      return { startMs: Math.round(performance.now() - begin), generation };
+    });
   }
 
   async setPrompt(prompt: string): Promise<void> {
@@ -112,7 +155,8 @@ export class LiveSceneController {
     await this.commandThenEvent("reset", {}, isResetDone, COMMAND_EVENT_TIMEOUT_MS, "reset");
     this.started = false;
     this.hasImage = false;
-    this.watchingForFirstFrame = false;
+    this.sessionDirty = false;
+    this.firstFrames.cancel();
     this.video.classList.remove("live");
   }
 
@@ -149,10 +193,23 @@ export class LiveSceneController {
     this.waiters.rejectAll(new Error("disconnected"));
     this.started = false;
     this.hasImage = false;
-    this.watchingForFirstFrame = false;
+    this.sessionDirty = false;
+    this.preparedOnSession = false;
+    this.firstFrames.cancel();
     this.video.classList.remove("live");
     this.video.srcObject = null;
     await reactor.disconnect();
+  }
+
+  /** Best effort: a model that rejects one of these still animates, just at its defaults. */
+  private async configureDelivery(): Promise<void> {
+    for (const { name, data } of DELIVERY_COMMANDS) {
+      try {
+        await this.command(name, data);
+      } catch (error) {
+        log(`${name} not applied: ${String(error)}`);
+      }
+    }
   }
 
   private requireReactor(): Reactor {
@@ -230,7 +287,10 @@ export class LiveSceneController {
       });
       return;
     }
-    if (message.type === "generation_started") this.started = true;
+    if (message.type === "generation_started") {
+      this.started = true;
+      this.firstFrames.generationStarted();
+    }
     if (message.type === "generation_complete" || message.type === "generation_reset") this.started = false;
     post({ event: "model", type: message.type ?? "unknown", json: describeMessage(message) });
   }
@@ -241,20 +301,35 @@ export class LiveSceneController {
     this.video.play().catch((error: unknown) => log(`video.play: ${String(error)}`));
   }
 
-  /** Reports the first frame shown after start(), which is when the still can hand over to video. */
-  private watchFirstFrame(): void {
-    this.watchingForFirstFrame = true;
+  /**
+   * Reports generation `generation`'s first frame, which is when the still can hand over to
+   * video. Frames shown before its `generation_started` are leftovers and don't count.
+   */
+  private watchFirstFrame(generation: number): void {
+    this.firstFrames.arm(generation);
     this.video.classList.remove("live");
-    this.video.requestVideoFrameCallback(() => {
-      if (!this.watchingForFirstFrame) return;
-      this.watchingForFirstFrame = false;
+    if (this.frameLoopActive) return;
+    this.frameLoopActive = true;
+    const onFrame = (): void => {
+      if (!this.firstFrames.isWatching) {
+        this.frameLoopActive = false;
+        return;
+      }
+      const shown = this.firstFrames.onFrame();
+      if (shown === null) {
+        this.video.requestVideoFrameCallback(onFrame);
+        return;
+      }
+      this.frameLoopActive = false;
       this.video.classList.add("live");
       post({
         event: "firstFrame",
+        generation: shown,
         sinceStartMs: this.startedAt === null ? null : Math.round(performance.now() - this.startedAt),
         width: this.video.videoWidth,
         height: this.video.videoHeight,
       });
-    });
+    };
+    this.video.requestVideoFrameCallback(onFrame);
   }
 }

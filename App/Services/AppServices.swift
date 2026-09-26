@@ -82,7 +82,8 @@ actor MediaCache {
     /// Downloads `url` and returns the absolute file path the book stores as `stillPath`.
     func store(from url: URL, named name: String) async throws -> String {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let request = URLRequest(url: url, timeoutInterval: PopServerTimeouts.mediaDownload)
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
         let file = directory.appending(path: name)
         try data.write(to: file, options: .atomic)

@@ -3,7 +3,7 @@
 // generationConfig shape exactly; this wraps both in one small client.
 import { PopError } from "./errors.ts";
 import { GEMINI_IMAGE_MODEL, GEMINI_TEXT_MODEL } from "./models.ts";
-import { fetchWithRetry } from "./retry.ts";
+import { fetchWithOneRetry, fetchWithRetry, UPSTREAM_TIMEOUTS_MS } from "./retry.ts";
 import { describeGeminiError, geminiErrorCode } from "./gemini_error.ts";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -51,20 +51,24 @@ export async function generateImage(
   }
 
   // The image service sometimes turns a burst of calls away (402/429); retry briefly.
-  const res = await fetchWithRetry(() => fetch(`${GEMINI_BASE}/${GEMINI_IMAGE_MODEL}:generateContent`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
+  // Each attempt has its own deadline, so one hung call can't hold the page on "Painting…".
+  const requestBody = JSON.stringify({
+    contents: [{ parts }],
+    generationConfig: {
+      responseModalities: ["IMAGE"],
+      imageConfig: { aspectRatio: opts.aspectRatio },
     },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: {
-        responseModalities: ["IMAGE"],
-        imageConfig: { aspectRatio: opts.aspectRatio },
+  });
+  const res = await fetchWithRetry((signal) =>
+    fetch(`${GEMINI_BASE}/${GEMINI_IMAGE_MODEL}:generateContent`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
       },
-    }),
-  }));
+      body: requestBody,
+      signal,
+    }), { timeoutMs: UPSTREAM_TIMEOUTS_MS.geminiImage, label: "Image generation" });
   if (!res.ok) {
     const body = await res.text();
     // The full reason stays in the server log; it can name the Cloud project.
@@ -98,20 +102,23 @@ export async function generateJSON(
     parts.push({ inlineData: { mimeType: opts.image.mimeType, data: opts.image.data } });
   }
 
-  const res = await fetch(`${GEMINI_BASE}/${GEMINI_TEXT_MODEL}:generateContent`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
+  const requestBody = JSON.stringify({
+    contents: [{ parts }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: opts.responseSchema,
     },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: opts.responseSchema,
-      },
-    }),
   });
+  const res = await fetchWithOneRetry((signal) =>
+    fetch(`${GEMINI_BASE}/${GEMINI_TEXT_MODEL}:generateContent`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: requestBody,
+      signal,
+    }), { timeoutMs: UPSTREAM_TIMEOUTS_MS.geminiText, label: "Gemini text request" });
   if (!res.ok) {
     throw new PopError("upstream", `Gemini text request failed (${res.status})`);
   }

@@ -88,6 +88,7 @@ async function handlePath(apiKey: string, body: PathRequest) {
     body.index,
     body.bible,
     body.kid.firstName,
+    body.brief.language,
     body.input ? { text: body.input.text, speaker: body.input.speaker } : null,
     {
       callModel: (rewriteReason) => callPathModelFor(apiKey, body, rewriteReason),
@@ -116,6 +117,7 @@ async function handlePage(apiKey: string, body: PageRequest) {
     readingLevel,
     body.index,
     body.bible,
+    body.brief.language,
     {
       callModel: (rewriteReason) => callPageModelFor(apiKey, body, rewriteReason),
       safety: buildSafetyDeps(apiKey),

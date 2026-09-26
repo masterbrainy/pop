@@ -8,6 +8,7 @@ import type { ReadingLevel } from "./reading_levels.ts";
 import { withinWordLimit } from "./reading_levels.ts";
 import { gentleParentNote, runSafetyGate, type SafetyDeps } from "./safety.ts";
 import { checkInputSafety, type InputSafetyDeps, type Refusal } from "./input_safety.ts";
+import { hasForeignScriptText } from "./language_check.ts";
 import { mergeBibleCharacters, stripRepeatedEarlierText, trimToLimit } from "./story_turn.ts";
 import type { StoryBible } from "./schemas.ts";
 import type { StoryPageModelOutput, StoryPathModelOutput } from "./story_path_schema.ts";
@@ -71,23 +72,36 @@ function preparePageText(pageText: string, level: ReadingLevel, earlierTexts: st
   return withinWordLimit(stripped, level) ? stripped.trim() : trimToLimit(stripped, level);
 }
 
+/** True when any of the three output texts leaked a foreign-script letter (see language_check.ts). */
+function hasForeignScript(pageText: string, artPrompt: string, readingQuestion: string, language: string): boolean {
+  return hasForeignScriptText(pageText, language) ||
+    hasForeignScriptText(artPrompt, language) ||
+    hasForeignScriptText(readingQuestion, language);
+}
+
 async function passesOutputGate(
   pageText: string,
   artPrompt: string,
   readingQuestion: string,
   readingLevel: ReadingLevel,
+  language: string,
   safety: SafetyDeps,
 ): Promise<{ safe: boolean; safetyMs: number }> {
   const start = performance.now();
   const verdict = await runSafetyGate([pageText, artPrompt, readingQuestion], readingLevel, safety);
   const wordLimitOk = withinWordLimit(pageText, readingLevel);
-  return { safe: verdict.safe && wordLimitOk, safetyMs: Math.round(performance.now() - start) };
+  const languageOk = !hasForeignScript(pageText, artPrompt, readingQuestion, language);
+  return { safe: verdict.safe && wordLimitOk && languageOk, safetyMs: Math.round(performance.now() - start) };
 }
 
-function rewriteReasonFor(pageText: string, readingLevel: ReadingLevel): string {
-  return !withinWordLimit(pageText, readingLevel)
-    ? "The page was too long for this reading level's word limit."
-    : "The page did not pass the kid-safety rubric.";
+function rewriteReasonFor(pageText: string, artPrompt: string, readingQuestion: string, readingLevel: ReadingLevel, language: string): string {
+  if (!withinWordLimit(pageText, readingLevel)) {
+    return "The page was too long for this reading level's word limit.";
+  }
+  if (hasForeignScript(pageText, artPrompt, readingQuestion, language)) {
+    return "The page mixed in a word from another language or script. Write it again using only the brief's language.";
+  }
+  return "The page did not pass the kid-safety rubric.";
 }
 
 export interface PathModelAttempt {
@@ -113,6 +127,7 @@ export async function runPathTurn(
   index: number,
   existingBible: StoryBible,
   kidFirstName: string,
+  language: string,
   input: { text: string; speaker: "parent" | "kid" } | null,
   deps: RunPathTurnDeps,
   earlierTexts: string[] = [],
@@ -168,16 +183,20 @@ export async function runPathTurn(
     first.output.artPrompt,
     first.output.readingQuestion,
     readingLevel,
+    language,
     deps.safety,
   );
   if (firstGate.safe) return buildSuccess(first, { modelMs: first.modelMs, safetyMs: firstGate.safetyMs });
 
-  const second = prepare(await deps.callModel(rewriteReasonFor(first.output.pageText, readingLevel)));
+  const second = prepare(
+    await deps.callModel(rewriteReasonFor(first.output.pageText, first.output.artPrompt, first.output.readingQuestion, readingLevel, language)),
+  );
   const secondGate = await passesOutputGate(
     second.output.pageText,
     second.output.artPrompt,
     second.output.readingQuestion,
     readingLevel,
+    language,
     deps.safety,
   );
   const modelMs = first.modelMs + second.modelMs;
@@ -207,6 +226,7 @@ export async function runPageTurn(
   readingLevel: ReadingLevel,
   index: number,
   existingBible: StoryBible,
+  language: string,
   deps: RunPageTurnDeps,
   earlierTexts: string[] = [],
 ): Promise<StoryPathResponseData> {
@@ -244,16 +264,20 @@ export async function runPageTurn(
     first.output.artPrompt,
     first.output.readingQuestion,
     readingLevel,
+    language,
     deps.safety,
   );
   if (firstGate.safe) return buildSuccess(first, { modelMs: first.modelMs, safetyMs: firstGate.safetyMs });
 
-  const second = prepare(await deps.callModel(rewriteReasonFor(first.output.pageText, readingLevel)));
+  const second = prepare(
+    await deps.callModel(rewriteReasonFor(first.output.pageText, first.output.artPrompt, first.output.readingQuestion, readingLevel, language)),
+  );
   const secondGate = await passesOutputGate(
     second.output.pageText,
     second.output.artPrompt,
     second.output.readingQuestion,
     readingLevel,
+    language,
     deps.safety,
   );
   const modelMs = first.modelMs + second.modelMs;

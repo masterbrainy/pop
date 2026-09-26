@@ -40,10 +40,21 @@ export function charactersIn(prompt: string, characters: Character[]): Character
 }
 
 /**
+ * The characters a page picture is drawn with: those its prompt names, or — when it names
+ * none (the story model wrote "the little dragon", not "Ember") — the whole cast, as before
+ * charactersIn existed. Without that fallback such a page got no reference image and no
+ * description, and the character was redrawn from scratch.
+ */
+export function pageCharacters(prompt: string, characters: Character[]): Character[] {
+  const named = charactersIn(prompt, characters);
+  return named.length > 0 ? named : characters;
+}
+
+/**
  * Which of this request's characters need their reference image sent to
  * the image model for consistency: the single named character for `character`/`cutout`,
- * every character with a saved reference for `cover`, only those the prompt
- * names for `page` (charactersIn), none for `plate` (which draws the scene with
+ * every character with a saved reference for `cover`, those the prompt
+ * names for `page` (pageCharacters: all of them when it names none), none for `plate` (which draws the scene with
  * no characters at all).
  */
 export function referencePathsFor(
@@ -60,7 +71,7 @@ export function referencePathsFor(
       return match?.referencePath ? [match.referencePath] : [];
     }
     case "page":
-      return withReference(charactersIn(prompt, characters));
+      return withReference(pageCharacters(prompt, characters));
     case "cover":
       return withReference(characters);
     case "plate":
@@ -106,7 +117,7 @@ export function buildArtPrompt(
     if (character) lines.push(`This character: ${character.name} — ${character.description}`);
   } else if (kind === "page" || kind === "cover") {
     // A cover shows the whole cast; a page only the characters its prompt names.
-    const appearing = kind === "page" ? charactersIn(prompt, characters) : characters;
+    const appearing = kind === "page" ? pageCharacters(prompt, characters) : characters;
     if (appearing.length > 0) {
       lines.push(
         "Characters appearing in this picture — keep each one's look identical to its reference image if one is attached: " +

@@ -13,7 +13,11 @@ Deno.test("referencePathsFor: cover includes every character with a saved refere
 Deno.test("referencePathsFor: page includes only the characters its prompt names that have a saved reference", () => {
   assertEquals(referencePathsFor("page", [rex, maya], null, "Rex and Maya fly a kite"), ["u/b/character-rex-v1.png"]);
   assertEquals(referencePathsFor("page", [rex, maya], null, "Maya flies a kite"), []);
-  assertEquals(referencePathsFor("page", [rex, maya], null, "An empty meadow"), []);
+});
+
+Deno.test("referencePathsFor: a page prompt that names nobody gets the whole cast's references", () => {
+  // "the little dragon" instead of "Rex" must not redraw Rex from scratch.
+  assertEquals(referencePathsFor("page", [rex, maya], null, "The little dragon flies a kite"), ["u/b/character-rex-v1.png"]);
 });
 
 Deno.test("referencePathsFor: cutout/character include only the matching characterId", () => {
@@ -72,9 +76,14 @@ Deno.test("buildArtPrompt and referencePathsFor leave out a character the page p
   assertEquals(referencePathsFor("page", [bella, rusty], null, pagePrompt), ["u/b/character-bella-v1.png"]);
 });
 
-Deno.test("buildArtPrompt lists no characters when the page prompt names none of them", () => {
-  const prompt = buildArtPrompt("page", "A quiet snowy garden at dawn", [bella, rusty]);
-  assertEquals(prompt.includes("Characters appearing in this picture"), false);
+Deno.test("buildArtPrompt lists the whole cast when the page prompt names none of them", () => {
+  const prompt = buildArtPrompt("page", "The little bunny naps in a snowy garden", [bella, rusty]);
+  assertEquals(prompt.includes("Bella the bunny"), true);
+  assertEquals(prompt.includes("Rusty the fox"), true);
+});
+
+Deno.test("buildArtPrompt lists no characters when there are none", () => {
+  assertEquals(buildArtPrompt("page", "A quiet snowy garden at dawn", []).includes("Characters appearing in this picture"), false);
 });
 
 Deno.test("buildArtPrompt and referencePathsFor keep every character for a cover", () => {

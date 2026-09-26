@@ -630,8 +630,10 @@ final class StoryMaker {
     }
 
     /// Paints a page that has words and prepares its motion, unless it's already painting.
+    /// Pages ahead wait their turn (`isNextToPaint`); `ensureBuilds` starts them later.
     private func paint(_ page: PageContent) {
-        guard let pipeline = services.pipeline, paintTasks[page.id] == nil, !unavailablePictures.contains(page.id) else { return }
+        guard let pipeline = services.pipeline, paintTasks[page.id] == nil, !unavailablePictures.contains(page.id),
+              isNextToPaint(page) else { return }
         let book = reader.book
         let run = UUID()
         picturelessPages.remove(page.id)
@@ -665,6 +667,7 @@ final class StoryMaker {
             paintFailures[page.id] = nil
             picturelessPages.insert(page.id)
             note("Pop! has made all the pictures it can for today, so these pages are ones to imagine.")
+            ensureBuilds()
             return
         }
         let failures = paintFailures[page.id, default: 0]
@@ -672,6 +675,7 @@ final class StoryMaker {
             paintFailures[page.id] = nil
             picturelessPages.insert(page.id)
             note("A picture didn't arrive, so this page is one to imagine for now.")
+            ensureBuilds()
             return
         }
         paintFailures[page.id] = failures + 1
@@ -682,6 +686,15 @@ final class StoryMaker {
             guard let self, !self.hasEnded, let latest = self.reader.page(id: page.id), latest.stillPath == nil else { return }
             self.paint(latest)
         }
+    }
+
+    /// Pages are painted in order: a page ahead only once the page before it has its picture.
+    /// That picture is the reference for the characters first drawn in it, so the next page is
+    /// drawn to match instead of inventing them again (PRD S6).
+    private func isNextToPaint(_ page: PageContent) -> Bool {
+        guard let current = reader.currentPage, page.index > current.index else { return true }
+        let before = page.index - 1 == current.index ? current : reader.ahead.first { $0.index == page.index - 1 }
+        return before.map(isPictureSettled) ?? true
     }
 
     /// A page behind was replaced by a rewrite: stop its picture, layers and motion.
@@ -762,8 +775,8 @@ final class StoryMaker {
     private func applyPaint(_ event: PagePipelineEvent) async {
         switch event {
         case let .stillReady(key, path, url):
-            guard reader.page(id: key.id)?.version == key.version else { return }
-            makeReferences(fromStill: path)
+            guard let page = reader.page(id: key.id), page.version == key.version else { return }
+            makeReferences(fromStill: path, of: page)
             await storeStill(url: url, for: key)
         case let .motionReady(key, prompt):
             guard let page = reader.page(id: key.id), page.version == key.version else { return }
@@ -773,6 +786,7 @@ final class StoryMaker {
             guard reader.page(id: key.id)?.version == key.version else { return }
             unavailablePictures.insert(key.id)
             note("That picture didn't turn out right, so this page is one to imagine.")
+            ensureBuilds()
         case let .failed(message):
             // A failed picture is retried (`paintFailed`); the parent hears only if it gives up.
             lastPaintFailure = message
@@ -793,7 +807,7 @@ final class StoryMaker {
     /// page behind. A page the reader has already seen is never changed.
     private func written(_ outcome: PathOutcome, by build: Build) {
         // Take only the bible, onto the latest book: pages may have gained pictures meanwhile.
-        reader.updateStory { $0.with(bible: outcome.book.bible.carryingReferences(from: $0.bible)) }
+        reader.updateStory { $0.with(bible: outcome.book.bible.keepingCharacters(from: $0.bible)) }
         if let message = outcome.parentNote { note(message) }
         if let page = outcome.page {
             switch reader.place(page) {
@@ -818,23 +832,31 @@ final class StoryMaker {
         ensureBuilds()
     }
 
-    /// Makes a reference sheet, from this page's picture, for each character that has none,
-    /// so later pages draw them the same way (PRD S6).
-    private func makeReferences(fromStill stillPath: String) {
+    /// For each character first drawn in this page's picture: the picture becomes its reference
+    /// at once (so the next page, painted as soon as this one is stored, already matches it),
+    /// and a reference sheet made from it replaces it when ready (PRD S6). Only characters the
+    /// page's art prompt names: a picture can't be the reference for someone who isn't in it.
+    private func makeReferences(fromStill stillPath: String, of page: PageContent) {
+        let needed = CharacterReferences.missing(in: reader.book.bible, onPageWith: page.artPrompt ?? "",
+                                                 alreadyRequested: referencesRequested)
+        guard !needed.isEmpty else { return }
+        reader.updateStory { book in
+            book.with(bible: needed.reduce(book.bible) { $0.settingReference(stillPath, for: $1.id) })
+        }
         guard let server = services.server else { return }
         let bookId = reader.book.id
-        for character in CharacterReferences.missing(in: reader.book.bible, alreadyRequested: referencesRequested) {
+        for character in needed {
             referencesRequested.insert(character.id)
             let request = CharacterReferences.request(for: character, bookId: bookId, fromStill: stillPath)
             Task { [weak self] in
                 do {
                     let art = try await server.art(request)
                     guard let self, !art.placeholder else { return }
-                    self.reader.updateStory { $0.with(bible: $0.bible.settingReference(art.path, for: character.id)) }
+                    self.reader.updateStory { $0.with(bible: $0.bible.replacingReference(stillPath, with: art.path, for: character.id)) }
                     self.scriptLog?.append("reference ready for \(character.id) in \(art.ms) ms")
                 } catch {
+                    // The page picture stays as the reference.
                     self?.scriptLog?.append("reference failed for \(character.id): \(error.localizedDescription)")
-                    self?.referencesRequested.remove(character.id)
                 }
             }
         }
@@ -852,6 +874,8 @@ final class StoryMaker {
                 // Pop-up layers are several more pictures, so only the page on screen makes them.
                 if updated.id == reader.currentPage?.id { prepareLayers(for: updated) }
                 if !hasOpened, updated.id == reader.currentPage?.id { limitOpeningAnimationWait() }
+                // The next page ahead was waiting for this picture (`isNextToPaint`).
+                ensureBuilds()
             }
         } catch {
             note("A picture didn't arrive. It will be tried again on the next turn.")

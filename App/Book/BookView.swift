@@ -41,7 +41,7 @@ struct BookView: View {
             }
         }
         .overlay(alignment: .top) { banner }
-        .overlay(alignment: .topLeading) { topBar }
+        .overlay(alignment: .topLeading) { if hinge.state.phase != .closed { topBar } }
         .readsHinge(into: hinge)
         .onTapGesture(count: 3) { showsDebugPanel.toggle() }
         .onChange(of: hinge.state.popDepth) { _, depth in reader.setPopDepth(depth) }
@@ -193,7 +193,7 @@ enum BookFinisher {
         guard let server = AppServices.shared.server else { return nil }
         let media = AppServices.shared.media
         let opening = book.pages.first.map { $0.artPrompt ?? $0.text } ?? ""
-        let prompt = "The cover of a picture book called \"\(title)\": the main characters together, inviting and joyful. Opening scene: \(opening)"
+        let prompt = "Cover art for a picture book about: \(title). The main characters together, inviting and joyful. Opening scene: \(opening). No words, letters or title anywhere in the picture; leave calm sky or space at the top for the title."
         let request = ArtRequest(bookId: book.id, kind: .cover, version: 1, prompt: prompt, characters: book.bible.characters)
         do {
             let art = try await server.art(request)

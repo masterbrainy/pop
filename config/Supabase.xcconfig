@@ -1,0 +1,6 @@
+// Base build settings for the app. The real values live in the git-ignored
+// Supabase.local.xcconfig next to this file, which is included if present.
+SUPABASE_URL =
+SUPABASE_PUBLISHABLE_KEY =
+
+#include? "Supabase.local.xcconfig"

@@ -1,0 +1,58 @@
+name: Pop
+options:
+  bundleIdPrefix: com.masterbrainy
+  deploymentTarget:
+    iOS: "27.1"
+  developmentLanguage: en
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  PopKit:
+    path: PopKit
+targets:
+  Pop:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        type: syncedFolder
+    dependencies:
+      - package: PopKit
+    configFiles:
+      Debug: config/Supabase.xcconfig
+      Release: config/Supabase.xcconfig
+    info:
+      path: config/Pop-Info.plist
+      properties:
+        CFBundleDisplayName: Pop!
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSMicrophoneUsageDescription: Pop! listens so you can tell the story out loud.
+        NSSpeechRecognitionUsageDescription: Pop! can turn your words into story text on this iPhone.
+        SupabaseURL: $(SUPABASE_URL)
+        SupabasePublishableKey: $(SUPABASE_PUBLISHABLE_KEY)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.masterbrainy.pop
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+schemes:
+  Pop:
+    build:
+      targets:
+        Pop: all
+    run:
+      config: Debug

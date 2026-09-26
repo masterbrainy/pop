@@ -36,3 +36,11 @@
 - **Cost (final):** the MVP line moves from about 60 h to about 78 h, and the total from 109 h to 118 h (+9 h net). v1 said 119 h, but its phases summed to 109 h. That's more than my first estimate of +3–4 h, because showing a saved book exactly makes saving, the bookshelf and clip recording must-haves. No new vendors. Orbis cost per book is unchanged, and showing a saved book is now free. Risks: recording clips from the web view is unproven (Phase 0.3), and lessons need to be accurate (curated packs first).
 - **Recommendation:** Do it (given 2026-09-25).
 - **Decision:** 2026-09-25, Brian accepted. Applied in `5c22f0d` (PRD v2, ROADMAP v2).
+
+### P-02 · Pro as a monthly allowance of new books, not "unlimited" · 2026-09-25 · Status: proposed
+- **Idea (source: Pitch & Tech Log, in PITCH.md "Unit economics"; not Brian's words):** "A fair-use allowance may beat 'unlimited'. PRD K5 still says unlimited."
+- **Why it comes up:** making a book costs about $8.73 of Orbis time (15 live minutes). A family making four books a month costs about $35 a month in animation alone, so an "unlimited" Pro can lose money on exactly the families who love it most. Since P-01, showing a saved book costs nothing; only making new books costs money.
+- **Changes:** PRD K5 ("Pro for unlimited" becomes "Pro includes N new books a month; showing saved books is always unlimited"), with N and the price set at D5 after measuring. Roadmap Phase 7: a monthly counter in the paywall (+0.5 h).
+- **Cost:** about 0.5 h of build, no money. Risk: "unlimited" is simpler to sell; an allowance needs a friendly limit screen for the parent (never shown to the child).
+- **Recommendation:** Do it. It keeps the business honest without touching any must-have, and "unlimited rereads of every book you make" is still a strong line. Leave the numbers to D5.
+- **Decision:** —

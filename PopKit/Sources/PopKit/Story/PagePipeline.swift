@@ -3,9 +3,12 @@ import Foundation
 /// One page's generation progress: text, then its still, then its motion prompt —
 /// or a failure at any stage (docs/CONTRACTS.md §3; ROADMAP §2 `PagePipeline`).
 public enum PagePipelineEvent: Sendable, Equatable {
-    case textReady(PageContent)
-    case stillReady(path: String, url: String)
-    case motionReady(prompt: String)
+    /// The full result of applying the story-turn response: the updated book (bible
+    /// carried forward), the current draft, a pending next-page draft if the turn
+    /// proposed a break, and a parent note if there was nothing to show.
+    case textReady(StoryTurnOutcome)
+    case stillReady(pageIndex: Int, path: String, url: String)
+    case motionReady(pageIndex: Int, prompt: String)
     case failed(String)
 }
 
@@ -122,10 +125,15 @@ public actor PagePipeline {
             try Task.checkCancellation()
 
             let outcome = StoryEngine.apply(response, to: book, currentDraft: currentDraft)
-            continuation.yield(.textReady(outcome.currentDraft))
+            continuation.yield(.textReady(outcome))
             try Task.checkCancellation()
 
             try await runArtAndMotion(page: outcome.currentDraft, book: outcome.book, continuation: continuation)
+            // A `new_page` break: prepare the next page's art and motion early too,
+            // so it's ready by the time the parent folds.
+            if let pending = outcome.pendingNextDraft {
+                try await runArtAndMotion(page: pending, book: outcome.book, continuation: continuation)
+            }
         } catch is CancellationError {
             // superseded by a newer run for the same page; stay quiet.
         } catch let error as ServerError {
@@ -143,7 +151,6 @@ public actor PagePipeline {
             continuation.finish()
         }
         do {
-            continuation.yield(.textReady(page))
             try await runArtAndMotion(page: page, book: book, continuation: continuation)
         } catch is CancellationError {
         } catch let error as ServerError {
@@ -160,12 +167,12 @@ public actor PagePipeline {
         )
         let art = try await timedArt { try await self.server.art(artRequest) }
         try Task.checkCancellation()
-        continuation.yield(.stillReady(path: art.path, url: art.url))
+        continuation.yield(.stillReady(pageIndex: page.index, path: art.path, url: art.url))
 
         let motionRequest = MotionPromptRequest(bookId: book.id, pageIndex: page.index, text: page.text, stillPath: art.path)
         let parts = try await timedMotionPrompt { try await self.server.motionPrompt(motionRequest) }
         try Task.checkCancellation()
-        continuation.yield(.motionReady(prompt: MotionPromptBuilder.prompt(parts)))
+        continuation.yield(.motionReady(pageIndex: page.index, prompt: MotionPromptBuilder.prompt(parts)))
     }
 
     // MARK: - timing

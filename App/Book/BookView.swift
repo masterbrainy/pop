@@ -46,6 +46,18 @@ struct BookView: View {
         .overlay(alignment: .topTrailing) { if !showsCover { nextPageButton } }
         .readsHinge(into: hinge)
         .onTapGesture(count: 3) { showsDebugPanel.toggle() }
+        // While making a book, each page is read aloud once its words are in and it's showing.
+        .onChange(of: pageToReadAloud) { _, key in
+            if key != nil, let text = reader.currentPage?.text {
+                readAloud.read(text)
+            } else if isCreating {
+                readAloud.stop()
+            }
+        }
+        .onChange(of: readAloud.isReading) { _, reading in
+            guard let maker, isCreating else { return }
+            Task { await maker.setReadingAloud(reading) }
+        }
         // On a Duo, angled is for talking into the story; open flat (to read) or closed isn't.
         .onChange(of: hinge.hasReadings && hinge.isAngled, initial: true) { _, angled in
             guard hinge.hasReadings, isCreating, !finishing, let maker else { return }
@@ -75,6 +87,7 @@ struct BookView: View {
         } else if let maker, reader.book.status == .draft {
             SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,
                        curl: hinge.state.curl, popDepth: reader.popDepth, live: maker.live,
+                       highlight: readAloud.spokenRange,
                        pictureUnavailable: reader.currentPage.map {
                            maker.unavailablePictures.contains($0.id) || maker.picturelessPages.contains($0.id)
                        } ?? false) {
@@ -117,6 +130,14 @@ struct BookView: View {
     /// The phone is shut, or opening again after a close: the cover shows until the next page
     /// replaces it (see `HingeModel.showsCover`).
     private var showsCover: Bool { hinge.showsCover }
+
+    /// While making a book: the page (and version) to read aloud, once its words are in, it's
+    /// on screen, and the first page's loading screen is gone. Nil while nothing should be read.
+    private var pageToReadAloud: String? {
+        guard isCreating, ParentPreferences.readAlong, !showsCover, maker?.openingStage == nil,
+              let page = reader.currentPage, !page.text.isEmpty else { return nil }
+        return "\(page.id)#\(page.version)"
+    }
 
     /// Making the book (not reading a finished one): only then do the story banners show.
     private var isCreating: Bool { maker != nil && reader.book.status == .draft }

@@ -23,7 +23,14 @@ struct TextPageView: View {
             let compact = proxy.size.height < 420
             ZStack(alignment: .bottom) {
                 Theme.paper
-                Text(text.isEmpty ? AttributedString(placeholder) : HighlightedText.attributed(text, highlight: highlight))
+                Group {
+                    if text.isEmpty {
+                        Text(placeholder)
+                    } else {
+                        // The spoken word is highlighted, with a ball bouncing along above it.
+                        ReadAlongText(text: text, highlight: highlight, ballSize: compact ? 10 : 14)
+                    }
+                }
                     .font(Theme.storyFont(size: compact ? fontSize * 0.8 : fontSize))
                     .foregroundStyle(text.isEmpty ? Theme.softInk : Theme.ink)
                     .lineSpacing(fontSize * (compact ? 0.12 : 0.25))

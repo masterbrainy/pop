@@ -33,11 +33,13 @@ import Testing
         if case .unchecked = verdict {} else { Issue.record("expected .unchecked, got \(verdict)") }
     }
 
-    @Test func checksSoonAfterTheFirstFrameThenOnAnInterval() {
-        #expect(FrameTripwire.delay(beforeCheck: 0) == FrameTripwire.firstCheck)
-        #expect(FrameTripwire.delay(beforeCheck: 1) == FrameTripwire.interval)
-        #expect(FrameTripwire.delay(beforeCheck: 5) == FrameTripwire.interval)
-        #expect(FrameTripwire.firstCheck < FrameTripwire.interval)
+    @Test func checksEveryFewSecondsWhileTheClipRecordsThenOnAnInterval() {
+        // R-38: every part of the saved 10 s clip is covered by a check.
+        let offsets = (0..<6).reduce(into: [Duration]()) { times, index in
+            times.append((times.last ?? .zero) + FrameTripwire.delay(beforeCheck: index))
+        }
+        #expect(offsets == [.seconds(3), .seconds(6), .seconds(9), .seconds(12), .seconds(27), .seconds(42)])
+        #expect(FrameTripwire.clipCheckSpacing < FrameTripwire.interval)
     }
 }
 

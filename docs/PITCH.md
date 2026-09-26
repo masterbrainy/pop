@@ -106,7 +106,7 @@ Pop! lets a parent make a picture book for their child in minutes, about whateve
 6. **Pop-up without the Neural Engine.** Vision's foreground mask reportedly doesn't run in the Simulator, so the layers are generated and keyed out with Core Image (TN-014). The target is layers rising within 300 ms (TBD, Phase 4).
 7. **Read-along timing** comes from `AVSpeechSynthesizer`'s `willSpeakRangeOfSpeechString`, because OpenAI's text-to-speech has no word timings (TN-015).
 
-**Privacy by design:** audio is streamed for transcription and never stored. The only personal data is the kid's first name and interests. Keys stay on the server, and the app only receives short-lived tokens (TN-011, TN-016, TN-017). Monitoring has personal data scrubbed.
+**Privacy by design:** audio is streamed for transcription and never stored. The only personal data is the kid's first name and interests. Keys stay on the server, and the app only receives short-lived tokens (TN-011, TN-016, TN-017). Timing logs stay local, with no third-party analytics or crash service.
 
 **Simulator only:** Xcode 27.1 beta (27A9269) and the iPhone Duo simulator (TN-001). No physical Duo, camera, haptics or motion sensors. Whether the simulator delivers a continuous hinge angle is TBD (Phase 0.1), and the fallback is an in-app slider (TN-008).
 

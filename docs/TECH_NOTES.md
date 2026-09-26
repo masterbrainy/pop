@@ -37,11 +37,11 @@ This index is not part of the append-only log. Update it freely, and link each a
 | Orbis warm-up time, `reset` to first frame, drift after 30 s and 60 s, Stable vs Dynamic, clip recording in `WKWebView` | Phase 0.3 Orbis probe | TBD |
 | Does Orbis bill from connection or from generation? | Phase 0.3, plus a question to Reactor | TBD |
 | How to record each page's clip (in-page recording or native capture of the web view), and how long each clip is (D4) | Phase 0.3, then Gate G0 | TBD |
-| How long it takes a parent to make a 5-page lesson book | Phase 2 exit | TBD |
+| How long it takes a parent to make a 5-page book | Phase 2 exit | TBD |
 | Gemini p50 latency, character consistency, how well cutouts key out | Phase 0.4 | TBD |
 | Realtime end-of-speech detection and latency; does Apple on-device speech work in the simulator? | Phase 0.5 | TBD |
 | p50 latency per pipeline stage | Phase 2 exit | TBD |
-| Cost per finished book, all vendors | Phase 2 (partial), Phase 5 (full) | TBD |
+| Reactor credit used per demo run (warm-up plus live minutes) | Phase 3, Phase 9 rehearsals | TBD |
 | Pop-up layers start rising ≤ 300 ms after the pop angle is reached | Phase 4 | TBD |
 
 ---
@@ -224,7 +224,7 @@ It's **unclear** whether billing starts at connection or at generation.
 **Confidence:** Decision. Gemini covering images only is **assumed** (D7, to confirm now).
 **So what for Pop!:** Keys for all three AI vendors sit behind Supabase functions (TN-017).
 
-### TN-021 · 2026-09-25 · Snapshot of open decisions (PRD §13, ROADMAP §10) → D4 row superseded by TN-024
+### TN-021 · 2026-09-25 · Snapshot of open decisions (PRD §13, ROADMAP §10) → D4 row superseded by TN-024; D5 row by TN-025
 **Decision:** The status of each decision on 2026-09-25. Each one gets its own entry when it's made.
 
 | # | Decision | Recommendation | Status | Decide by |
@@ -259,3 +259,9 @@ It's **unclear** whether billing starts at connection or at generation.
 **Evidence:** PRD v2 (principle 6, S13, B1–B2, §11 "Clip recording", D4) and ROADMAP v2 (§2 units, Phase 0.3, Phase 3, the new Phase 5 "Save and show", with the exit test "identical with Reactor off and network disconnected"), commit `5c22f0d`. P-01 is marked accepted in `docs/PIVOTS.md`.
 **Confidence:** Decision (accepted). **Unverified:** whether a clip can be recorded from the `WKWebView` at all. Phase 0.3 tries in-page recording first, then native capture of the web view. If neither works, a saved book shows the still and re-animates it live from the same picture and prompt, which is close but not exact, and not free.
 **So what for Pop!:** Orbis cost is paid once, while a book is made. Showing it costs $0 in Orbis time. Clip storage becomes a new per-book cost, TBD (measured in Phase 5). The demo's network fallback is now a saved golden book on the device.
+
+### TN-025 · 2026-09-25 · Decision: a hackathon-style pitch, not a release; everything is free
+**Decision:** Brian decided that Pop! is a hackathon-style pitch, not a release, and everything is free. There's no pricing, paywall, Pro, unit-economics strategy, upsells, go-to-market, App Store or Kids Category planning, or legal-release checklist. Lessons are optional: a parent *can* ask for a story that teaches something, as one use of the story brief. There are no lesson packs and no separate fact-check pipeline beyond the normal safety checks. What stays: demo reliability, kid safety (moderation), privacy by design, private keys, and a practical Reactor credit budget for the demo. This supersedes the D5 row of TN-021 (pricing), and it makes P-02 moot.
+**Evidence:** CLAUDE.md "What this is" (commit `c1cec06`, dated 2026-09-26 in the file; logged here on 2026-09-25 local time) and the builder's override message. PRD and ROADMAP updates by Pivots & Ideas are pending.
+**Confidence:** Decision (accepted, Brian).
+**So what for Pop!:** PITCH.md drops monetization and has one honest line on money. The only cost that matters is the demo's Reactor credit. At the verified $0.582/min (TN-012), 5 rehearsals of the PRD's 15-minute planning case come to 75 min ≈ **$43.65**, plus any billed warm-up (TBD, Phase 0.3). That's a planning estimate, not a measurement.

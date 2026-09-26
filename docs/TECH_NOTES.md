@@ -218,7 +218,7 @@ It's **unclear** whether billing starts at connection or at generation.
 **Confidence:** Decision (accepted).
 **So what for Pop!:** This is how PRD P4 ("the animation stays relevant") is enforced. Drift is measured in Phase 0.3.
 
-### TN-020 · 2026-09-25 · Vendor stack as planned
+### TN-020 · 2026-09-25 · Vendor stack as planned → Sentry and RevenueCat dropped, see TN-026
 **Decision:** Reactor Orbis for animation. Google Gemini for illustrations, pop-up layers and animation prompts. OpenAI for speech-to-text, the story model, moderation and narration. Supabase for auth, Postgres, Storage and the Edge Functions that hold the keys. Sentry for crash and performance monitoring, with personal data scrubbed. RevenueCat for the paywall.
 **Evidence:** PRD §11, ROADMAP §2.
 **Confidence:** Decision. Gemini covering images only is **assumed** (D7, to confirm now).
@@ -265,3 +265,9 @@ It's **unclear** whether billing starts at connection or at generation.
 **Evidence:** CLAUDE.md "What this is" (commit `c1cec06`, dated 2026-09-26 in the file; logged here on 2026-09-25 local time) and the builder's override message. PRD and ROADMAP updates by Pivots & Ideas are pending.
 **Confidence:** Decision (accepted, Brian).
 **So what for Pop!:** PITCH.md drops monetization and has one honest line on money. The only cost that matters is the demo's Reactor credit. At the verified $0.582/min (TN-012), 5 rehearsals of the PRD's 15-minute planning case come to 75 min ≈ **$43.65**, plus any billed warm-up (TBD, Phase 0.3). That's a planning estimate, not a measurement.
+
+### TN-026 · 2026-09-25 · PRD and ROADMAP v3 applied: everything is free, lessons optional
+**Decision:** PRD v3 and ROADMAP v3 apply TN-025. P-02 is rejected (superseded by "everything is free"). P-01 is refined: a lesson is an optional free-text "Anything you'd like this story to teach?" in the story brief, with no lesson packs and no fact-check pipeline beyond the normal safety checks. Removed from the PRD: K2, K5 (paywall) and D5 and D6, and S9 and S10; their IDs are left as gaps. K6 is now local timing logs plus the in-app debug overlay, so **Sentry and RevenueCat are dropped** and TN-020's vendor list no longer includes them. The unit-economics risk became a "demo Reactor credit budget" (PRD §9). The roadmap total is about 109 h, with the MVP line at about 75 h.
+**Evidence:** Commits `8e4453d` and `331bcf4`, and the top of PRD v3 and ROADMAP v3.
+**Confidence:** Decision (accepted, Brian).
+**So what for Pop!:** The vendors are now Reactor, Gemini, OpenAI and Supabase. PITCH.md matches: no pricing, no third-party analytics, and lessons appear only as an example.

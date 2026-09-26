@@ -134,12 +134,15 @@ public struct StoryTurnPageResult: Codable, Sendable, Equatable {
     public let text: String
     public let artPrompt: String
     public let breakSuggested: Bool
+    /// One question for the parent to ask about the page (PRD C3).
+    public let question: String?
 
-    public init(index: Int, text: String, artPrompt: String, breakSuggested: Bool) {
+    public init(index: Int, text: String, artPrompt: String, breakSuggested: Bool, question: String? = nil) {
         self.index = index
         self.text = text
         self.artPrompt = artPrompt
         self.breakSuggested = breakSuggested
+        self.question = question
     }
 }
 
@@ -214,6 +217,7 @@ public enum ArtKind: String, Codable, Sendable, Equatable {
     case character
     case plate
     case cutout
+    case drawing
 }
 
 public struct ArtRequest: Codable, Sendable, Equatable {
@@ -224,8 +228,14 @@ public struct ArtRequest: Codable, Sendable, Equatable {
     public let prompt: String
     public let characters: [Character]
     public let characterId: String?
+    /// `kind: .drawing` only: the kid's own finger drawing, base64-encoded PNG or JPEG,
+    /// ≤ 1.5 MB decoded (docs/CONTRACTS.md §3 `art`).
+    public let drawing: String?
 
-    public init(bookId: UUID, kind: ArtKind, pageIndex: Int? = nil, version: Int? = nil, prompt: String, characters: [Character] = [], characterId: String? = nil) {
+    public init(
+        bookId: UUID, kind: ArtKind, pageIndex: Int? = nil, version: Int? = nil, prompt: String,
+        characters: [Character] = [], characterId: String? = nil, drawing: String? = nil
+    ) {
         self.bookId = bookId
         self.kind = kind
         self.pageIndex = pageIndex
@@ -233,6 +243,7 @@ public struct ArtRequest: Codable, Sendable, Equatable {
         self.prompt = prompt
         self.characters = characters
         self.characterId = characterId
+        self.drawing = drawing
     }
 }
 

@@ -19,6 +19,8 @@ actor FakePopServer: PopServer {
     private(set) var storyTurnCalls: [StoryTurnRequest] = []
     private(set) var artCalls: [ArtRequest] = []
     private(set) var motionPromptCalls: [MotionPromptRequest] = []
+    private(set) var reportCalls: [String] = []
+    private(set) var cleanupCallCount = 0
 
     init() {}
 
@@ -65,14 +67,16 @@ actor FakePopServer: PopServer {
         return try await handler()
     }
 
+    /// Recorded, and a no-op unless a handler is set (the session controller reports every connect).
     func reactorReport(sessionId: String) async throws {
-        guard let handler = reactorReportHandler else { fatalError("FakePopServer.reactorReportHandler not set") }
-        try await handler(sessionId)
+        reportCalls.append(sessionId)
+        try await reactorReportHandler?(sessionId)
     }
 
+    /// Recorded, and ends nothing unless a handler is set.
     func reactorCleanup() async throws -> ReactorCleanupResponse {
-        guard let handler = reactorCleanupHandler else { fatalError("FakePopServer.reactorCleanupHandler not set") }
-        return try await handler()
+        cleanupCallCount += 1
+        return try await reactorCleanupHandler?() ?? ReactorCleanupResponse(ended: 0)
     }
 
     // MARK: - convenience setters (actor-isolated, so tests `await` these)

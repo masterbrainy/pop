@@ -79,7 +79,8 @@ final class AppModel {
                            cutouts: layers.cutouts.map { Cutout(characterId: $0.characterId, path: absolute($0.path) ?? $0.path) })
             }
             return PageContent(id: page.id, index: page.index, version: page.version, text: page.text, artPrompt: page.artPrompt,
-                               stillPath: absolute(page.stillPath), layers: layers, motion: page.motion, clipPath: absolute(page.clipPath))
+                               stillPath: absolute(page.stillPath), layers: layers, motion: page.motion, clipPath: absolute(page.clipPath),
+                               question: page.question)
         }
         return Book(id: book.id, kidId: book.kidId, brief: book.brief, bible: book.bible, pages: pages, status: book.status,
                     title: book.title, coverPath: absolute(book.coverPath), createdAt: book.createdAt, finishedAt: book.finishedAt)

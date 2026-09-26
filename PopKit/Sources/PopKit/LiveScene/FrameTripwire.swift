@@ -14,8 +14,11 @@ public struct FrameTripwire: Sendable {
         }
     }
 
-    /// The first check comes soon after the first frame, then one every `interval`.
-    public static let firstCheck: Duration = .seconds(3)
+    /// While a page's clip records (its first `clipSeconds`), a frame is checked every
+    /// `clipCheckSpacing`, so no part of the saved clip goes unchecked (R-38); after that,
+    /// one every `interval`.
+    public static let clipCheckSpacing: Duration = .seconds(3)
+    public static let clipSeconds = 10
     public static let interval: Duration = .seconds(15)
     /// The sampled frame's long side, in pixels.
     public static let maxSide = 512
@@ -28,7 +31,8 @@ public struct FrameTripwire: Sendable {
 
     /// How long to wait before check number `index` (0 is the first) on a page.
     public static func delay(beforeCheck index: Int) -> Duration {
-        index == 0 ? firstCheck : interval
+        let checksDuringClip = Int(Duration.seconds(clipSeconds + 2) / clipCheckSpacing)
+        return index < checksDuringClip ? clipCheckSpacing : interval
     }
 
     public func check(base64: String, mimeType: String) async -> Verdict {

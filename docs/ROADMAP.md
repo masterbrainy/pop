@@ -1,6 +1,6 @@
 # Pop! — Execution Roadmap
 
-*Status: DRAFT v3.1 · 2026-09-26 · P-01 (parents drive creation; saved books replay exactly; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · v3.1 adds the readiness fixes from REVIEW.md · Implements: [PRD.md](PRD.md)*
+*Status: DRAFT v3.1 · 2026-09-26 · P-01 (parents drive creation; saved books replay exactly; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · P-04 (story path; page built behind the current one) · v3.1 adds the readiness fixes from REVIEW.md · Implements: [PRD.md](PRD.md)*
 
 **Planning assumptions.** Two engineers (Brian plus a teammate) building with Claude Code. Estimates are in **focused hours** and include tests. **There's no deadline (D8, resolved), so we build the full scope in phase order.** The cut lines in §7 are kept only as a fallback. Everything is built and demoed **only on the iPhone Duo simulator in Xcode 27.1 beta**.
 
@@ -48,8 +48,8 @@
 |---|---|---|
 | `HingeSource` | Emits posture updates `(status, angle)`. Two versions: Duo (`onHingeChange`) and a debug slider. iPhone Duo only (P-03). A nil hinge means "unknown" (it can be brief on a Duo, when the view leaves a hierarchy that gets hinge updates), so the last posture is kept | — |
 | `PostureMachine` | Pure function from a stream of angles to effects: curl progress, turn committed or cancelled (with hysteresis), pop depth for the page now showing, and closed (after a ~1 s hold). Angles are normalised to the range measured in 0.1 | `HingeSource` values |
-| `PagePipeline` | Per page: input → text → art → layers → animation prompt. Prepares the next page early; cancels work when a direction changes the page | StoryEngine, Art, Moderation |
-| `StoryEngine` | One LLM call per turn. Input: the story brief (interests, optional real moment, optional "teach something" note), the bible, and the parent's or kid's words (spoken or typed) or a "You continue" tap. Structured output: `append / new_page / revise_current`, text, art prompt, bible and direction updates, parent question | `story-turn` function |
+| `PagePipeline` | Keeps the page behind the current one fully built: text → art → layers → animation prompt. A direction cancels and rebuilds the page behind; the page on screen never changes | StoryEngine, Art, Moderation |
+| `StoryEngine` | Plans a **story path** from the brief (interests, optional real moment, optional "teach something" note): an ordered list of page beats that always reaches an ending. It writes pages one at a time along the path. A direction (spoken or typed, parent or kid) re-plans the path from the page behind onward and rewrites that page. Output: path, page text, art prompt, bible and direction updates, parent question | `story-turn` function |
 | `Art` | Gemini page illustration (framing for the portrait page set at G0; see §3), background plate, character cutouts, cover | `art` function |
 | `MotionPromptBuilder` | Builds the Orbis prompt for **one page only** from a fixed template (below) | `motion-prompt` function |
 | `LiveScene` | Protocol: `prepare(image:prompt:)`, `start()`, `stop()`, event stream. Implementations: `ReactorWebScene` (also records each page's clip), `StillPanScene` (fallback) and `ClipReplayScene` (plays a saved page's recorded clip) | Reactor JS SDK |
@@ -108,7 +108,7 @@ These were checked by reading the SDK's `SwiftUICore` interface file on 2026-09-
 - **0.2 Spread (outer screen).** On the closed Duo's portrait outer screen, `ArrangementView(.split)` stacks the two panes top and bottom, 466×339 pt each. There is no `.division` region there, and there are two active `.occlusion` regions at the top right: the camera [399,29 37×37] and its housing [382,0 84×170]. The inner spread (expected 2 × about 475×669 pt) is measured when the hinge is opened by hand.
 - **Logs.** `simctl spawn … log` fails on this Mac (`getpwuid_r`), so probes also write `Documents/<probe>.log`, which the Mac reads through `simctl get_app_container`.
 - **0.3a Orbis go/no-go: GO (2026-09-26).** Reactor's JS SDK in the app's WKWebView streams Orbis video on the Duo simulator: connect 3.5 s, prepare (upload → `set_image` → `set_prompt` → `conditions_ready`) 1.6 s, `start` → `generation_started` 58 ms, **first frame 4.8 s after start**, 33 frames per ~2 s chunk, 17–18 fps at 7–10 Mbit/s, delivered at 2560×1440 ("2k"; input still 1344×768). Session start-up is seconds, not minutes, so warm-up can be short. `disconnect()` ended the session (0 open afterwards). **Style drift:** from a watercolor still, Orbis rendered a photoreal fox within seconds, so the scene part of the motion prompt restates the art style. Log: `build/probe/orbis-run-3.txt`.
-- **Real hinge in DeviceHub (2026-09-26): not usable on this Mac.** The hinge slider is hidden behind an internal flag (`defaults write -g com.apple.dt.coredevicepop.useInternalV68ActionBar -bool YES`, then restart DeviceHub; restarting DeviceHub shuts the Duo down). With it on, the slider and the tabletop pose animate DeviceHub's 3D model, but the simulated Duo never reports the commanded angle: `devicectl device motion hinge-angle` stays at 0.0°, the app stays on its cover, and DeviceHub logs "No hinge reading agreed with the commanded inner and the fold never came to rest within 10.0 seconds … Falling back". Same with `disableHingeInterpolation`. So fold-to-turn is exercised through the in-app hinge panel and `-hingeScript`, which feed the same `PostureMachine` path as `onHingeChange`.
+- **Real hinge in DeviceHub (2026-09-26): works when the Mac isn't overloaded.** The hinge slider is hidden behind an internal flag (`defaults write -g com.apple.dt.coredevicepop.useInternalV68ActionBar -bool YES`, then restart DeviceHub; restarting DeviceHub shuts the Duo down). At load averages of 60–400 the simulated Duo never reached the commanded angle ("Falling back"); at load ≈ 5 it follows the slider (`devicectl device motion hinge-angle` 0 → 180°), the app moves to the inner screen and shows the two-page spread (text left, picture right, 2853×2007 px). Opening can leave the inner display asleep and black in DeviceHub until the screen is clicked once. **The app's hinge updates are sparse:** `onHingeChange` and `UIHingeInteraction` report identical values, roughly one per status change or pause (a fold to 103° may arrive only as 154°), so a quick fold can be missed; a slow fold with a pause turned the page (180 → 103 → 180: `turnCommitted`, then `popBegan`). The in-app hinge panel stays as the reliable demo control.
 - **0.4 (first result).** `generationConfig.imageConfig.aspectRatio: "16:9"` works on `gemini-2.5-flash-image`: a 1344×768 PNG in 5 s.
 
 ## 4. Reusing the teammate's starter (with permission)
@@ -155,15 +155,15 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 - Speech input (OpenAI Realtime; Apple speech as fallback), typed input, and the parent's/kid's turn toggle (the parent is the default speaker).
 - Kid profile (first name, reading level, interests) and the per-book story brief (interests, optional real moment, and an optional free-text "Anything you'd like this story to teach?" that simply goes into the prompt).
-- `StoryEngine` with a strict response schema, reading-level limits, page breaks, parent directions (add or change, carried into later pages), "You continue", and a revise-current action. It leaves surnames, addresses, schools and phone numbers out of the story text.
-- Page breaks while creating: the engine proposes a break and shows "fold to turn". Anything said after that drafts the next page, which appears when the parent folds. The engine never turns the page itself.
+- `StoryEngine` with a strict response schema, reading-level limits, a story path planned from the brief (always reaching an ending), and directions that re-plan the path from the page behind (P-04). It leaves surnames, addresses, schools and phone numbers out of the story text.
+- The page behind: while a page shows, the next page along the path is fully built. A direction rebuilds it; the page on screen never changes, and only the parent's fold turns the page.
 - `StoryBible` and character registry (fixed description plus reference image).
 - `Art` (Gemini): locked art style, character references, framing from D9 (16:9 with important content central until G0).
 - Kid-safety gate (PRD §8.6 rubric): `omni-moderation-latest` on text, prompts and pictures, plus an LLM rubric check on text and prompts at the kid's reading level, and each category's response (rewrite, redirect, regenerate the picture, placeholder).
-- `PagePipeline`: prepares the next page early, cancels work on revision, versions each page.
+- `PagePipeline`: keeps the page behind built, cancels it when a direction arrives, versions each page.
 - Persistence in Supabase (rows plus Storage); timing spans for every stage.
 
-**Exit:** a parent makes a 5-page book from a brief in the Duo simulator, by voice and by typing, using at least one direction and one "You continue". Pages fill with text and then art, and a latency table is recorded.
+**Exit:** a parent makes a 5-page book from a brief in the Duo simulator, by voice and by typing, with one mid-story direction that changes the path. Every fold shows a page that's already built, the story reaches an ending, and a latency table is recorded.
 
 ### Phase 3: Living page, Orbis per page (≈ 14 h · A 7, B 7)
 
@@ -224,24 +224,50 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 
 | If we have… | Build | Skip |
 |---|---|---|
-| **About 2 days (≈ 40 h)** | Phase 0 trimmed; Phase 1 (curl, slider allowed); Phase 2 with the brief, directions and "You continue"; Phase 3 without drift guard or tripwire (clip recording kept); Phase 4 with two layers; Phase 5 save and exact replay with a basic cover; Phase 9 golden path | Everything else |
+| **About 2 days (≈ 40 h)** | Phase 0 trimmed; Phase 1 (curl, slider allowed); Phase 2 with the story path, the page behind and directions; Phase 3 without drift guard or tripwire (clip recording kept); Phase 4 with two layers; Phase 5 save and exact replay with a basic cover; Phase 9 golden path | Everything else |
 | **1 week** | The MVP line + Phase 9 | Phases 6–7, cut-list features |
 | **2+ weeks** | Everything except talking characters | Talking characters |
 
 ## 8. Testing and verification
 
-- **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, directions and "You continue" (a direction carries into later pages), reading-level limits, `PagePipeline` cancellation, the kid-safety gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
+- **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, the story path (it always reaches an ending; a direction re-plans from the page behind and never changes the page on screen), reading-level limits, `PagePipeline` cancellation, the kid-safety gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
 - **Server function tests:** each function tested in Deno against recorded fixtures.
-- **Eval set:** 30 sessions (parent narration and directions, "You continue", kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something. It covers every kid-safety category at each reading level (PRD §8.6), personal details, and 40 labelled utterances for telling narration from directions (S3). Checked for safety, reading level and coherence; passing means 0 misses and false blocks on ≤ 5% of safe pages. Run before every demo.
+- **Eval set:** 30 sessions (parent narration and directions, kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something. It covers every kid-safety category at each reading level (PRD §8.6), personal details, and 40 labelled utterances for telling narration from directions (S3). Checked for safety, reading level and coherence; passing means 0 misses and false blocks on ≤ 5% of safe pages. Run before every demo.
 - **UI:** XCUITest on the iPhone Duo simulator for navigation. Duo postures are tested automatically through a scripted `HingeSource` and the debug slider, because `simctl` can't move the hinge; the real hinge is checked by hand with DeviceHub's hinge slider. Screenshots of both screens: `xcrun simctl io booted screenshot --display=1` (outer) and `--display=3` (inner).
 - **Latency:** a timing span per stage, with a p50 table in the debug overlay.
 
 ## 9. Demo run-book
 
-- **Warm-up (T-60 min until 0.3b measures it):** launch and open a New Book to warm Orbis, early enough for the measured start-up time but late enough that the session cap and token lifetime can't end the session on stage. The overlay should show 1 open session, status ready and the credit meter running, with enough Reactor credit left for the demo (PRD §9 credit budget).
-- **T-15 min:** a rehearsal pass; headphones or muted speakers so the animation's sound doesn't reach the mic; a wired connection or a hotspot.
-- **Live:** follow the script. If Reactor fails, the still fallback takes over automatically. If the network fails, show the saved golden book.
-- **After:** KILL, then run the admin-only `reactor-sessions` cleanup; confirm 0 open sessions on the account.
+**Setup (T-60 min)**
+1. Close heavy apps; the load average should be under about 10, or DeviceHub's hinge lags and the simulator stutters (§3).
+2. Open DeviceHub with the Duo booted. If the hinge slider is missing, run `defaults write -g com.apple.dt.coredevicepop.useInternalV68ActionBar -bool YES` and reopen DeviceHub.
+3. Restore the golden book, which is the network-failure fallback: `scripts/golden-book.sh restore`, then `scripts/golden-book.sh show`.
+4. Install the current build (`scripts/sim.sh run`). Check that `scripts/reactor-sessions.sh list` shows 0 open sessions and there's Reactor credit for the demo (PRD §9).
+5. Open the Duo with the slider. If the inner screen stays black, click it once to wake it.
+
+**Rehearsal (T-15 min):** make a two-page book once. Mute the Mac, so Orbis sound can't reach the mic. Use a wired connection or a hotspot.
+
+**Live:**
+1. **Bookshelf.** Tap New book, fill in the brief (first name, interests), and open.
+2. **Tell.** Type or speak page 1. The words land left; about 7 s later the picture lands right and comes alive about 10 s after that.
+3. **Direct.** Type a change ("make the kite purple"). The page is redrawn, and the character keeps its look.
+4. **Turn.** Fold slowly with the slider to about 100°, pause, then open flat. The page turns and the next page is ready for words. The in-app panel (triple tap) turns pages if the hinge lags.
+5. **You continue.** Tap the sparkles: the story writes the next bit itself.
+6. **Pop-up.** Fold to about 90° and hold: the scene tilts back and the characters stand up.
+7. **Finish.** Tap Finish, or close the Duo. The book gets a title and a painted cover and is saved.
+8. **Replay.** Open it from the bookshelf. The same words, pictures and clips play back with no network.
+
+**If something fails**
+
+| Failure | What the audience sees | What to do |
+|---|---|---|
+| Reactor down or slow | Pictures stay still with a slow pan | Carry on; the book still works. KILL in the debug panel if needed |
+| Network down | "Pop! is offline" note | Open the golden book from the bookshelf and demo reading, fold-to-turn and the pop-up |
+| Safety gate refuses a line | A gentle note asks for a friendlier direction | Give a gentler line; the eval set's false-block rate is 7% |
+| Speech fails | A note under the story bar | Type instead |
+| Hinge lags | Folds don't turn | Triple-tap for the hinge panel and use Turn and Pop |
+
+**After:** KILL, then `scripts/reactor-sessions.sh list` (expect 0). If needed, `scripts/reactor-sessions.sh kill`.
 
 ## 10. Decision log
 

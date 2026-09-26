@@ -89,6 +89,7 @@ export function buildStoryTurnSystemPrompt(input: StoryTurnPromptInput): string 
     ACTION_GUIDE,
     "If the input is a direction (an instruction to add or change something, not narration), fold it into the bible's directions so it carries into every later page.",
     'If input.kind is "continue", write the next beat yourself, following the brief and every direction so far.',
+    `readingQuestion: one short, warm question a parent can ask ${input.kid.firstName} about this page's words or picture (for example "What colour is the kite?" or "How do you think Maya feels?"), at this reading level and never about ${input.kid.firstName}'s own address, school or family details.`,
     "Respond with only the JSON object the response schema describes.",
   );
 

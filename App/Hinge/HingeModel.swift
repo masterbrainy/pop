@@ -24,6 +24,8 @@ final class HingeModel {
     @ObservationIgnored private var tickTask: Task<Void, Never>?
     @ObservationIgnored private var scriptTask: Task<Void, Never>?
     @ObservationIgnored private let origin = ContinuousClock.now
+    /// `-logHinge YES` writes every reading and posture event to Documents/hinge.log.
+    @ObservationIgnored private let fileLog = LaunchOptions.logHinge ? FileLog(name: "hinge") : nil
 
     init(config: PostureConfig = .standard) {
         machine = PostureMachine(config: config)
@@ -58,6 +60,7 @@ final class HingeModel {
 
     func ingest(posture: HingePosture, degrees: Double, from source: Source) {
         if source == .device { lastDeviceAngle = degrees }
+        fileLog?.append("\(source == .device ? "device" : "debug") \(posture) \(String(format: "%.1f", degrees))° overridden=\(overridden)")
         guard (source == .debug) == overridden else { return }
         apply(HingeSample(posture: posture, angle: degrees, time: elapsed()))
     }
@@ -92,7 +95,10 @@ final class HingeModel {
         let (next, events) = machine.reduce(state, sample)
         state = next
         lastSample = sample
-        for event in events { onEvent(event) }
+        for event in events {
+            fileLog?.append("event \(event) phase \(state.phase)")
+            onEvent(event)
+        }
         scheduleTick()
     }
 

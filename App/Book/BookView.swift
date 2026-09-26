@@ -16,14 +16,14 @@ struct BookView: View {
     @State private var showsDebugPanel = LaunchOptions.debugHinge
     @State private var finishing = false
 
-    init(book: Book, kid: KidProfile, settings: ParentSettings = ParentSettings(), mode: BookMode,
+    init(book: Book, kid: KidProfile, settings: ParentSettings = ParentSettings(), mode: BookMode, heroDrawing: HeroDrawing? = nil,
          onClose: @escaping () -> Void = {}, onFinish: @escaping (Book) -> Void = { _ in }) {
         self.kid = kid
         self.onClose = onClose
         self.onFinish = onFinish
         let reader = BookReader(book: book, mode: mode)
         _reader = State(initialValue: reader)
-        _maker = State(initialValue: mode == .creating ? StoryMaker(reader: reader, kid: kid, settings: settings) : nil)
+        _maker = State(initialValue: mode == .creating ? StoryMaker(reader: reader, kid: kid, settings: settings, heroDrawing: heroDrawing) : nil)
     }
 
     var body: some View {
@@ -41,11 +41,19 @@ struct BookView: View {
             }
         }
         .overlay(alignment: .top) { banner }
-        .overlay(alignment: .topLeading) { topBar }
+        .overlay(alignment: .topLeading) { if hinge.state.phase != .closed { topBar } }
         .readsHinge(into: hinge)
         .onTapGesture(count: 3) { showsDebugPanel.toggle() }
         .onChange(of: hinge.state.popDepth) { _, depth in reader.setPopDepth(depth) }
         .task { await start() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            guard let maker, !finishing else { return }
+            Task { await maker.pauseLive() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            guard let maker, !finishing else { return }
+            Task { await maker.resumeLive() }
+        }
         .onDisappear {
             readAloud.stop()
             if let maker { Task { await maker.end() } }
@@ -193,7 +201,7 @@ enum BookFinisher {
         guard let server = AppServices.shared.server else { return nil }
         let media = AppServices.shared.media
         let opening = book.pages.first.map { $0.artPrompt ?? $0.text } ?? ""
-        let prompt = "The cover of a picture book called \"\(title)\": the main characters together, inviting and joyful. Opening scene: \(opening)"
+        let prompt = "Cover art for a picture book about: \(title). The main characters together, inviting and joyful. Opening scene: \(opening). No words, letters or title anywhere in the picture; leave calm sky or space at the top for the title."
         let request = ArtRequest(bookId: book.id, kind: .cover, version: 1, prompt: prompt, characters: book.bible.characters)
         do {
             let art = try await server.art(request)

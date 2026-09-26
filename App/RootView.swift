@@ -30,6 +30,7 @@ private struct AutomationBookView: View {
         Group {
             if let book {
                 BookView(book: book, kid: model.kid, settings: model.settings, mode: opensLatest ? .reading : .creating,
+                         heroDrawing: opensLatest ? nil : LaunchOptions.heroDrawing,
                          onFinish: { finished in Task { await model.save(finished) } })
             } else {
                 ProgressView()

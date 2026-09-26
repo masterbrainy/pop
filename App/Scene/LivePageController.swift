@@ -22,7 +22,7 @@ final class LivePageController {
     }
 
     /// How long each page's clip runs; saved books loop it (G0/D4).
-    static let clipSeconds = 10
+    static let clipSeconds = FrameTripwire.clipSeconds
 
     private(set) var status: Status = .off
     private(set) var credits: Double = 0

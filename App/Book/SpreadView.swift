@@ -15,10 +15,14 @@ struct SpreadView<Controls: View>: View {
     var highlight: NSRange? = nil
     @ViewBuilder var controls: () -> Controls
 
+    /// The co-pilot question shows while reading a book, not while making one.
+    private var showsQuestion: Bool { live == nil }
+
     var body: some View {
         ArrangementView {
             ZStack(alignment: .bottom) {
-                TextPageView(text: page?.text ?? "", level: level, pageNumber: pageNumber, highlight: highlight)
+                TextPageView(text: page?.text ?? "", level: level, pageNumber: pageNumber, highlight: highlight,
+                             question: showsQuestion ? page?.question : nil)
                     .id(page?.id)
                     .transition(.opacity)
                 controls()

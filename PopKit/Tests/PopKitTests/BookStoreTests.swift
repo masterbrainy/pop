@@ -78,6 +78,16 @@ struct BookStoreTests {
         #expect(reloaded == [saved])
     }
 
+    @Test func savingKeepsEachPagesReadingQuestion() async throws {
+        let root = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try FileBookStore(root: root)
+        let page = PageContent(index: 0, text: "Pip swims.", question: "Where does Pip swim?")
+        let saved = try await store.save(book(createdAt: Date(timeIntervalSince1970: 1), coverPath: nil, pages: [page]))
+        #expect(saved.pages.first?.question == "Where does Pip swim?")
+        #expect(try await store.loadAll().first?.pages.first?.question == "Where does Pip swim?")
+    }
+
     @Test func loadAllSortsBooksNewestFirst() async throws {
         let root = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

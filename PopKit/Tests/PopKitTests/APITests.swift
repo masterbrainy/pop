@@ -104,6 +104,24 @@ struct APITests {
         #expect(response.width == 1344 && response.placeholder == false)
     }
 
+    @Test func artRequestEncodesTheDrawingKindAndItsBase64Field() throws {
+        let request = ArtRequest(
+            bookId: UUID(), kind: .drawing, version: 1, prompt: "a purple cat with wings",
+            characterId: "hero", drawing: "AAA="
+        )
+        let json = try object(from: encoder.encode(request))
+        #expect(json["kind"] as? String == "drawing")
+        #expect(json["characterId"] as? String == "hero")
+        #expect(json["drawing"] as? String == "AAA=")
+        #expect(json["prompt"] as? String == "a purple cat with wings")
+    }
+
+    @Test func artRequestOmitsTheDrawingFieldWhenThereIsNoDrawing() throws {
+        let request = ArtRequest(bookId: UUID(), kind: .character, prompt: "a fox")
+        let json = try object(from: encoder.encode(request))
+        #expect(json["drawing"] == nil)
+    }
+
     @Test func moderateRequestEncodesEitherTextOrImage() throws {
         let textJSON = try object(from: encoder.encode(ModerateRequest.text("hello")))
         #expect(textJSON["text"] as? String == "hello")

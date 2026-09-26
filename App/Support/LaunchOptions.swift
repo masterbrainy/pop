@@ -18,6 +18,9 @@ enum LaunchOptions {
     /// `-screen book` opens the sample book directly (for automated checks).
     static var screen: String? { UserDefaults.standard.string(forKey: "screen") }
 
+    /// `-logHinge YES` logs hinge readings and posture events to Documents/hinge.log.
+    static var logHinge: Bool { UserDefaults.standard.bool(forKey: "logHinge") }
+
     /// `-debugHinge YES` hands the hinge to the debug panel from launch.
     static var debugHinge: Bool { UserDefaults.standard.bool(forKey: "debugHinge") }
 
@@ -32,6 +35,14 @@ enum LaunchOptions {
     static var storyTurns: [String] {
         (UserDefaults.standard.string(forKey: "storyTurns") ?? "")
             .split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// `-heroDrawing drawing.png -heroName "a red ball with a smile"` starts `-screen create` with
+    /// a kid's drawing (a PNG in the app's Documents) as the hero.
+    static var heroDrawing: HeroDrawing? {
+        guard let name = UserDefaults.standard.string(forKey: "heroDrawing"),
+              let data = try? Data(contentsOf: URL.documentsDirectory.appending(path: name)) else { return nil }
+        return HeroDrawing(imageData: data, description: UserDefaults.standard.string(forKey: "heroName") ?? "the hero")
     }
 
     /// `-hingeAngle 95` sweeps the debug hinge from flat to this angle at launch and holds it

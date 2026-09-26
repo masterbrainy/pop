@@ -49,6 +49,7 @@ All Pop! sessions live in the sidebar group **"Pop!"**. Set your own title to yo
 
 ## Where things get recorded
 - **ROADMAP §3 (platform facts) and §10 (decision log):** verified technical facts, each with its source (SDK file, measurement or vendor doc), plus decisions. The builder writes them; others send corrections to the builder.
+- **`docs/BUILD_LOG.md`:** the builder's running log (what works, how to run it, what's next). Builder-owned.
 - **`docs/PIVOTS.md`:** Brian's pivots and suggestions, each with impact and status (proposed, accepted, parked, rejected).
 - **`docs/REVIEW.md`:** QA findings with severity and status, plus the current readiness verdict.
 

@@ -1,6 +1,10 @@
-// `story-turn`: one story engine turn, a title, or the story path (P-04)
-// (docs/CONTRACTS.md §3, PRD S1-S8, S11, S12, S14, §8.6 K1, §8.7). Requires
-// sign-in and a per-user rate limit.
+// `story-turn`: the story path, or a title (P-04, docs/CONTRACTS.md §3, PRD
+// S1-S8, S11, S12, S14, §8.6 K1, §8.7). Requires sign-in and a per-user rate
+// limit.
+//
+// `mode: "turn"` (the pre-P-04 append/new_page/revise_current engine) was
+// removed once the app moved to `path`/`page` and the full eval passed on
+// them (see docs/CONTRACTS.md §3 for the removal note).
 import { requireUser } from "../_shared/auth.ts";
 import { requireEnv } from "../_shared/env.ts";
 import { servePop } from "../_shared/handler.ts";
@@ -11,12 +15,7 @@ import { buildInputSafetyDeps, buildSafetyDeps } from "../_shared/safety_deps.ts
 import type { ReadingLevel } from "../_shared/reading_levels.ts";
 import { enforceStandardRateLimit } from "../_shared/rate_limit.ts";
 import { parseRequest } from "../_shared/request.ts";
-import {
-  buildStoryPageSystemPrompt,
-  buildStoryPathSystemPrompt,
-  buildStoryTurnSystemPrompt,
-  buildTitlePrompt,
-} from "../_shared/story_prompt.ts";
+import { buildStoryPageSystemPrompt, buildStoryPathSystemPrompt, buildTitlePrompt } from "../_shared/story_prompt.ts";
 import {
   STORY_PAGE_JSON_SCHEMA,
   STORY_PATH_JSON_SCHEMA,
@@ -24,50 +23,13 @@ import {
   storyPathModelOutputSchema,
 } from "../_shared/story_path_schema.ts";
 import { runPageTurn, runPathTurn, type PageModelAttempt, type PathModelAttempt } from "../_shared/story_path.ts";
-import {
-  STORY_TURN_JSON_SCHEMA,
-  storyModelOutputSchema,
-  TITLE_JSON_SCHEMA,
-  titleModelOutputSchema,
-} from "../_shared/story_schema.ts";
-import { runStoryTurnWithInputGate, type ModelAttempt } from "../_shared/story_turn.ts";
-import { requestSchema, type PageRequest, type PathRequest, type TitleRequest, type TurnRequest } from "./schema.ts";
+import { TITLE_JSON_SCHEMA, titleModelOutputSchema } from "../_shared/story_schema.ts";
+import { requestSchema, type PageRequest, type PathRequest, type TitleRequest } from "./schema.ts";
 
 const WRITE_NOW = "Produce the JSON response for this turn now.";
 const TITLE_SYSTEM_PROMPT =
   "You are Pop!'s story engine, writing a short, warm title for a children's picture book.";
 const FALLBACK_TITLE_SUFFIX = "'s Storybook";
-
-async function callModelFor(apiKey: string, body: TurnRequest, rewriteReason: string | null): Promise<ModelAttempt> {
-  const start = performance.now();
-  const raw = await chatJSON(apiKey, {
-    model: STORY_MODEL,
-    system: buildStoryTurnSystemPrompt({ ...body, rewriteReason }),
-    user: WRITE_NOW,
-    jsonSchema: STORY_TURN_JSON_SCHEMA,
-  });
-  const output = parseModelJSON(raw, storyModelOutputSchema);
-  return { output, modelMs: Math.round(performance.now() - start) };
-}
-
-async function handleTurn(apiKey: string, body: TurnRequest) {
-  const readingLevel = body.kid.readingLevel as ReadingLevel;
-  const data = await runStoryTurnWithInputGate(
-    readingLevel,
-    body.current.index,
-    body.current.text,
-    body.bible,
-    { text: body.input.text, speaker: body.input.speaker },
-    body.kid.firstName,
-    {
-      callModel: (rewriteReason) => callModelFor(apiKey, body, rewriteReason),
-      safety: buildSafetyDeps(apiKey),
-      inputSafety: buildInputSafetyDeps(apiKey),
-    },
-    body.pages.filter((page) => page.index < body.current.index).sort((a, b) => a.index - b.index).map((page) => page.text),
-  );
-  return data;
-}
 
 async function callPathModelFor(apiKey: string, body: PathRequest, rewriteReason: string | null): Promise<PathModelAttempt> {
   const start = performance.now();
@@ -150,7 +112,6 @@ async function handleTitle(apiKey: string, body: TitleRequest) {
 }
 
 type StoryTurnFunctionData =
-  | Awaited<ReturnType<typeof handleTurn>>
   | Awaited<ReturnType<typeof handleTitle>>
   | Awaited<ReturnType<typeof handlePath>>
   | Awaited<ReturnType<typeof handlePage>>;
@@ -163,8 +124,6 @@ Deno.serve((req) =>
     const apiKey = requireEnv("OPENAI_API_KEY");
 
     switch (body.mode) {
-      case "turn":
-        return { data: await handleTurn(apiKey, body) };
       case "title":
         return { data: await handleTitle(apiKey, body) };
       case "path":

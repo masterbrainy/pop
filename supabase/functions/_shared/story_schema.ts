@@ -1,73 +1,11 @@
-// The story-turn model's structured-output contract: a strict JSON Schema for
-// the OpenAI request, and a zod schema to re-validate the parsed response
+// story-turn's remaining model-call contracts: a strict JSON Schema for each
+// OpenAI request, and a zod schema to re-validate the parsed response
 // (defense in depth — strict mode can still be bypassed by a rewrite call).
+//
+// `mode: "turn"`'s STORY_TURN_JSON_SCHEMA/storyModelOutputSchema lived here
+// too; they were removed with `mode: "turn"` (see _shared/story_path_schema.ts
+// for `path`/`page`'s equivalents).
 import { z } from "npm:zod@3.23.8";
-
-export const STORY_TURN_JSON_SCHEMA = {
-  name: "pop_story_turn",
-  strict: true,
-  schema: {
-    type: "object",
-    properties: {
-      action: {
-        type: "string",
-        enum: ["append", "new_page", "revise_current", "none"],
-      },
-      pageText: { type: "string" },
-      artPrompt: { type: "string" },
-      breakSuggested: { type: "boolean" },
-      readingQuestion: { type: "string" },
-      bibleTitle: { type: ["string", "null"] },
-      bibleSetting: { type: "string" },
-      bibleCharacters: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            name: { type: "string" },
-            description: { type: "string" },
-          },
-          required: ["id", "name", "description"],
-          additionalProperties: false,
-        },
-      },
-      bibleDirections: { type: "array", items: { type: "string" } },
-      parentNote: { type: ["string", "null"] },
-    },
-    required: [
-      "action",
-      "pageText",
-      "artPrompt",
-      "breakSuggested",
-      "readingQuestion",
-      "bibleTitle",
-      "bibleSetting",
-      "bibleCharacters",
-      "bibleDirections",
-      "parentNote",
-    ],
-    additionalProperties: false,
-  },
-} as const;
-
-export const storyModelOutputSchema = z.object({
-  action: z.enum(["append", "new_page", "revise_current", "none"]),
-  pageText: z.string(),
-  artPrompt: z.string(),
-  breakSuggested: z.boolean(),
-  /** One question a parent can ask about this page (PRD C3); may be empty for "none". */
-  readingQuestion: z.string().default(""),
-  bibleTitle: z.string().nullable(),
-  bibleSetting: z.string(),
-  bibleCharacters: z.array(
-    z.object({ id: z.string(), name: z.string(), description: z.string() }),
-  ),
-  bibleDirections: z.array(z.string()),
-  parentNote: z.string().nullable(),
-});
-
-export type StoryModelOutput = z.infer<typeof storyModelOutputSchema>;
 
 export const TITLE_JSON_SCHEMA = {
   name: "pop_story_title",

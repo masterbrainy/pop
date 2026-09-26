@@ -6,7 +6,6 @@ import {
   readingLevelSchema,
   storyBibleSchema,
   storyBriefSchema,
-  storyInputSchema,
   uuidSchema,
   zodIssueSummary,
 } from "./schemas.ts";
@@ -51,17 +50,6 @@ Deno.test("characterSchema requires id, name and description", () => {
       name: "Rex",
       description: "A friendly green dinosaur",
     }).success,
-  );
-});
-
-Deno.test("storyInputSchema restricts kind and speaker to known enums", () => {
-  assert(
-    storyInputSchema.safeParse({ kind: "typed", speaker: "parent", text: "hi" })
-      .success,
-  );
-  assertFalse(
-    storyInputSchema.safeParse({ kind: "sung", speaker: "parent", text: "hi" })
-      .success,
   );
 });
 

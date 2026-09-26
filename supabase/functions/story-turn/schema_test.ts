@@ -4,21 +4,6 @@ import { requestSchema } from "./schema.ts";
 const kid = { firstName: "Maya", readingLevel: "early_reader", interests: ["dinosaurs"] };
 const bible = { title: null, setting: "", characters: [], directions: [], path: [] };
 
-Deno.test("requestSchema accepts a well-formed turn request", () => {
-  const result = requestSchema.safeParse({
-    mode: "turn",
-    bookId: "123e4567-e89b-12d3-a456-426614174000",
-    kid,
-    brief: { interests: ["dinosaurs"], realMoment: null, teach: null, language: "en" },
-    settings: { avoidTopics: [] },
-    bible,
-    pages: [],
-    current: { index: 0, text: "" },
-    input: { kind: "typed", speaker: "parent", text: "Once upon a time" },
-  });
-  assert(result.success);
-});
-
 Deno.test("requestSchema accepts a well-formed title request without current/input", () => {
   const result = requestSchema.safeParse({
     mode: "title",
@@ -30,7 +15,7 @@ Deno.test("requestSchema accepts a well-formed title request without current/inp
   assert(result.success);
 });
 
-Deno.test("requestSchema rejects a turn request missing input", () => {
+Deno.test("requestSchema rejects mode 'turn' (removed once the app moved to path/page)", () => {
   const result = requestSchema.safeParse({
     mode: "turn",
     bookId: "123e4567-e89b-12d3-a456-426614174000",
@@ -40,6 +25,7 @@ Deno.test("requestSchema rejects a turn request missing input", () => {
     bible,
     pages: [],
     current: { index: 0, text: "" },
+    input: { kind: "typed", speaker: "parent", text: "Once upon a time" },
   });
   assertFalse(result.success);
 });

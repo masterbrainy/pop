@@ -29,6 +29,13 @@ struct BookView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
+            if let maker {
+                // The live video's permanent home behind the pages: it never leaves the window,
+                // so the page behind keeps animating and recording through turns and the cover.
+                LiveSceneParking(dock: maker.live.dock)
+                    .allowsHitTesting(false)
+                    .ignoresSafeArea()
+            }
             content
             if showsDebugPanel {
                 VStack(spacing: 8) {
@@ -99,7 +106,7 @@ struct BookView: View {
                 }
         } else {
             SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,
-                       curl: hinge.state.curl, popDepth: reader.popDepth, replaysClips: true,
+                       curl: hinge.state.curl, popDepth: reader.popDepth,
                        highlight: readAloud.spokenRange)
         }
     }

@@ -96,6 +96,17 @@ struct DraftPagesTests {
         #expect(draft.updatingPage(id: behind.id, version: 2) { $0.with(stillPath: "/v2.png") } == nil)
     }
 
+    @Test func aLoopPreRecordedForThePageBehindLandsOnlyOnTheVersionItWasRecordedFrom() throws {
+        // The page behind is pre-animated, then a direction rewrites it before its loop lands.
+        let behind = PageContent(index: 1, version: 2, text: "Snow.", artPrompt: "snow", stillPath: "/v2.png")
+        let draft = DraftPages(pages: [shown], pendingNext: behind)
+
+        #expect(draft.updatingPage(id: behind.id, version: 1) { $0.with(clipPath: "/v1-loop.mp4") } == nil)
+        let landed = try #require(draft.updatingPage(id: behind.key.id, version: behind.key.version) { $0.with(clipPath: "/v2-loop.mp4") })
+        #expect(landed.pages.pendingNext?.clipPath == "/v2-loop.mp4")
+        #expect(landed.pages.pages == [shown])
+    }
+
     @Test func updatingAShownPageChangesOnlyThatFieldOnTheLatestCopy() throws {
         // Layers arrive while a clip is already attached: the clip must survive.
         let draft = DraftPages(pages: [shown], pendingNext: written(1))

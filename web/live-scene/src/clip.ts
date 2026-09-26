@@ -2,6 +2,8 @@
 // The bytes go to Swift in base64 chunks through `window.webkit.messageHandlers.popClip`,
 // because a WKWebView can't hand a Blob to native code directly.
 
+import { SupersededError } from "./gate.ts";
+
 const CHUNK_BYTES = 256 * 1024;
 const PREFERRED_TYPES = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp8", "video/webm"];
 
@@ -33,6 +35,14 @@ export function toBase64(bytes: Uint8Array): string {
 
 export function chunkCount(byteLength: number): number {
   return Math.max(1, Math.ceil(byteLength / CHUNK_BYTES));
+}
+
+/**
+ * A clip asked for by page flow `generation` is refused once a newer flow has claimed the
+ * session: the video now playing belongs to another page. Without a generation, no check.
+ */
+export function checkClipGeneration(generation: number | undefined, isCurrent: (generation: number) => boolean): void {
+  if (generation !== undefined && !isCurrent(generation)) throw new SupersededError(generation);
 }
 
 export class ClipRecorder {

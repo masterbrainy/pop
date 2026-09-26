@@ -124,15 +124,6 @@ final class StoryMaker {
     @ObservationIgnored private var toldLiveBusy = false
     /// Characters whose reference sheet is being made (or was tried).
     @ObservationIgnored private var referencesRequested: Set<String> = []
-    /// Characters whose reference sheet is being made right now.
-    @ObservationIgnored private var referencesInFlight: Set<String> = []
-    /// Pages ahead waiting to paint until the characters' reference sheets exist, so every
-    /// page draws them the same way (pages are built ahead, and would otherwise paint before
-    /// the first picture has made the references).
-    @ObservationIgnored private var awaitingReferences: [UUID] = []
-    @ObservationIgnored private var referenceWaitStarted: ContinuousClock.Instant?
-    /// The longest a page waits for reference sheets before painting without them.
-    private static let referenceWait: Duration = .seconds(45)
     /// Set by the book view: a scripted "finish" step ends and saves the book.
     @ObservationIgnored var onScriptedFinish: @MainActor () async -> Void = {}
     /// Set by the book view: a scripted "pop" step folds to about 90° and back.
@@ -663,16 +654,8 @@ final class StoryMaker {
     /// Paints a page that has words and prepares its motion, unless it's already painting.
     /// Pages ahead wait their turn (`isNextToPaint`); `ensureBuilds` starts them later.
     private func paint(_ page: PageContent) {
-<<<<<<< HEAD
         guard let pipeline = services.pipeline, paintTasks[page.id] == nil, !unavailablePictures.contains(page.id),
               isNextToPaint(page) else { return }
-=======
-        guard let pipeline = services.pipeline, paintTasks[page.id] == nil, !unavailablePictures.contains(page.id) else { return }
-        if waitsForReferences(page) {
-            deferPaint(page)
-            return
-        }
->>>>>>> b7fa390 (Keep characters looking the same: later pages wait for reference sheets, and looks are remembered by name across stories)
         let book = reader.book
         let run = UUID()
         let started = callPipeline { await pipeline.paint(page, book: book) }
@@ -695,39 +678,6 @@ final class StoryMaker {
             self.refreshLatency()
         }
         paintTasks[page.id] = (run, task)
-    }
-
-    /// Whether `page` should wait for the characters' reference sheets: while one is being
-    /// made, or (before any picture exists) for every page after the first, whose picture
-    /// makes them. Never past `referenceWait`.
-    private func waitsForReferences(_ page: PageContent) -> Bool {
-        guard !reader.book.bible.characters.isEmpty else { return false }
-        if let started = referenceWaitStarted, started.duration(to: .now) >= Self.referenceWait { return false }
-        if !referencesInFlight.isEmpty { return true }
-        let written = (reader.book.pages + reader.ahead).filter { !$0.text.isEmpty }
-        guard !written.contains(where: { $0.stillPath != nil }), let first = written.map(\.index).min() else { return false }
-        return page.index > first
-    }
-
-    private func deferPaint(_ page: PageContent) {
-        if !awaitingReferences.contains(page.id) { awaitingReferences.append(page.id) }
-        guard referenceWaitStarted == nil else { return }
-        referenceWaitStarted = .now
-        scriptLog?.append("page \(page.index + 1) waits for the characters' reference sheets")
-        Task { [weak self] in
-            try? await Task.sleep(for: Self.referenceWait)
-            self?.paintAwaitingReferences()
-        }
-    }
-
-    /// References arrived (or failed, or the wait ran out): paint the pages that waited.
-    private func paintAwaitingReferences() {
-        let waiting = awaitingReferences
-        awaitingReferences = []
-        for id in waiting {
-            if let page = reader.page(id: id), page.stillPath == nil { paint(page) }
-        }
-        if awaitingReferences.isEmpty { referenceWaitStarted = nil }
     }
 
     /// Painting ended without a picture: try again after a wait (the page keeps "Painting…"
@@ -880,15 +830,11 @@ final class StoryMaker {
     /// page behind. A page the reader has already seen is never changed.
     private func written(_ outcome: PathOutcome, by build: Build) {
         // Take only the bible, onto the latest book: pages may have gained pictures meanwhile.
-<<<<<<< HEAD
-        reader.updateStory { $0.with(bible: outcome.book.bible.keepingCharacters(from: $0.bible)) }
-=======
         // Characters met in earlier stories keep the look they had there.
         reader.updateStory { book in
-            let bible = outcome.book.bible.carryingReferences(from: book.bible)
+            let bible = outcome.book.bible.keepingCharacters(from: book.bible)
             return book.with(bible: bible.with(characters: CharacterLooks.applying(to: bible.characters)))
         }
->>>>>>> b7fa390 (Keep characters looking the same: later pages wait for reference sheets, and looks are remembered by name across stories)
         if let message = outcome.parentNote { note(message) }
         if let page = outcome.page {
             switch reader.place(page) {
@@ -928,29 +874,17 @@ final class StoryMaker {
         let bookId = reader.book.id
         for character in needed {
             referencesRequested.insert(character.id)
-            referencesInFlight.insert(character.id)
             let request = CharacterReferences.request(for: character, bookId: bookId, fromStill: stillPath)
             Task { [weak self] in
                 do {
                     let art = try await server.art(request)
-<<<<<<< HEAD
                     guard let self, !art.placeholder else { return }
                     self.reader.updateStory { $0.with(bible: $0.bible.replacingReference(stillPath, with: art.path, for: character.id)) }
                     self.scriptLog?.append("reference ready for \(character.id) in \(art.ms) ms")
-=======
-                    guard let self else { return }
-                    if !art.placeholder {
-                        self.reader.updateStory { $0.with(bible: $0.bible.settingReference(art.path, for: character.id)) }
-                        self.scriptLog?.append("reference ready for \(character.id) in \(art.ms) ms")
-                    }
->>>>>>> b7fa390 (Keep characters looking the same: later pages wait for reference sheets, and looks are remembered by name across stories)
                 } catch {
                     // The page picture stays as the reference.
                     self?.scriptLog?.append("reference failed for \(character.id): \(error.localizedDescription)")
                 }
-                guard let self else { return }
-                self.referencesInFlight.remove(character.id)
-                if self.referencesInFlight.isEmpty { self.paintAwaitingReferences() }
             }
         }
     }
@@ -965,9 +899,6 @@ final class StoryMaker {
                 paintFailures[updated.id] = nil
                 picturelessPages.remove(updated.id)
                 lastPaintFailure = ""
-                // The first picture is in: pages that waited for it paint now, unless its
-                // reference sheets are still being made (they'll be released when those land).
-                if !awaitingReferences.isEmpty, referencesInFlight.isEmpty { paintAwaitingReferences() }
                 // Pop-up layers are several more pictures, so only the page on screen makes them.
                 if updated.id == reader.currentPage?.id { prepareLayers(for: updated) }
                 if !hasOpened, updated.id == reader.currentPage?.id { limitOpeningAnimationWait() }

@@ -224,7 +224,7 @@ It's **unclear** whether billing starts at connection or at generation.
 **Confidence:** Decision. Gemini covering images only is **assumed** (D7, to confirm now).
 **So what for Pop!:** Keys for all three AI vendors sit behind Supabase functions (TN-017).
 
-### TN-021 · 2026-09-25 · Snapshot of open decisions (PRD §13, ROADMAP §10)
+### TN-021 · 2026-09-25 · Snapshot of open decisions (PRD §13, ROADMAP §10) → D4 row superseded by TN-024
 **Decision:** The status of each decision on 2026-09-25. Each one gets its own entry when it's made.
 
 | # | Decision | Recommendation | Status | Decide by |

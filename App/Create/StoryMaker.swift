@@ -27,6 +27,8 @@ final class StoryMaker {
     @ObservationIgnored private var speech: (any SpeechInput)?
     @ObservationIgnored private var speechTask: Task<Void, Never>?
     @ObservationIgnored private var turnTask: Task<Void, Never>?
+    /// Serializes turns so a second input while one is in flight isn't lost (R-31).
+    @ObservationIgnored private let turnQueue = TurnQueue()
     @ObservationIgnored private var noteTask: Task<Void, Never>?
     @ObservationIgnored private var scriptLog: FileLog?
     @ObservationIgnored private var layerTasks: [UUID: Task<Void, Never>] = [:]
@@ -113,11 +115,21 @@ final class StoryMaker {
     func submit(_ text: String, kind: InputKind = .typed) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        runTurn(StoryTurnInput(kind: kind, speaker: speaker, text: trimmed))
+        enqueue(StoryTurnInput(kind: kind, speaker: speaker, text: trimmed))
     }
 
     func continueStory() {
-        runTurn(StoryEngine.continueInput(speaker: speaker))
+        enqueue(StoryEngine.continueInput(speaker: speaker))
+    }
+
+    /// Routes an input through `turnQueue` (R-31): starts a turn immediately if
+    /// none is in flight, else queues it to be merged in when the current one
+    /// returns. `isWorking` stays true until the queue fully drains.
+    private func enqueue(_ input: StoryTurnInput) {
+        Task { [weak self] in
+            guard let self, let toRun = await self.turnQueue.submit(input) else { return }
+            self.runTurn(toRun)
+        }
     }
 
     func toggleMic() async {
@@ -176,6 +188,8 @@ final class StoryMaker {
     private func runTurn(_ input: StoryTurnInput) {
         guard let pipeline = services.pipeline, let draft = reader.currentPage else {
             note("Pop! is offline, so new pages can't be made right now.")
+            isWorking = false
+            Task { [weak self] in await self?.turnQueue.reset() }
             return
         }
         isWorking = true
@@ -185,8 +199,14 @@ final class StoryMaker {
             for await event in events {
                 await self.apply(event)
             }
-            self.isWorking = false
             self.latency = await pipeline.latencyTable()
+            // Anything that arrived while this turn ran is queued; run it next,
+            // joined into one input. `isWorking` stays true until the queue drains.
+            if let next = await self.turnQueue.drain() {
+                self.runTurn(next)
+            } else {
+                self.isWorking = false
+            }
         }
     }
 

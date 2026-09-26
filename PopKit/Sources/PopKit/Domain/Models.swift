@@ -120,10 +120,13 @@ public struct PageContent: Codable, Equatable, Identifiable, Sendable {
     public let layers: PageLayers?
     public let motion: MotionParts?
     public let clipPath: String?
+    /// One question for the parent to ask about this page (PRD C3); nil in books saved before it.
+    public let question: String?
 
     public init(
         id: UUID = UUID(), index: Int, version: Int = 1, text: String, artPrompt: String? = nil,
-        stillPath: String? = nil, layers: PageLayers? = nil, motion: MotionParts? = nil, clipPath: String? = nil
+        stillPath: String? = nil, layers: PageLayers? = nil, motion: MotionParts? = nil, clipPath: String? = nil,
+        question: String? = nil
     ) {
         self.id = id
         self.index = index
@@ -134,6 +137,7 @@ public struct PageContent: Codable, Equatable, Identifiable, Sendable {
         self.layers = layers
         self.motion = motion
         self.clipPath = clipPath
+        self.question = question
     }
 
     /// A new version of this page: new words and art prompt, and no media yet (it's regenerated).
@@ -142,23 +146,29 @@ public struct PageContent: Codable, Equatable, Identifiable, Sendable {
     }
 
     public func with(stillPath: String?) -> PageContent {
-        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath)
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath, question: question)
     }
 
     public func with(layers: PageLayers?) -> PageContent {
-        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath)
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath, question: question)
     }
 
     public func with(motion: MotionParts?) -> PageContent {
-        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath)
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath, question: question)
     }
 
     public func with(clipPath: String?) -> PageContent {
-        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath)
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath, question: question)
+    }
+
+    public func with(question: String?) -> PageContent {
+        let trimmed = question?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers,
+                           motion: motion, clipPath: clipPath, question: trimmed?.isEmpty == false ? trimmed : nil)
     }
 
     public func with(text: String) -> PageContent {
-        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath)
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers, motion: motion, clipPath: clipPath, question: question)
     }
 }
 

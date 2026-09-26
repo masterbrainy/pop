@@ -9,6 +9,7 @@ function output(overrides: Partial<StoryModelOutput> = {}): StoryModelOutput {
     pageText: "A friendly dragon shares a cookie.",
     artPrompt: "A friendly dragon sharing a cookie with a child.",
     breakSuggested: false,
+    readingQuestion: "What does the dragon share?",
     bibleTitle: null,
     bibleSetting: "A cozy meadow",
     bibleCharacters: [],
@@ -193,4 +194,21 @@ Deno.test("runStoryTurn turns a full page into a new page instead of refusing it
   assertEquals(data.page.index, 1);
   assertEquals(data.page.text, "She lifts it up high into the sky.");
   assertEquals(data.parentNote, null);
+});
+
+Deno.test("runStoryTurn returns the page's reading question and runs it past the safety gate", async () => {
+  const checked: string[] = [];
+  const deps: StoryTurnDeps = {
+    callModel: async () => ({ output: output({ readingQuestion: "  Who shares the cookie?  " }), modelMs: 5 }),
+    safety: {
+      moderateText: async (text: string) => {
+        checked.push(text);
+        return { flagged: false, categories: [] };
+      },
+      checkRubric: async () => ({ safe: true, reason: "" }),
+    },
+  };
+  const result = await runStoryTurn("early_reader", 0, "", emptyBible, deps);
+  assertEquals(result.page.question, "Who shares the cookie?");
+  assertEquals(checked.some((text) => text.includes("Who shares the cookie?")), true);
 });

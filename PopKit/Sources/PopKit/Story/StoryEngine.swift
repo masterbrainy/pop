@@ -36,20 +36,20 @@ public enum StoryEngine {
             return StoryTurnOutcome(book: updatedBook, currentDraft: currentDraft, pendingNextDraft: nil, parentNote: response.parentNote)
 
         case let (.append, .some(page)):
-            let updated = replacing(currentDraft, text: page.text, artPrompt: page.artPrompt)
+            let updated = replacing(currentDraft, text: page.text, artPrompt: page.artPrompt).with(question: page.question)
             return StoryTurnOutcome(book: updatedBook, currentDraft: updated, pendingNextDraft: nil, parentNote: nil)
 
         case let (.reviseCurrent, .some(page)):
-            let revised = currentDraft.revised(text: page.text, artPrompt: page.artPrompt)
+            let revised = currentDraft.revised(text: page.text, artPrompt: page.artPrompt).with(question: page.question)
             return StoryTurnOutcome(book: updatedBook, currentDraft: revised, pendingNextDraft: nil, parentNote: nil)
 
         case let (.newPage, .some(page)) where currentDraft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty:
             // Nothing to turn away from yet: the words belong on this page.
-            let filled = replacing(currentDraft, text: page.text, artPrompt: page.artPrompt)
+            let filled = replacing(currentDraft, text: page.text, artPrompt: page.artPrompt).with(question: page.question)
             return StoryTurnOutcome(book: updatedBook, currentDraft: filled, pendingNextDraft: nil, parentNote: nil)
 
         case let (.newPage, .some(page)):
-            let pending = PageContent(index: page.index, text: page.text, artPrompt: page.artPrompt)
+            let pending = PageContent(index: page.index, text: page.text, artPrompt: page.artPrompt).with(question: page.question)
             return StoryTurnOutcome(book: updatedBook, currentDraft: currentDraft, pendingNextDraft: pending, parentNote: nil)
 
         case (.append, .none), (.reviseCurrent, .none), (.newPage, .none):

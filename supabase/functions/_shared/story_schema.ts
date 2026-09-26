@@ -16,6 +16,7 @@ export const STORY_TURN_JSON_SCHEMA = {
       pageText: { type: "string" },
       artPrompt: { type: "string" },
       breakSuggested: { type: "boolean" },
+      readingQuestion: { type: "string" },
       bibleTitle: { type: ["string", "null"] },
       bibleSetting: { type: "string" },
       bibleCharacters: {
@@ -39,6 +40,7 @@ export const STORY_TURN_JSON_SCHEMA = {
       "pageText",
       "artPrompt",
       "breakSuggested",
+      "readingQuestion",
       "bibleTitle",
       "bibleSetting",
       "bibleCharacters",
@@ -54,6 +56,8 @@ export const storyModelOutputSchema = z.object({
   pageText: z.string(),
   artPrompt: z.string(),
   breakSuggested: z.boolean(),
+  /** One question a parent can ask about this page (PRD C3); may be empty for "none". */
+  readingQuestion: z.string().default(""),
   bibleTitle: z.string().nullable(),
   bibleSetting: z.string(),
   bibleCharacters: z.array(

@@ -102,7 +102,7 @@ public actor FileBookStore: BookStoring {
         let clipPath = try page.clipPath.map { try copyMedia(from: $0, into: mediaDirectory, baseName: "\(baseName)-clip") }
         return PageContent(
             id: page.id, index: page.index, version: page.version, text: page.text, artPrompt: page.artPrompt,
-            stillPath: stillPath, layers: layers, motion: page.motion, clipPath: clipPath
+            stillPath: stillPath, layers: layers, motion: page.motion, clipPath: clipPath, question: page.question
         )
     }
 

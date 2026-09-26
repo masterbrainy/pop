@@ -23,8 +23,7 @@ struct SpreadView<Controls: View>: View {
         ArrangementView {
             ZStack(alignment: .bottom) {
                 TextPageView(text: page?.text ?? "", level: level, pageNumber: pageNumber, highlight: highlight,
-                             question: showsQuestion ? page?.question : nil,
-                             backdrop: StillImageLoader.image(for: page?.stillPath), backdropKey: page?.stillPath)
+                             question: showsQuestion ? page?.question : nil)
                     .id(page?.id)
                     .transition(.opacity)
                 controls()

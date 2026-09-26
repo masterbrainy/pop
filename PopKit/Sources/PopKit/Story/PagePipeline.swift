@@ -128,9 +128,14 @@ public actor PagePipeline {
             continuation.yield(.textReady(outcome))
             try Task.checkCancellation()
 
-            try await runArtAndMotion(page: outcome.currentDraft, book: outcome.book, continuation: continuation)
-            // A `new_page` break: prepare the next page's art and motion early too,
-            // so it's ready by the time the parent folds.
+            // Only regenerate the current page's art/motion when its words actually
+            // changed (revise_current) or it never had a still to begin with (its
+            // first append). An append onto a page that already has a still, and a
+            // new_page break (the current page is unchanged), skip it — the
+            // pending next draft still gets its own art/motion below.
+            if shouldIllustrateCurrentPage(action: response.action, currentDraft: outcome.currentDraft) {
+                try await runArtAndMotion(page: outcome.currentDraft, book: outcome.book, continuation: continuation)
+            }
             if let pending = outcome.pendingNextDraft {
                 try await runArtAndMotion(page: pending, book: outcome.book, continuation: continuation)
             }
@@ -157,6 +162,14 @@ public actor PagePipeline {
             continuation.yield(.failed(error.message))
         } catch {
             continuation.yield(.failed("\(error)"))
+        }
+    }
+
+    private func shouldIllustrateCurrentPage(action: StoryTurnAction, currentDraft: PageContent) -> Bool {
+        switch action {
+        case .reviseCurrent: true
+        case .append: currentDraft.stillPath == nil
+        case .newPage, .none: false
         }
     }
 

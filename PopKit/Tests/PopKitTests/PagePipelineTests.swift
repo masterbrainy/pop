@@ -44,7 +44,7 @@ struct PagePipelineTests {
         #expect(events[2] == .motionReady(pageIndex: 0, prompt: MotionPromptBuilder.prompt(scene: "a quiet meadow", motion: "grass sways")))
     }
 
-    @Test func aNewPageBreakAlsoPreparesTheArtAndMotionForThePendingNextDraft() async throws {
+    @Test func aNewPageBreakSkipsTheUnchangedCurrentPageButPreparesThePendingNextDraft() async throws {
         let server = FakePopServer()
         await server.onStoryTurn { _ in
             StoryTurnResponse(
@@ -52,30 +52,62 @@ struct PagePipelineTests {
                 bible: .empty, parentNote: nil, timings: StoryTurnTimings(modelMs: 1, safetyMs: 1)
             )
         }
-        await server.onArt { request in
-            switch request.pageIndex {
-            case 0: ArtResponse(path: "u/b/p0.png", url: "https://x/p0.png", width: 1344, height: 768, placeholder: false, ms: 1)
-            default: ArtResponse(path: "u/b/p1.png", url: "https://x/p1.png", width: 1344, height: 768, placeholder: false, ms: 1)
-            }
-        }
-        await server.onMotionPrompt { request in
-            request.pageIndex == 0 ? MotionParts(scene: "a meadow", motion: "grass sways") : MotionParts(scene: "a forest path", motion: "leaves drift")
-        }
+        await server.onArt { _ in ArtResponse(path: "u/b/p1.png", url: "https://x/p1.png", width: 1344, height: 768, placeholder: false, ms: 1) }
+        await server.onMotionPrompt { _ in MotionParts(scene: "a forest path", motion: "leaves drift") }
 
         let pipeline = PagePipeline(server: server)
-        let draft = PageContent(index: 0, text: "A fox ran into a meadow.", artPrompt: "a fox in a meadow")
+        // Already illustrated: a new_page break must not touch it again.
+        let draft = PageContent(index: 0, text: "A fox ran into a meadow.", artPrompt: "a fox in a meadow", stillPath: "u/b/p0.png")
         let input = StoryTurnInput(kind: .typed, speaker: .parent, text: "what happens next")
         let events = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: input))
 
-        #expect(events.count == 5)
+        #expect(events.count == 3)
         guard case let .textReady(outcome) = events[0] else { Issue.record("expected textReady first, got \(events[0])"); return }
         #expect(outcome.currentDraft == draft) // unchanged: new_page doesn't touch the current page
         #expect(outcome.pendingNextDraft?.index == 1)
         #expect(outcome.pendingNextDraft?.text == "They found berries.")
-        #expect(events[1] == .stillReady(pageIndex: 0, path: "u/b/p0.png", url: "https://x/p0.png"))
+        #expect(events[1] == .stillReady(pageIndex: 1, path: "u/b/p1.png", url: "https://x/p1.png"))
+        #expect(events[2] == .motionReady(pageIndex: 1, prompt: MotionPromptBuilder.prompt(scene: "a forest path", motion: "leaves drift")))
+        let artCalls = await server.artCalls
+        #expect(artCalls.map(\.pageIndex) == [1]) // page 0 was never asked for art again
+    }
+
+    @Test func appendOntoAPageThatAlreadyHasAStillSkipsRegeneratingItsArtAndMotion() async throws {
+        let server = FakePopServer()
+        await server.onStoryTurn { _ in self.appendResponse(text: "A fox ran into a meadow and stopped.", artPrompt: "a fox in a meadow") }
+
+        let pipeline = PagePipeline(server: server)
+        let draft = PageContent(index: 0, text: "A fox ran into a meadow", artPrompt: "a fox in a meadow", stillPath: "u/b/p0.png")
+        let input = StoryTurnInput(kind: .typed, speaker: .parent, text: "and stopped")
+        let events = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: input))
+
+        #expect(events.count == 1)
+        guard case let .textReady(outcome) = events[0] else { Issue.record("expected textReady, got \(events[0])"); return }
+        #expect(outcome.currentDraft.text == "A fox ran into a meadow and stopped.")
+        let artCallCount = await server.artCalls.count
+        #expect(artCallCount == 0)
+    }
+
+    @Test func reviseCurrentAlwaysRegeneratesArtAndMotionEvenIfTheOldStillIsStillSet() async throws {
+        let server = FakePopServer()
+        await server.onStoryTurn { _ in
+            StoryTurnResponse(
+                action: .reviseCurrent, page: StoryTurnPageResult(index: 0, text: "A gentle fox ran into a meadow.", artPrompt: "a gentle fox", breakSuggested: false),
+                bible: .empty, parentNote: nil, timings: StoryTurnTimings(modelMs: 1, safetyMs: 1)
+            )
+        }
+        await server.onArt { _ in ArtResponse(path: "u/b/p0-v2.png", url: "https://x/p0-v2.png", width: 1344, height: 768, placeholder: false, ms: 1) }
+        await server.onMotionPrompt { _ in MotionParts(scene: "a meadow", motion: "grass sways") }
+
+        let pipeline = PagePipeline(server: server)
+        // revised() drops stale media, but the rule should hold even independent of that.
+        let draft = PageContent(index: 0, text: "A fox ran into a meadow.", artPrompt: "a fox", stillPath: "u/b/p0.png")
+        let input = StoryTurnInput(kind: .typed, speaker: .parent, text: "make it gentle")
+        let events = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: input))
+
+        #expect(events.count == 3)
+        #expect(events[1] == .stillReady(pageIndex: 0, path: "u/b/p0-v2.png", url: "https://x/p0-v2.png"))
         #expect(events[2] == .motionReady(pageIndex: 0, prompt: MotionPromptBuilder.prompt(scene: "a meadow", motion: "grass sways")))
-        #expect(events[3] == .stillReady(pageIndex: 1, path: "u/b/p1.png", url: "https://x/p1.png"))
-        #expect(events[4] == .motionReady(pageIndex: 1, prompt: MotionPromptBuilder.prompt(scene: "a forest path", motion: "leaves drift")))
     }
 
     @Test func preparePendingDraftSkipsStoryTurnAndOnlyRunsArtAndMotion() async throws {

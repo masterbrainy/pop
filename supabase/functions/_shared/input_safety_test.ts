@@ -6,6 +6,7 @@ function fakeDeps(overrides: Partial<InputSafetyDeps> = {}): InputSafetyDeps {
   return {
     moderateText: async () => ({ flagged: false, categories: [] }),
     checkRealHarm: async () => ({ safe: true, reason: "" }),
+    checkDirectionSafety: async () => ({ safe: true, reason: "" }),
     ...overrides,
   };
 }
@@ -37,28 +38,97 @@ Deno.test("checkInputSafety passes safe text from either speaker", async () => {
   assertEquals(kidVerdict.blocked, false);
 });
 
-Deno.test("checkInputSafety blocks moderation-flagged input from a kid with the calm real-harm note, and skips the rubric call", async () => {
-  let rubricCalled = false;
+Deno.test("checkInputSafety blocks moderation-flagged input from a kid with the calm real-harm note when the real-harm rubric agrees", async () => {
+  // R-42: moderation alone never decides "real_harm" — the dedicated rubric does.
   const deps = fakeDeps({
     moderateText: async () => ({ flagged: true, categories: ["violence"] }),
-    checkRealHarm: async () => {
-      rubricCalled = true;
-      return { safe: true, reason: "" };
-    },
+    checkRealHarm: async () => ({ safe: false, reason: "sounds like real harm" }),
   });
   const verdict = await checkInputSafety("something unsafe", "kid", "Maya", deps);
   assertEquals(verdict.blocked, true);
   assertEquals(verdict.parentNote, kidRealHarmNote("Maya"));
   assertEquals(verdict.refusal, "real_harm");
-  assertEquals(rubricCalled, false);
 });
 
-Deno.test("checkInputSafety blocks moderation-flagged input from a parent with the generic gentle redirect note and refusal 'unsafe'", async () => {
-  const deps = fakeDeps({ moderateText: async () => ({ flagged: true, categories: [] }) });
+Deno.test("checkInputSafety blocks moderation-flagged playful pretend content from a kid as 'unsafe', not 'real_harm' (R-42)", async () => {
+  // "The dragon fights the knight!" can trip content moderation's violence
+  // category, but the real-harm rubric correctly reads it as pretend play —
+  // it must still be a gentle, generic block, never the alarming real-harm
+  // disclosure note.
+  const deps = fakeDeps({
+    moderateText: async () => ({ flagged: true, categories: ["violence"] }),
+    checkRealHarm: async () => ({ safe: true, reason: "" }),
+  });
+  const verdict = await checkInputSafety("the dragon fights the knight", "kid", "Maya", deps);
+  assertEquals(verdict.blocked, true);
+  assertEquals(verdict.parentNote, gentleParentNote());
+  assertEquals(verdict.refusal, "unsafe");
+});
+
+Deno.test("checkInputSafety runs the real-harm rubric for a kid speaker even when moderation doesn't flag anything", async () => {
+  let rubricCalled = false;
+  const deps = fakeDeps({
+    moderateText: async () => ({ flagged: false, categories: [] }),
+    checkRealHarm: async () => {
+      rubricCalled = true;
+      return { safe: true, reason: "" };
+    },
+  });
+  const verdict = await checkInputSafety("add a puppy", "kid", "Maya", deps);
+  assertEquals(verdict.blocked, false);
+  assertEquals(rubricCalled, true);
+});
+
+Deno.test("checkInputSafety blocks moderation-flagged input from a parent when the direction-safety second opinion agrees it's unsafe", async () => {
+  const deps = fakeDeps({
+    moderateText: async () => ({ flagged: true, categories: [] }),
+    checkDirectionSafety: async () => ({ safe: false, reason: "genuinely unsafe" }),
+  });
   const verdict = await checkInputSafety("something unsafe", "parent", "Maya", deps);
   assertEquals(verdict.blocked, true);
   assertEquals(verdict.parentNote, gentleParentNote());
   assertEquals(verdict.refusal, "unsafe");
+});
+
+Deno.test("checkInputSafety allows a parent's moderation-flagged-but-benign direction through, via the direction-safety second opinion (R-41 root cause)", async () => {
+  // Regression: OpenAI's moderation model flagged the entirely benign
+  // "Let's finish the story here with a proper ending." under its "violence"
+  // category (observed live against the deployed function). The second
+  // opinion catches this false positive and lets the direction through.
+  const deps = fakeDeps({
+    moderateText: async () => ({ flagged: true, categories: ["violence"] }),
+    checkDirectionSafety: async () => ({ safe: true, reason: "" }),
+  });
+  const verdict = await checkInputSafety("Let's finish the story here with a proper ending.", "parent", "Maya", deps);
+  assertEquals(verdict, { blocked: false, parentNote: null, refusal: null });
+});
+
+Deno.test("checkInputSafety never calls the direction-safety second opinion when moderation doesn't flag anything", async () => {
+  let secondOpinionCalled = false;
+  const deps = fakeDeps({
+    checkDirectionSafety: async () => {
+      secondOpinionCalled = true;
+      return { safe: true, reason: "" };
+    },
+  });
+  const verdict = await checkInputSafety("wake the dragon up", "parent", "Maya", deps);
+  assertEquals(verdict.blocked, false);
+  assertEquals(secondOpinionCalled, false);
+});
+
+Deno.test("checkInputSafety never calls the direction-safety second opinion for a kid speaker", async () => {
+  let secondOpinionCalled = false;
+  const deps = fakeDeps({
+    moderateText: async () => ({ flagged: true, categories: ["violence"] }),
+    checkRealHarm: async () => ({ safe: true, reason: "" }),
+    checkDirectionSafety: async () => {
+      secondOpinionCalled = true;
+      return { safe: true, reason: "" };
+    },
+  });
+  const verdict = await checkInputSafety("the dragon fights the knight", "kid", "Maya", deps);
+  assertEquals(verdict.blocked, true);
+  assertEquals(secondOpinionCalled, false);
 });
 
 Deno.test("checkInputSafety runs the real-harm rubric only for a kid speaker, and blocks with the kid note and refusal 'real_harm' when it fails", async () => {

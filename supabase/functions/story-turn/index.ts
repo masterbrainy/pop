@@ -79,6 +79,7 @@ async function handlePage(apiKey: string, body: PageRequest) {
     readingLevel,
     body.index,
     body.bible,
+    body.kid.firstName,
     body.brief.language,
     {
       callModel: (rewriteReason) => callPageModelFor(apiKey, body, rewriteReason),

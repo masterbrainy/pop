@@ -39,3 +39,24 @@ Read the CHILD'S WORDS and reply with only a JSON object:
 "safe" is false only when the words sound like the child may be describing real harm to themselves; true otherwise.
 "reason" must be empty when safe is true, and a short (under 20 words) plain-English reason when safe is false.`;
 }
+
+/**
+ * The prompt for the input-side direction-safety second opinion (R-41
+ * root-cause fix, docs/CONTRACTS.md): OpenAI's moderation model can flag an
+ * ordinary, benign parent direction as a false positive — observed live, it
+ * flagged "Let's finish the story here with a proper ending." under its
+ * "violence" category. A parent is the trusted adult steering the story
+ * (PRD "Parents drive creation"), so a moderation flag on their words gets
+ * this fast second opinion before blocking; a kid's own words never get this
+ * override (see realHarmCheckPrompt/checkRealHarm, always run and never
+ * overturned for a kid speaker).
+ */
+export function directionSafetyCheckPrompt(): string {
+  return `You check a parent's own instruction to a children's picture-book story engine for a genuine safety concern.
+Content moderation can over-trigger on ordinary, benign instructions — for example ending the story, asking for a happy or exciting moment, or a plain scene change — treat those as safe.
+
+Read the PARENT'S INSTRUCTION and reply with only a JSON object:
+{"safe": boolean, "reason": string}
+"safe" is false only when the instruction itself asks for something genuinely unsafe for a children's story (real violence, adult themes, danger a child could copy, real people, personal details, and similar); true otherwise, including any ordinary instruction a blunt filter might misflag.
+"reason" must be empty when safe is true, and a short (under 20 words) plain-English reason when safe is false.`;
+}

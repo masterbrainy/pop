@@ -25,13 +25,14 @@
 
 ## Log
 
-### P-01 · Parents drive creation; lessons inside stories kids love · 2026-09-25 · Status: proposed
+### P-01 · Parents drive creation; lessons inside stories kids love · 2026-09-25 · Status: accepted
 - **Idea (Brian's words):** "The product is not simply for kids to imagine some stories. A core part of it is for PARENTS to actually be able to create these stories for their kids. For instance, they can tie in educational lessons inside of stories that their kids may like. Of course, it's also cool if the parents and kids can collaborate together to make the story, but don't forget that a major part of it is the parents actually driving this creation."
-- **Changes:**
-  - PRD tagline, §1 Problem, §3 Users, §4 Hypothesis, §6 principle 2 ("the kid leads" becomes "the parent drives, the kid can join in"), §7 Core experience, §10 MVP scope.
-  - §8.1: new **story brief** (the lesson + what the kid loves + optional real-life moment) and a **kid profile with interests**. Learn and Real-life modes become that brief and move from P1 to P0. Typed input sits alongside voice. Kid co-creation stays P0 as the second way to make a book.
-  - §8.6: fact-checking lessons (K2) moves from P1 to P0.
-  - Roadmap: Phase 2 absorbs the brief, the interests and the lesson packs from Phase 6. Phases 0, 1, 3 and 4 (curl, animation, pop-up) don't change.
-- **Cost:** docs about 1 h. Build about +6–8 h before the MVP line, mostly moved up from Phase 6, so about +3–4 h net overall. No new vendors or spend. Risk: wrong facts become a P0 risk (curated lesson packs first), and the demo's wow moment shifts from "the kid speaks and the book appears" to "a parent makes a lesson book in 2 minutes and the kid reads it".
-- **Recommendation:** Do it, and do it now, while no code exists. The parent is the payer and the decider, so this makes the product stronger. It leaves the must-haves alone. Keep creation live: for each page, the parent tells it (voice or text) or taps "you continue", and the AI writes it following the lesson. That keeps live generation a must-have.
-- **Decision:** —
+- **Brian's clarification:** "I should be able to create the story ahead of time and save it or create the story with the child. These are both technically the same thing… I can tell it what I want it to add or change, and then it'll generate the next pages like that. When I'm satisfied, I can save this story then show to my child exactly the way I recorded it… Don't think of it as two entirely separate things."
+- **Changes (as applied):**
+  - PRD: intro, §1 Problem, §2 Evidence, §3 Users (the parent is the author), §4 Hypothesis, §5 (new "saved book replays exactly" gate), §6 (principle 2 is now "the parent drives"; new principle 6, "what you save is what they see"), §7 (one creation flow; the child being there is optional), §10 MVP scope.
+  - PRD §8: the Imagine, Learn and Real-life modes become one **story brief** plus a **kid profile** (S4). New P0s: typed input (S2), directions (S7, was P1), "You continue" (S8), lesson woven in (S9), **save and show exactly** (S13), bookshelf and showing saved books (B1–B2, were P1), and lesson fact-checking (K2, was P1).
+  - PRD §11–13: new assumption and risks for clip recording and wrong lessons; D4 (record clips) resolved as required.
+  - Roadmap: Phase 0.3 must answer how to record clips. Phase 2 becomes parent-driven (brief, profile, typed input, directions, "You continue", lesson packs). Phase 3 records clips. The new **Phase 5, "Save and show"**, is above the MVP line. Phase 6 shrinks to lesson extras and parent controls. `BookStore` and `ClipReplayScene` are new units. Cut lines, tests, eval set and run-book are updated.
+- **Cost (final):** the MVP line moves from about 60 h to about 78 h, and the total from 109 h to 118 h (+9 h net). v1 said 119 h, but its phases summed to 109 h. That's more than my first estimate of +3–4 h, because showing a saved book exactly makes saving, the bookshelf and clip recording must-haves. No new vendors. Orbis cost per book is unchanged, and showing a saved book is now free. Risks: recording clips from the web view is unproven (Phase 0.3), and lessons need to be accurate (curated packs first).
+- **Recommendation:** Do it (given 2026-09-25).
+- **Decision:** 2026-09-25, Brian accepted. Applied in the next commit on main.

@@ -1,6 +1,6 @@
 # Pop! — Execution Roadmap
 
-*Status: DRAFT v1 · 2026-09-25 · Implements: [PRD.md](PRD.md)*
+*Status: DRAFT v2 · 2026-09-25 · P-01 applied (parents drive creation; saved books replay exactly) · Implements: [PRD.md](PRD.md)*
 
 **Planning assumptions.** Two engineers (Brian plus a teammate) building with Claude Code. Estimates are in **focused hours** and include tests. **There's no deadline (D8, resolved), so we build the full scope in phase order.** The cut lines in §7 are kept only as a fallback. Everything is built and demoed **only on the iPhone Duo simulator in Xcode 27.1 beta**.
 
@@ -47,15 +47,16 @@
 |---|---|---|
 | `HingeSource` | Emits posture updates `(status, angle)`. Three versions: Duo (`onHingeChange`), a debug slider, and none (swipe) | — |
 | `PostureMachine` | Pure function from a stream of angles to effects: curl progress, turn committed or cancelled, pop depth, closed | `HingeSource` values |
-| `PagePipeline` | Per page: transcript → text → art → layers → animation prompt. Prepares the next page early; cancels work when the kid changes their mind | StoryEngine, Art, Moderation |
-| `StoryEngine` | One LLM call per turn, with structured output: `append / new_page / revise_current`, text, art prompt, bible updates, parent question, fact card, word of the story | `story-turn` function |
+| `PagePipeline` | Per page: input → text → art → layers → animation prompt. Prepares the next page early; cancels work when a direction changes the page | StoryEngine, Art, Moderation |
+| `StoryEngine` | One LLM call per turn. Input: the story brief (interests, optional lesson, optional real moment), the bible, and the parent's or kid's words (spoken or typed) or a "You continue" tap. Structured output: `append / new_page / revise_current`, text, art prompt, bible and direction updates, parent question, fact card, word of the story | `story-turn` function |
 | `Art` | Gemini page illustration (16:9, important content kept central), background plate, character cutouts, cover | `art` function |
 | `MotionPromptBuilder` | Builds the Orbis prompt for **one page only** from a fixed template (below) | `motion-prompt` function |
-| `LiveScene` | Protocol: `prepare(image:prompt:)`, `start()`, `stop()`, event stream. Implementations: `ReactorWebScene` and `StillPanScene` (fallback) | Reactor JS SDK |
+| `LiveScene` | Protocol: `prepare(image:prompt:)`, `start()`, `stop()`, event stream. Implementations: `ReactorWebScene` (also records each page's clip), `StillPanScene` (fallback) and `ClipReplayScene` (plays a saved page's recorded clip) | Reactor JS SDK |
 | `SessionController` | Orbis session lifecycle: warm-up, token, reconnect with backoff, kill, server-side cleanup of stray sessions, credit meter | `reactor-*` functions |
+| `BookStore` | Saves a finished book (rows, pictures, layers, clips) and keeps a copy on the device, so a saved book shows exactly and works offline | Supabase |
 
 **Per-page animation sequence (PRD P3–P5).** On page shown (fully open):
-`reset → set_image(page still) → set_prompt(page motion prompt) → wait for conditions_ready → start`. The still stays on screen until the first frames arrive, because the first chunk after start contains none. A drift guard re-anchors, or pauses and holds the frame, after *T* seconds, where *T* comes from the Phase 0 spike. On flip, the same sequence runs for the next page. Orbis audio is off during creation.
+`reset → set_image(page still) → set_prompt(page motion prompt) → wait for conditions_ready → start`. The still stays on screen until the first frames arrive, because the first chunk after start contains none. A drift guard re-anchors, or pauses and holds the frame, after *T* seconds, where *T* comes from the Phase 0 spike. On flip, the same sequence runs for the next page. Orbis audio is off during creation. While the final version of a page plays, its clip is recorded (length set at G0) and saved with the page. When a saved book is shown, `ClipReplayScene` plays that clip instead and no Reactor session is needed.
 
 **Motion prompt template.** This applies the teammate's continuity lesson. `SCENE` (from this page's text plus its illustration) and `CAMERA` stay identical within the page, and only one gentle motion clause varies:
 `"The same {SCENE}, the same {CAMERA: locked-off, still}. {ONE GENTLE MOTION CLAUSE}. Nothing new enters the scene. Continuous slow motion, no cuts."`
@@ -104,23 +105,23 @@ These were checked by reading the SDK's `SwiftUICore` interface file on 2026-09-
 
 Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at the `PageContent` model and the `LiveScene` protocol, which are defined in Phase 0 so both can work against mocks.
 
-### Phase 0: Probes and foundations (≈ 12 h · A 6, B 6)
+### Phase 0: Probes and foundations (≈ 13 h · A 7, B 6)
 
 | Task | Track | Est | Answers |
 |---|---|---|---|
 | 0.1 Hinge probe screen: show `status` and `angle` live while using the simulator's fold controls | A | 2 h | Is the angle continuous? How often does it update? How is `.closed` / the cover shown? |
 | 0.2 Spread probe: `ArrangementView` split, and the reserved regions drawn as overlays | A | 1 h | Page sizes and aspect ratio, and where the fold and camera are |
-| 0.3 Orbis in iOS probe: `WKWebView` + bundled JS SDK + token → video playing in the Duo simulator | A | 3 h | Warm-up time, time from `reset` to first frame, drift after 30 and 60 s, Stable vs Dynamic on 3 picture-book images, whether clips can be recorded |
+| 0.3 Orbis in iOS probe: `WKWebView` + bundled JS SDK + token → video playing in the Duo simulator | A | 4 h | Warm-up time, time from `reset` to first frame, drift after 30 and 60 s, Stable vs Dynamic on 3 picture-book images, **how to record each page's clip** (required: saved books replay exactly; try in-page recording first, then native capture of the web view) |
 | 0.4 Gemini probe: page art with a character reference at 16:9, plus plate and cutout edits | B | 2 h | p50 latency, character consistency, how well the cutouts key out |
 | 0.5 Speech probe: Mac mic → simulator → OpenAI Realtime transcription using a short-lived secret | B | 2 h | End-of-speech detection, latency, whether Apple on-device speech works in the simulator |
 | 0.6 Backend skeleton: Supabase project, schema and access rules, `reactor-token`, `reactor-sessions`, stub functions, secrets | B | 2 h | — |
 
-**Gate G0:** decide D1 (gesture model), D3 (Stable or Dynamic) and D4 (record clips or not); fix the latency budget; freeze the `PageContent` and `LiveScene` contracts.
+**Gate G0:** decide D1 (gesture model) and D3 (Stable or Dynamic); settle how clips are recorded and how long each page's clip is (D4); fix the latency budget; freeze the `PageContent` and `LiveScene` contracts.
 
 ### Phase 1: Book shell and hinge (≈ 10 h · A) · must-have: curl
 
 - App skeleton and navigation: Bookshelf → New Book → Book.
-- Domain models (`Book`, `Page`, `Character`, `StoryBible`) and mock data.
+- Domain models (`Book`, `Page`, `Character`, `StoryBible`, `KidProfile`, `StoryBrief`) and mock data.
 - `HingeSource` (Duo, slider, none) and **`PostureMachine` built test-first**, driven by scripted angle sequences. These include **sparse, irregular and jumpy updates** (the update rate is system policy), and the curl smooths between samples.
 - `SpreadView`: left text page, right art page (still only for now), padded for reserved regions.
 - Page curl v1: 3D rotation plus shading driven by curl progress; springs back if released early, commits past the threshold.
@@ -128,28 +129,31 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 **Exit:** a 5-page mock book turns by folding in the Duo simulator, and the `PostureMachine` tests pass.
 
-### Phase 2: Live story pipeline (≈ 16 h · B) · must-have: live generation
+### Phase 2: Live story pipeline, parent-driven (≈ 23 h · B) · must-have: live generation
 
-- Speech input (OpenAI Realtime; Apple speech as fallback) and the kid's/parent's turn toggle.
-- `StoryEngine` with a strict response schema, reading-level limits, page breaks, and a revise-current action.
+- Speech input (OpenAI Realtime; Apple speech as fallback), typed input, and the parent's/kid's turn toggle (the parent is the default speaker).
+- Kid profile (first name, reading level, interests) and the per-book story brief (interests, optional lesson, optional real moment).
+- `StoryEngine` with a strict response schema, reading-level limits, page breaks, parent directions (add or change, carried into later pages), "You continue", and a revise-current action.
+- Lessons woven in: start with 4–6 curated lesson packs (for example sharing, brushing teeth, counting, space), plus a fact-check call for anything else.
 - `StoryBible` and character registry (fixed description plus reference image).
 - `Art` (Gemini): locked art style, character references, 16:9 with important content central.
 - Moderation gate on text, prompts and images; safe fallback lines.
 - `PagePipeline`: prepares the next page early, cancels work on revision, versions each page.
 - Persistence in Supabase (rows plus Storage); timing spans for every stage.
 
-**Exit:** tell a 5-page story out loud in the Duo simulator. Pages fill with text and then art, and a latency table is recorded.
+**Exit:** a parent makes a 5-page lesson book in the Duo simulator, by voice and by typing, using at least one direction and one "You continue". Pages fill with text and then art, and a latency table is recorded.
 
-### Phase 3: Living page, Orbis per page (≈ 12 h · A 5, B 7)
+### Phase 3: Living page, Orbis per page (≈ 14 h · A 7, B 7)
 
 - `ReactorWebScene` bridge (bundled JS, Swift event stream) and the `StillPanScene` fallback.
 - `SessionController`: warm up on New Book, reconnect with backoff, kill, clean up stray sessions at launch, credit meter.
 - `motion-prompt` function (Gemini reads the page text and still) and `MotionPromptBuilder`.
 - On flip: the per-page sequence; crossfade from still to video; drift guard; audio off while the mic is live.
 - Frame tripwire: a sampled frame goes through image moderation, and the page switches back to the still if it's flagged.
+- Clip recording: record each page's final animation (method and length from G0) and save it with the page.
 - Debug overlay (from the teammate's panel), hidden behind a gesture.
 
-**Exit:** every page animates within 5 s of the flip and stays on topic for 60 s. Killing the Reactor session drops cleanly to the still fallback.
+**Exit:** every page animates within 5 s of the flip and stays on topic for 60 s, and each page's clip is saved. Killing the Reactor session drops cleanly to the still fallback.
 
 ### Phase 4: Pop-up (≈ 10 h · A 7, B 3) · must-have
 
@@ -159,13 +163,18 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 **Exit:** every generated page pops up at about 90° and folds back flat in the Duo simulator.
 
-> **═══ MVP / demo line: all must-haves done, ≈ 60 h (about 30 h per engineer) ═══**
+### Phase 5: Save and show (≈ 8 h · A 6, B 2) · must-have: exact replay
 
-### Phase 5: Finish the book (≈ 8 h)
-Closing ends the book: generate the title and cover art, show the cover when `.closed`. Bookshelf, reread, PDF export. Clip recording if D4 = yes, so rereads and video export are free.
+- Finish: closing the phone (or tapping Save) ends the book; generate the title and cover art; show the cover when `.closed`.
+- `BookStore`: save the book with its clips, keep a copy on the device, and show saved books on the bookshelf as covers.
+- Show a saved book: `ClipReplayScene` on each page, with the same curl and pop-up, and no generation calls.
 
-### Phase 6: Modes and parent controls (≈ 10 h)
-Learn mode (fact packs for space, dinosaurs, the water cycle and counting, plus a fact-check call, word of the story, and the 3 remember-when questions). Real-life mode (calm-tone presets and safety rules). Parent settings and parental gate. Onboarding for the kid's first name.
+**Exit:** a saved 5-page book shows the identical text, pictures and clips with Reactor switched off and the network disconnected.
+
+> **═══ MVP / demo line: all must-haves done, ≈ 78 h (about 39 h per engineer) ═══**
+
+### Phase 6: Lesson extras and parent controls (≈ 9 h)
+Word of the story and the 3 remember-when questions. Real-moment tone (calm-tone presets and safety rules). Parent settings and parental gate. PDF export.
 
 ### Phase 7: Business and operations (≈ 5 h)
 RevenueCat paywall (3 free books; StoreKit test configuration for the simulator). Sentry with personal data scrubbed. Privacy check that no audio is ever saved.
@@ -177,14 +186,14 @@ RevenueCat paywall (3 free books; StoreKit test configuration for the simulator)
 4. Talking characters · 5 h
 
 ### Phase 9: Demo hardening (≈ 8 h · start at least 2 days before the demo)
-Golden-path script and book; "demo replay" mode as a fallback if the network fails; failure drills (no network, Reactor down, moderation blocks something, speech fails); performance pass; 5 rehearsals in a row.
+Golden-path script and book; a saved golden book (exact replay, stored on the device) as the fallback if the network fails; failure drills (no network, Reactor down, moderation blocks something, speech fails); performance pass; 5 rehearsals in a row.
 
-**Total ≈ 119 h.**
+**Total ≈ 118 h.** *(v1 said 119 h, but its phases summed to 109 h. P-01 adds about 9 h net.)*
 
 ## 6. Critical path
 
 `Phase 0.1 hinge probe` → `PostureMachine` → curl → pop-up gesture
-`Phase 0.3 Orbis probe` → `LiveScene` bridge → per-page animation
+`Phase 0.3 Orbis probe` (including clip recording) → `LiveScene` bridge → per-page animation → saved-book replay
 `Phase 0.4 and 0.5 probes` → `PagePipeline` → first end-to-end story
 
 The Orbis probe (0.3) is the riskiest unknown. Start it first.
@@ -193,15 +202,15 @@ The Orbis probe (0.3) is the riskiest unknown. Start it first.
 
 | If we have… | Build | Skip |
 |---|---|---|
-| **About 2 days (≈ 40 h)** | Phase 0 trimmed; Phase 1 (curl, slider allowed); Phase 2 Imagine-only with no revisions or persistence; Phase 3 without drift guard or tripwire; Phase 4 with two layers; a basic cover screen; Phase 9 golden path and replay | Everything else |
-| **1 week** | The MVP line + Phase 5 + Learn mode + Phase 9 | Real-life mode, paywall, cut-list features |
+| **About 2 days (≈ 40 h)** | Phase 0 trimmed; Phase 1 (curl, slider allowed); Phase 2 with the brief, one lesson pack, directions and "You continue"; Phase 3 without drift guard or tripwire (clip recording kept); Phase 4 with two layers; Phase 5 save and exact replay with a basic cover; Phase 9 golden path | Everything else |
+| **1 week** | The MVP line + Phase 9 | Phase 6 extras, paywall, cut-list features |
 | **2+ weeks** | Everything except talking characters | Talking characters |
 
 ## 8. Testing and verification
 
-- **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, reading-level limits, `PagePipeline` cancellation, the moderation gate, and the `SessionController` state machine against a fake transport.
+- **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, directions and "You continue" (a direction carries into later pages), reading-level limits, `PagePipeline` cancellation, the moderation gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
 - **Server function tests:** each function tested in Deno against recorded fixtures.
-- **Eval set:** 30 transcripts (rambling, mind-changing, scary requests, parent interruptions), checked for safety, reading level and coherence. Run before every demo.
+- **Eval set:** 30 sessions (parent narration and directions, "You continue", kid interruptions, mind-changing, scary requests), checked for safety, reading level and coherence, plus 10 lesson briefs checked for accuracy. Run before every demo.
 - **UI:** XCUITest on a standard iPhone simulator for navigation and the fallback reader. A Duo posture checklist run through Claude's simulator tool, with a screenshot per posture.
 - **Latency:** a timing span per stage, with a p50 table in the debug overlay.
 
@@ -209,7 +218,7 @@ The Orbis probe (0.3) is the riskiest unknown. Start it first.
 
 - **T-60 min:** launch and open a New Book to warm Orbis. The overlay should show 1 open session, status ready and the credit meter running.
 - **T-15 min:** a rehearsal pass; headphones or muted speakers so the animation's sound doesn't reach the mic; a wired connection or a hotspot.
-- **Live:** follow the script. If Reactor fails, the still fallback takes over automatically. If the network fails, switch on demo replay.
+- **Live:** follow the script. If Reactor fails, the still fallback takes over automatically. If the network fails, show the saved golden book.
 - **After:** KILL, then clean up stray sessions; confirm 0 open sessions on the account.
 
 ## 10. Decision log
@@ -219,7 +228,7 @@ The Orbis probe (0.3) is the riskiest unknown. Start it first.
 | D1 | Gesture model for turning vs popping up | G0 |
 | D2 | What the latency target means | G0 |
 | D3 | Orbis Stable vs Dynamic | G0 |
-| D4 | Record per-page clips | G0 |
+| D4 | Record per-page clips | ✅ Resolved 2026-09-25 by P-01: required (saved books replay exactly). How, and the clip length: G0 |
 | D5 | Pro pricing | After Phase 5 (real cost per book) |
 | D6 | Kids Category listing | Before any public release |
 | D7 | Gemini covers images only; OpenAI keeps speech, story and narration | Assumed; confirm now |

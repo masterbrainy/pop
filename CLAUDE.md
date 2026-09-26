@@ -55,7 +55,7 @@ All Pop! sessions live in the sidebar group **"Pop!"**. Set your own title to yo
 - **`docs/REVIEW.md`:** QA findings with severity and status, plus the current readiness verdict.
 
 ## Secrets and private information
-- API keys (Reactor, Gemini, OpenAI) live **only** in `/Users/brianhuang/Pop!/supabase/functions/.env` (ignored by git, readable only by Brian's account) and in Supabase secrets. **Never print, log, commit or paste their values.** When checking a key, print only HTTP status codes or `set / EMPTY`.
+- API keys (Reactor, Gemini, OpenAI) live **only** in `/Users/brianhuang/Pop!/supabase/functions/.env` (ignored by git, readable only by Brian's account) and in Supabase secrets. **Never print, log, commit or paste their values.** When checking a key, print only HTTP status codes or `set / EMPTY`. **Don't hash, fingerprint or compare values either** (for example, local `.env` against `supabase secrets list` digests); Brian declined that. For Supabase secrets, list names only. When calling an API, pass the key through a header file (`-H @<(printf ...)`) so it never appears in the process list.
 - App-side Supabase URL and publishable key: `/Users/brianhuang/Pop!/config/Supabase.local.xcconfig` (ignored by git).
 - Supabase project ref: `/Users/brianhuang/Pop!/supabase/.temp/project-ref` (ignored by git). The CLI is already logged in. From a worktree, pass `--project-ref "$(cat /Users/brianhuang/Pop!/supabase/.temp/project-ref)"`.
 - Don't copy any of these values into tracked files, docs or messages.

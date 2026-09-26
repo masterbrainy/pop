@@ -16,7 +16,7 @@ All Pop! sessions live in the sidebar group **"Pop!"**. Set your own title to yo
 
 | Session (title) | Session id | Role | Owns (only this session edits these) |
 |---|---|---|---|
-| **Pop! · Builder (lead)** | `local_fd25db33-d66a-47cc-9fb4-4c2fbee2e46a` | Builds the app phase by phase; integrates everything; final say on code; fixes readiness findings in its files | App code, `supabase/` (functions, migrations), `config/`, `CLAUDE.md`, ROADMAP (except when an accepted pivot is being applied) |
+| **Pop! · Builder (lead)** | `local_fd25db33-d66a-47cc-9fb4-4c2fbee2e46a` | Builds the app phase by phase; integrates everything; final say on code; fixes readiness findings in its files | App code, `supabase/` (functions, migrations), `config/`, `CLAUDE.md`, ROADMAP (except when an accepted pivot is being applied), and **factual or editorial fixes to the PRD**. PRD scope, pricing and product-promise changes go through Pivots & Ideas for Brian to decide |
 | **Pop! · Review & QA** | `local_883a05d7-0b22-46ae-a930-3e9efa9b9372` | Parallel checking: verifies claims, reviews every builder commit, runs builds and tests, makes small side improvements | `docs/REVIEW.md`, test-only additions, small fixes it announces to the builder |
 | **Pop! · Pitch & Tech Log** | `local_8d1a05f7-51a4-4d59-a744-d7816d375b71` | Captures what matters for VCs and Apple engineers | `docs/PITCH.md`, `docs/TECH_NOTES.md` |
 | **Pop! · Pivots & Ideas** | `local_9f48e2ec-d0fd-469b-b4a4-ec775fcafec4` | Brian's inbox for pivots and suggestions; assesses impact honestly | `docs/PIVOTS.md`; PRD (and ROADMAP scope) **only while applying a pivot Brian accepted** |

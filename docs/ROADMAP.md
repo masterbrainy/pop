@@ -68,9 +68,9 @@ These were checked by reading the SDK's `SwiftUICore` interface file on 2026-09-
 
 | API | Signature | Use in Pop! |
 |---|---|---|
-| Hinge | `func onHingeChange(isEnabled: Bool = true, _ action: @escaping (_ oldContext: DeviceHingeContext, _ newContext: DeviceHingeContext) -> Void) -> some View` · `DeviceHingeContext.hinge: DeviceHinge?` (nil when there's no hinge) · `DeviceHinge.status: .closed / .partiallyOpen / .fullyOpen` · `DeviceHinge.angle: Angle` | `status` → mode (book or cover); `angle` → curl progress and pop depth |
-| Two-pane layout | `ArrangementView(primary:secondary:)` · `.arrangementViewStyle(.split / .overlay)` · `.splitArrangementLayoutRatio(_:)` | The spread: primary = text page, secondary = art page |
-| Reserved regions | `GeometryProxy.reservedRegions(kind: .occlusion / .division, options: [.includeInactive]) -> [ReservedRegion]`, each with `frame`, `margins`, `isActive` | Pad text and position the art away from the fold (`.division`) and camera (`.occlusion`). *These kind meanings are inferred from the names.* |
+| Hinge | `func onHingeChange(isEnabled: Bool = true, _ action: @escaping (_ oldContext: DeviceHingeContext, _ newContext: DeviceHingeContext) -> Void) -> some View` · `DeviceHingeContext.hinge: DeviceHinge?` (nil when there's no hinge) · `DeviceHinge.status`: a **struct with static members** `.closed / .partiallyOpen / .fullyOpen`, **not an enum**, so compare with `==`, and any `switch` needs a `default` · `DeviceHinge.angle: Angle` (UIKit's `UIHinge.angle` is a `CGFloat` in **radians**) · **The rate and granularity of angle updates are "system policy"** (`UIHinge.h`), so don't rely on update frequency or precision | `status` → mode (book or cover); `angle` → curl progress and pop depth, **animated smoothly between samples** |
+| Two-pane layout | `ArrangementView { primary } secondary: { secondary }`: both are `@ContentBuilder` closures, and there are only ever two panes · `.arrangementViewStyle(.split / .overlay)` · `.splitArrangementLayoutRatio(_:)` | The spread: primary = text page, secondary = art page |
+| Reserved regions | `GeometryProxy.reservedRegions(kind: .occlusion / .division, options: [.includeInactive], layoutDirectionBehavior: LayoutDirectionBehavior = .mirrors) -> [ReservedRegion]`, each with `frame`, `margins`, `isActive` | Pad text and position the art away from the fold (`.division`) and camera (`.occlusion`). *These kind meanings are inferred from the names.* |
 | UIKit versions | `UIHingeInteraction`, `UIArrangementViewController` | Not needed (the app is SwiftUI) |
 | Cover display | **No dedicated API in the SDK** | `.closed` → cover view. Verify how the simulator shows the outer screen (Phase 0) |
 
@@ -121,7 +121,7 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 - App skeleton and navigation: Bookshelf → New Book → Book.
 - Domain models (`Book`, `Page`, `Character`, `StoryBible`) and mock data.
-- `HingeSource` (Duo, slider, none) and **`PostureMachine` built test-first**, driven by scripted angle sequences.
+- `HingeSource` (Duo, slider, none) and **`PostureMachine` built test-first**, driven by scripted angle sequences. These include **sparse, irregular and jumpy updates** (the update rate is system policy), and the curl smooths between samples.
 - `SpreadView`: left text page, right art page (still only for now), padded for reserved regions.
 - Page curl v1: 3D rotation plus shading driven by curl progress; springs back if released early, commits past the threshold.
 - Non-Duo single-page reader with swipe.

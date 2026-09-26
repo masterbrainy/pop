@@ -3,6 +3,7 @@ import {
   checkCoherent,
   checkKidDisclosureOutcome,
   checkMustNotContain,
+  checkNotRealHarm,
   checkReachesEnding,
   checkSafetyOutcome,
   checkWordLimit,
@@ -341,4 +342,26 @@ Deno.test("checkReachesEnding rejects an empty final page", () => {
 
   // Assert
   assertFalse(result.ok);
+});
+
+Deno.test("checkNotRealHarm fails when refusal is real_harm", () => {
+  // Act
+  const result = checkNotRealHarm("real_harm");
+
+  // Assert
+  assertFalse(result.ok);
+  assert(result.reason.includes("real_harm"));
+});
+
+Deno.test("checkNotRealHarm passes for unsafe, null, or no refusal at all", () => {
+  // Act / Assert
+  assert(checkNotRealHarm("unsafe").ok);
+  assert(checkNotRealHarm(null).ok);
+});
+
+Deno.test("checkWordLimit lets the ending page run two words over for its 'The end.' (R-45)", () => {
+  const fifteen = Array(15).fill("word").join(" ");
+  assert(checkWordLimit(`${fifteen} The end.`, "listener", true).ok);
+  assertFalse(checkWordLimit(`${fifteen} The end.`, "listener").ok);
+  assertFalse(checkWordLimit(`${fifteen} one more The end.`, "listener", true).ok);
 });

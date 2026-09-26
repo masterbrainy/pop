@@ -59,6 +59,7 @@ Request: `mode`, the bible (which now carries the path) and the pages **already 
   - At the start: `index: 0`, no `input`; the brief drives the path.
   - For a direction: `index` is the page behind the one on screen, and `input` carries the direction.
   - Beats before `index` (pages already shown) are never changed. The new path has about 5–8 beats in total, and its last beat always ends the story.
+  - When a direction explicitly asks to end the story now (for example "the end", "let's finish the story here with a proper ending"), the re-planned path always ends at the page being written (`index`) instead, overriding the usual 5–8 beat guidance.
 - `mode: "page"` writes page `index` from the existing `bible.path[index]`, with no re-planning and no `input`. The app calls it after each fold, for the new page behind.
 - `mode: "title"` returns `{ "title": "Rex Learns to Share" }` from the whole book (the cover adds ", a story for {firstName}"); it needs only `bookId`, `kid`, `bible` and `pages`.
 

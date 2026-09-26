@@ -7,6 +7,8 @@
 // too; it was removed with `mode: "turn"` once the app moved to the story
 // path and the eval passed on `path`/`page`.
 import { ART_STYLE } from "./art_style.ts";
+import { brandedCharactersIn } from "./brand_check.ts";
+import { detectsEndRequest } from "./end_request.ts";
 import { describeReadingLevelForPrompt, type ReadingLevel } from "./reading_levels.ts";
 import { KID_SAFETY_RUBRIC } from "./safety_rubric.ts";
 import type { Kid, ParentSettings, StoryBible, StoryBrief } from "./schemas.ts";
@@ -68,11 +70,57 @@ export interface StoryPathPromptInput {
   rewriteReason?: string | null;
 }
 
+/**
+ * Shared with buildStoryPageSystemPrompt's own isEnding line: concrete
+ * closing images the model can land on, so the path's actual last page reads
+ * like a definite ending rather than just trailing off mid-scene (R-35 d,
+ * R-42 ending-eval). Written to read naturally regardless of time of day —
+ * "safe and happy" and "settling down together" fit a daytime adventure as
+ * well as a bedtime story.
+ */
+const ENDING_PAGE_IMAGES =
+  "for example the characters ending up safe and happy, heading home, settling down together, or drifting off to sleep";
+
+/**
+ * Prescriptive close instruction for the exact page already known to be the
+ * path's last one (R-42/ending-eval): rather than widening the eval's
+ * checkReachesEnding heuristic to match whatever the model happens to write,
+ * the model is told to land its last sentence on one of the exact phrases
+ * that heuristic recognizes, or simply end with the words "The end." — a
+ * reliable, unmistakable close regardless of reading level or time-of-day
+ * setting (a daytime treasure hunt can still end "safe and back home").
+ */
+function endingCloseInstruction(level: ReadingLevel): string {
+  const closingPhrases =
+    '"lived happily ever after," "safe and back home," "snuggled up," "fell asleep," or "drifted off to sleep"';
+  if (level === "reader") {
+    return `This page is the path's last page: make its very last sentence a clear, unmistakable close by ending it with one of these exact phrases — ${closingPhrases} — or simply the words "The end." Never leave the last sentence open or unresolved.`;
+  }
+  return `This page is the path's last page: make its very last sentence a clear, unmistakable close, for example everyone safe and happy, snuggled up, or fast asleep, and it may simply end with the words "The end." Never leave the last sentence open or unresolved.`;
+}
+
 const PATH_PLANNING_GUIDE = [
   "Plan the whole story as a path of about 5 to 8 page beats in total, each one short sentence describing that page's moment.",
-  "The path's last beat must clearly end the story: something gentle and reassuring that closes it, never a cliffhanger.",
+  `The path's last beat must clearly end the story — ${ENDING_PAGE_IMAGES} — something gentle and reassuring that closes it, never a cliffhanger.`,
   "Each page is one still moment that suits a gentle, repeating animation (for example, a dragon that flew into a tree lying knocked out, bobbing gently) — it never itself moves the plot on; the next page does.",
 ].join("\n");
+
+/**
+ * Names a brand or famous character the brief, the bible or a direction brought in, so the
+ * model swaps it for an original one up front: the output gate refuses those names, and a
+ * kid who loves Lego would otherwise have every page refused (R-44).
+ */
+function brandInstruction(texts: string[], kidFirstName: string): string[] {
+  const names = Array.from(new Set(texts.flatMap((text) => brandedCharactersIn(text, kidFirstName))));
+  if (names.length === 0) return [];
+  return [
+    `Never use these brand or character names: ${names.join(", ")}. Turn each into something original of your own (for example, colourful building bricks, or an ice princess you invent), never the brand itself.`,
+  ];
+}
+
+function bibleTexts(bible: StoryBible): string[] {
+  return [bible.title ?? "", bible.setting, ...bible.directions, ...bible.path, ...bible.characters.map((c) => `${c.name} ${c.description}`)];
+}
 
 /** `mode: "path"` (docs/CONTRACTS.md): plans/replans the path from `index` on, then writes page `index`. */
 export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string {
@@ -100,6 +148,10 @@ export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string 
   if (input.settings.avoidTopics.length > 0) {
     lines.push(`Never include these topics: ${input.settings.avoidTopics.join(", ")}.`);
   }
+  lines.push(...brandInstruction(
+    [...interests, input.brief.realMoment ?? "", input.brief.teach ?? "", input.input?.text ?? "", ...bibleTexts(input.bible)],
+    input.kid.firstName,
+  ));
 
   lines.push(
     "Never use surnames, home addresses, school names, or phone numbers anywhere in the story text.",
@@ -124,6 +176,12 @@ export function buildStoryPathSystemPrompt(input: StoryPathPromptInput): string 
       `A direction just came in — kind: ${input.input.kind}, speaker: ${input.input.speaker}: "${input.input.text}"`,
       `Fold this direction into the bible's directions so it carries into every later page, and re-plan the path from page ${input.index} on. The ending may change, but the path must still reach one.`,
     );
+    if (detectsEndRequest(input.input.text)) {
+      lines.push(
+        `This direction asks to end the story right now: make page ${input.index} the very last beat of the re-planned path — do not plan any beats after it, even though that's fewer than the usual 5 to 8 — and set "isEnding" to true.`,
+        endingCloseInstruction(level),
+      );
+    }
   } else {
     lines.push("Plan the path from the brief above.");
   }
@@ -158,6 +216,7 @@ export interface StoryPagePromptInput {
 export function buildStoryPageSystemPrompt(input: StoryPagePromptInput): string {
   const level = input.kid.readingLevel as ReadingLevel;
   const beat = input.bible.path[input.index] ?? "";
+  const isEnding = input.bible.path.length > 0 && input.index === input.bible.path.length - 1;
 
   const lines: string[] = [
     `You are Pop!'s story engine, writing one page of a live picture book for ${input.kid.firstName}.`,
@@ -167,6 +226,7 @@ export function buildStoryPageSystemPrompt(input: StoryPagePromptInput): string 
     KID_SAFETY_RUBRIC,
     `One locked illustration style is used for every picture: ${ART_STYLE}. Write an art prompt that fits this style and depicts only what is safe to show this child.`,
     ...describeBible(input.bible),
+    ...brandInstruction([...input.kid.interests, ...input.brief.interests, ...bibleTexts(input.bible)], input.kid.firstName),
   ];
 
   if (input.pages.length > 0) {
@@ -181,6 +241,10 @@ export function buildStoryPageSystemPrompt(input: StoryPagePromptInput): string 
     `Write: "pageText" at this reading level, "artPrompt" for its picture, and "readingQuestion": one short, warm question a parent can ask ${input.kid.firstName} about this page's words or picture, never about ${input.kid.firstName}'s own address, school or family details.`,
     "Respond with only the JSON object the response schema describes.",
   );
+
+  if (isEnding) {
+    lines.push(endingCloseInstruction(level));
+  }
 
   if (input.rewriteReason) {
     lines.push(

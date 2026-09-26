@@ -3,7 +3,7 @@ import WebKit
 
 /// Serves the bundled live-scene page (HTML, JS, wasm) and the current page still
 /// to the web view under `popscene://app/…`. A real origin lets the page fetch its
-/// own wasm and call Reactor's API, which allows any origin (checked 2026-09-25).
+/// own wasm and call Reactor's API, which allows any origin (checked 2026-09-26).
 /// Only the three bundled files and registered stills are served; nothing else in
 /// the app bundle or on disk is reachable.
 @MainActor

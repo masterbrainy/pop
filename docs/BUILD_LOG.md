@@ -70,7 +70,7 @@ Keys stay in `supabase/functions/.env`. The scripts read them into shell variabl
 - **Phase 1 UI** committed (f33f3c9): bookshelf, spread, curl, cover, debug hinge. **Clip recording** added to the bridge: `startClip / stopClip / cancelClip` record the video with MediaRecorder and stream it to Swift (`popClip` → `ClipAssembler` → `Documents/clips/`).
 - **Tracks in parallel:** a backend agent finishes, tests and deploys all server functions; a PopKit agent builds the logic modules test-first (server client, story engine, page pipeline, session controller, book store, chroma key, read-along ranges); the builder does the app UI.
 
-## 2026-09-25
+## 2026-09-26
 
 - **Go.** Brian opened the build gate: build all phases without further check-ins.
 - **Project skeleton.** XcodeGen (`project.yml`) + `xcodebuild`, app target `Pop` (iOS 27.1, Swift 6), local package `PopKit` for testable logic (Swift Testing). `Pop.xcodeproj` is generated; edit `project.yml` instead.

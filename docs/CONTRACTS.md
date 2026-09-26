@@ -1,4 +1,4 @@
-# Pop! contracts (frozen at G0, 2026-09-25)
+# Pop! contracts (frozen at G0, 2026-09-26)
 
 The two tracks meet here: the app (Swift, `PopKit` + `App/`) and the server (Supabase Edge Functions in `supabase/functions/`). Change a contract only by editing this file first; the builder owns it. Field names are camelCase on the wire.
 

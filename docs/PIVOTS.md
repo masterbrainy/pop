@@ -24,7 +24,7 @@
 
 ## Log
 
-### P-01 · Parents drive creation (lessons optional) · 2026-09-25 · Status: accepted, refined 2026-09-26
+### P-01 · Parents drive creation (lessons optional) · 2026-09-26 · Status: accepted, refined 2026-09-26
 - **Idea (Brian's words):** "The product is not simply for kids to imagine some stories. A core part of it is for PARENTS to actually be able to create these stories for their kids. For instance, they can tie in educational lessons inside of stories that their kids may like. Of course, it's also cool if the parents and kids can collaborate together to make the story, but don't forget that a major part of it is the parents actually driving this creation."
 - **Brian's clarification:** "I should be able to create the story ahead of time and save it or create the story with the child. These are both technically the same thing… I can tell it what I want it to add or change, and then it'll generate the next pages like that. When I'm satisfied, I can save this story then show to my child exactly the way I recorded it… Don't think of it as two entirely separate things."
 - **Changes (as applied):**
@@ -33,11 +33,11 @@
   - PRD §11–13: new assumption and risks for clip recording and wrong lessons; D4 (record clips) resolved as required.
   - Roadmap: Phase 0.3 must answer how to record clips. Phase 2 becomes parent-driven (brief, profile, typed input, directions, "You continue", lesson packs). Phase 3 records clips. The new **Phase 5, "Save and show"**, is above the MVP line. Phase 6 shrinks to lesson extras and parent controls. `BookStore` and `ClipReplayScene` are new units. Cut lines, tests, eval set and run-book are updated.
 - **Cost (final):** the MVP line moves from about 60 h to about 78 h, and the total from 109 h to 118 h (+9 h net). v1 said 119 h, but its phases summed to 109 h. That's more than my first estimate of +3–4 h, because showing a saved book exactly makes saving, the bookshelf and clip recording must-haves. No new vendors. Orbis cost per book is unchanged, and showing a saved book is now free. Risks: recording clips from the web view is unproven (Phase 0.3), and lessons need to be accurate (curated packs first).
-- **Recommendation:** Do it (given 2026-09-25).
-- **Decision:** 2026-09-25, Brian accepted. Applied in `5c22f0d` (PRD v2, ROADMAP v2).
+- **Recommendation:** Do it (given 2026-09-26).
+- **Decision:** 2026-09-26, Brian accepted. Applied in `5c22f0d` (PRD v2, ROADMAP v2).
 - **Refinement (2026-09-26, Brian, relayed by the builder and recorded in CLAUDE.md "What this is"):** parents drive creation, and that stays. Lessons are **optional**: a use case of the story brief, not a subsystem. Removed: curated lesson packs, lesson fact-checking (K2), and lesson extras (S9, S10, word of the story, remember-when questions). The brief keeps an optional free-text "Anything you'd like this story to teach?". Normal kid-safety moderation (K1) stays P0. New totals: MVP about 75 h, total about 109 h. Applied in PRD v3 and ROADMAP v3 (commit below, under P-02).
 
-### P-02 · Pro as a monthly allowance of new books, not "unlimited" · 2026-09-25 · Status: rejected (superseded: everything is free)
+### P-02 · Pro as a monthly allowance of new books, not "unlimited" · 2026-09-26 · Status: rejected (superseded: everything is free)
 - **Idea (source: the former Pitch & Tech Log session, relayed by the builder; not Brian's words):** "A fair-use allowance may beat 'unlimited'. PRD K5 still says unlimited."
 - **Why it comes up:** making a book costs about $8.73 of Orbis time (15 live minutes). A family making four books a month costs about $35 a month in animation alone, so an "unlimited" Pro can lose money on exactly the families who love it most. Since P-01, showing a saved book costs nothing; only making new books costs money.
 - **Changes:** PRD K5 ("Pro for unlimited" becomes "Pro includes N new books a month; showing saved books is always unlimited"), with N and the price set at D5 after measuring. Roadmap Phase 7: a monthly counter in the paywall (+0.5 h).
@@ -68,3 +68,24 @@
 - **Cost:** about neutral in hours. The code already built needs rework: `story-turn` currently returns `append / new_page / revise_current`, and it now needs to plan and re-plan a path instead. Risk: a single Orbis session can only animate one page, so the new page's animation starts after the fold (its still shows first, about the reset-to-first-frame time measured in probe 0.3). A second warm session could pre-roll the page behind, at double the credit.
 - **Recommendation:** Do it. It hides almost all generation latency and makes the story always land. Keep one Orbis session unless probe 0.3 shows a noticeable gap after the fold.
 - **Decision:** 2026-09-26, Brian decided directly in this session.
+
+### P-05 · Use OpenAI for images and remove Gemini · 2026-09-26 · Status: proposed
+- **Idea (Brian's words):** "Should I use the OpenAI key for image generation and then completely remove Gemini?"
+- **Measured today** (prompt "a green dragon dazed under an oak tree, watercolor"; times are the full API round trip):
+
+  | Model | Size, quality | HTTP | Time | Price per picture |
+  |---|---|---|---|---|
+  | `gpt-image-2.5-flare` | **1536×1024, medium** (the page size; cropped to 1536×864 = 16:9, subject stays centred) | 200 ×3 | **12.8 s, 13.0 s, 11.9 s** | **≈ $0.011** (343 image tokens × $30/1M + 49 text tokens × $5/1M) |
+  | `gpt-image-2.5-flare` | 1536×1024, low | 200 | 10.4 s | ≈ $0.005 (158 image tokens) |
+  | `gpt-image-2.5-flare` | 1024×1536 portrait, medium | 200 | 14.4 s | — |
+  | `gpt-image-1-mini` | 1024×1536 portrait, medium | 200 | 15.5 s | cheaper ($8/1M image tokens) |
+  | `gpt-image-2` | 1024×1536 portrait, medium | 200 | 35.2 s | too slow |
+  | `gemini-2.5-flash-image` | 16:9 | **402** | — | "Prepayment credits are depleted", so Gemini art is down right now. Earlier probe: 1344×768 in about 5 s. Price $0.04–0.13 per picture (ROADMAP §3) |
+
+  Token counts come from each response's `usage` field. Per-token prices are from OpenAI's pricing page (developers.openai.com/api/docs/pricing, checked 2026-09-26). OpenAI has no native 16:9 size, so `art` would ask for 1536×1024 and crop to 16:9, as in the row above (REVIEW.md R-47).
+
+- **Changes:** PRD §11 vendors and D7, and the §5 "art ≤ 10 s after text" row (it becomes about 13 s). Roadmap: the `Art` unit (1536×1024, then crop to 16:9), `motion-prompt` (the OpenAI story model reads the page text and still instead of Gemini), Phase 4 layer generation, Phase 8 drawing restyle, run-book step 6. Code: `_shared/gemini_client.ts` is replaced by an OpenAI images client, and the `art` and `motion-prompt` functions are rewired.
+- **Cost:** about 3 h (rewire the two functions, then re-run probe 0.4 on OpenAI: character reference edits, cutouts and the 16:9 crop). Pictures get **cheaper**, about $0.011 against Gemini's $0.04–0.13. One fewer key, one fewer bill, and no more out-of-credit outages on a second vendor.
+- **Risks:** a picture takes about 2.5× as long (about 13 s against 5 s). The page behind (P-04) hides this on every page except page 1 and right after a direction. `gpt-image-2.5-flare` is two weeks old, so check that edits with reference images and transparent backgrounds (which would remove the chroma-key step for pop-up cutouts) work before relying on them. Each timing is one sample per setting (three at the page size).
+- **Recommendation:** Do it, with `gpt-image-2.5-flare`. Simpler, one vendor for everything but Orbis, and the extra 9 s is mostly hidden. To speed up page 1, use `quality: "low"` just for it (about 10 s). If you'd rather keep Gemini's speed, top up its credits instead; but then you're paying and watching two vendors.
+- **Decision:** —

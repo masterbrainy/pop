@@ -165,6 +165,13 @@ public struct PageContent: Codable, Equatable, Identifiable, Sendable {
         PageContent(id: id, index: index, version: version + 1, text: text, artPrompt: artPrompt)
     }
 
+    /// The same page (id, version, media) at another position: the page behind can be
+    /// renumbered when the parent turns to it, and its loop and layers must stay with it.
+    public func with(index: Int) -> PageContent {
+        PageContent(id: id, index: index, version: version, text: text, artPrompt: artPrompt, stillPath: stillPath, layers: layers,
+                    motion: motion, clipPath: clipPath, question: question, questionKind: questionKind, choices: choices)
+    }
+
     public func with(stillPath: String?) -> PageContent {
         copy(stillPath: stillPath)
     }

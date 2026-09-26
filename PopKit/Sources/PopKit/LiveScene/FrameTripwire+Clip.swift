@@ -26,8 +26,8 @@ extension FrameTripwire {
     }
 
     /// Samples the clip at `url`, checks every sampled frame at once, and decides whether the
-    /// clip may be attached. A clip that can't be read counts as an unchecked frame, so a page
-    /// nobody has seen fails closed.
+    /// clip may be attached. A clip that can't be read is never attached, seen or not: it
+    /// wouldn't play anyway.
     public func checkClip(at url: URL, pageWasSeenLive: Bool) async -> ClipVerdict {
         let verdicts: [Verdict]
         do {
@@ -37,7 +37,7 @@ extension FrameTripwire {
             )
             verdicts = await checkAll(frames)
         } catch {
-            verdicts = [.unchecked("clip unreadable: \(error)")]
+            return .unchecked("clip unreadable: \(error)")
         }
         return ClipVerdict.decide(verdicts, pageWasSeenLive: pageWasSeenLive)
     }

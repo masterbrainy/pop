@@ -165,6 +165,14 @@ import Testing
             .checkClip(at: SyntheticClip.temporaryURL("missing"), pageWasSeenLive: false)
         if case .unchecked = verdict {} else { Issue.record("expected .unchecked, got \(verdict)") }
     }
+
+    @Test func anUnreadableClipIsNeverAttachedEvenOnAPageSeenLive() async {
+        let server = FakePopServer()
+        await server.setModerateHandler { _ in ModerateResponse(flagged: false, categories: []) }
+        let verdict = await FrameTripwire(server: server)
+            .checkClip(at: SyntheticClip.temporaryURL("missing"), pageWasSeenLive: true)
+        if case .unchecked = verdict {} else { Issue.record("expected .unchecked, got \(verdict)") }
+    }
 }
 
 actor InFlightCounter {

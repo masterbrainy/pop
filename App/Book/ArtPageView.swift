@@ -18,7 +18,7 @@ struct ArtPageView: View {
         GeometryReader { proxy in
             ZStack {
                 Theme.paperShade
-                if let image = StillImageLoader.image(for: page?.stillPath) {
+                if let image = StillImageLoader.frameImage(for: page?.stillPath) {
                     picture(image, size: proxy.size)
                 } else if showsImagineCard {
                     ImagineCard()
@@ -58,7 +58,7 @@ struct ArtPageView: View {
 
     @ViewBuilder
     private func popUp(_ image: UIImage) -> some View {
-        if let layers = page?.layers, let plate = StillImageLoader.image(for: layers.platePath) {
+        if let layers = page?.layers, let plate = StillImageLoader.frameImage(for: layers.platePath) {
             PopUpView(plate: plate, cutouts: layers.cutouts.compactMap { StillImageLoader.image(for: $0.path) }, depth: popDepth)
         } else {
             PopUpCardView(image: image, depth: popDepth)

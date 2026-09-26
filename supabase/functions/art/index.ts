@@ -13,7 +13,7 @@ import {
 import { requireUser } from "../_shared/auth.ts";
 import { requireEnv } from "../_shared/env.ts";
 import { servePop } from "../_shared/handler.ts";
-import { generateImage, type InlineImage } from "../_shared/gemini_client.ts";
+import { generateImage, type GeneratedImage, ImageBlockedError, type InlineImage } from "../_shared/openai_images.ts";
 import { moderateImageDataUrl, moderateText } from "../_shared/openai_moderation.ts";
 import { pngDimensions } from "../_shared/png.ts";
 import { ART_DAILY_LIMIT, DAY_SECONDS, enforceRateLimit, enforceStandardRateLimit } from "../_shared/rate_limit.ts";
@@ -45,7 +45,7 @@ async function loadReferenceImages(
 }
 
 /** For `kind: "drawing"`: moderates the kid's drawing and description before
- * any Gemini call, so unsafe input never reaches image generation. */
+ * any image call, so unsafe input never reaches image generation. */
 async function drawingInputFlagged(
   openaiKey: string,
   drawing: InlineImage,
@@ -65,7 +65,6 @@ Deno.serve((req) =>
     await enforceRateLimit(client, "art-daily", ART_DAILY_LIMIT, DAY_SECONDS);
 
     const body = await parseRequest(req, requestSchema);
-    const geminiKey = requireEnv("GEMINI_API_KEY");
     const openaiKey = requireEnv("OPENAI_API_KEY");
     const aspectRatio = aspectRatioFor(body.kind);
     const start = performance.now();
@@ -82,27 +81,27 @@ Deno.serve((req) =>
     if (drawing) referenceImages.push(drawing);
     const prompt = buildArtPrompt(body.kind, body.prompt, body.characters, body.characterId);
 
-    let generated = await generateImage(geminiKey, { prompt, aspectRatio, referenceImages });
-    let verdict = await moderateImageDataUrl(
-      openaiKey,
-      `data:${generated.mimeType};base64,${generated.base64}`,
-    );
+    const paint = async (text: string): Promise<GeneratedImage | null> => {
+      try {
+        return await generateImage(openaiKey, { prompt: text, aspectRatio, referenceImages });
+      } catch (error) {
+        if (error instanceof ImageBlockedError) return null;
+        throw error;
+      }
+    };
+    const isFlagged = async (image: GeneratedImage | null) =>
+      image === null || (await moderateImageDataUrl(openaiKey, `data:${image.mimeType};base64,${image.base64}`)).flagged;
 
-    if (verdict.flagged) {
-      generated = await generateImage(geminiKey, {
-        prompt: `${prompt}\n\n${SAFER_REGENERATION_SUFFIX}`,
-        aspectRatio,
-        referenceImages,
-      });
-      verdict = await moderateImageDataUrl(
-        openaiKey,
-        `data:${generated.mimeType};base64,${generated.base64}`,
-      );
+    let generated = await paint(prompt);
+    let flagged = await isFlagged(generated);
+    if (flagged) {
+      generated = await paint(`${prompt}\n\n${SAFER_REGENERATION_SUFFIX}`);
+      flagged = await isFlagged(generated);
     }
 
     const ms = Math.round(performance.now() - start);
 
-    if (verdict.flagged) {
+    if (flagged || !generated) {
       const { width, height } = STANDARD_DIMENSIONS[aspectRatio];
       return { data: { path: "", url: "", width, height, placeholder: true, ms } };
     }

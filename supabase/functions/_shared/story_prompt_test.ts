@@ -169,3 +169,29 @@ Deno.test("buildStoryPageSystemPrompt asks for one of the eval's exact closing p
   assert(lastPage.includes("safe and back home"));
   assert(lastPage.includes("drifted off to sleep"));
 });
+
+Deno.test("buildStoryPathSystemPrompt steers away from a branded interest or direction by name", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput({
+    brief: { interests: ["Lego", "dinosaurs"], realMoment: null, teach: null, language: "en" },
+    input: { kind: "typed", speaker: "kid", text: "put Elsa in it" },
+  }));
+  assert(prompt.includes("Never use these brand or character names: lego, elsa."));
+});
+
+Deno.test("buildStoryPathSystemPrompt adds no brand line when nothing branded came in", () => {
+  assertFalse(buildStoryPathSystemPrompt(basePathInput()).includes("Never use these brand or character names"));
+});
+
+Deno.test("buildStoryPageSystemPrompt steers away from a branded name in the interests or the planned beat", () => {
+  const prompt = buildStoryPageSystemPrompt(basePageInput({
+    brief: { interests: ["Paw Patrol"], realMoment: null, teach: null, language: "en" },
+  }));
+  assert(prompt.includes("Never use these brand or character names: paw patrol."));
+});
+
+Deno.test("buildStoryPathSystemPrompt never lists the kid's own name as a brand", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput({
+    kid: { firstName: "Elsa", readingLevel: "early_reader", interests: ["snow"] },
+  }));
+  assertFalse(prompt.includes("Never use these brand or character names"));
+});

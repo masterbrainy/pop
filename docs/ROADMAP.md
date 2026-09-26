@@ -1,6 +1,6 @@
 # Pop! — Execution Roadmap
 
-*Status: DRAFT v3.1 · 2026-09-26 · P-01 (parents drive creation; saved books replay exactly; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · v3.1 adds the readiness fixes from REVIEW.md · Implements: [PRD.md](PRD.md)*
+*Status: DRAFT v3.1 · 2026-09-26 · P-01 (parents drive creation; saved books replay exactly; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · P-04 (story path; page built behind the current one) · v3.1 adds the readiness fixes from REVIEW.md · Implements: [PRD.md](PRD.md)*
 
 **Planning assumptions.** Two engineers (Brian plus a teammate) building with Claude Code. Estimates are in **focused hours** and include tests. **There's no deadline (D8, resolved), so we build the full scope in phase order.** The cut lines in §7 are kept only as a fallback. Everything is built and demoed **only on the iPhone Duo simulator in Xcode 27.1 beta**.
 
@@ -48,8 +48,8 @@
 |---|---|---|
 | `HingeSource` | Emits posture updates `(status, angle)`. Two versions: Duo (`onHingeChange`) and a debug slider. iPhone Duo only (P-03). A nil hinge means "unknown" (it can be brief on a Duo, when the view leaves a hierarchy that gets hinge updates), so the last posture is kept | — |
 | `PostureMachine` | Pure function from a stream of angles to effects: curl progress, turn committed or cancelled (with hysteresis), pop depth for the page now showing, and closed (after a ~1 s hold). Angles are normalised to the range measured in 0.1 | `HingeSource` values |
-| `PagePipeline` | Per page: input → text → art → layers → animation prompt. Prepares the next page early; cancels work when a direction changes the page | StoryEngine, Art, Moderation |
-| `StoryEngine` | One LLM call per turn. Input: the story brief (interests, optional real moment, optional "teach something" note), the bible, and the parent's or kid's words (spoken or typed) or a "You continue" tap. Structured output: `append / new_page / revise_current`, text, art prompt, bible and direction updates, parent question | `story-turn` function |
+| `PagePipeline` | Keeps the page behind the current one fully built: text → art → layers → animation prompt. A direction cancels and rebuilds the page behind; the page on screen never changes | StoryEngine, Art, Moderation |
+| `StoryEngine` | Plans a **story path** from the brief (interests, optional real moment, optional "teach something" note): an ordered list of page beats that always reaches an ending. It writes pages one at a time along the path. A direction (spoken or typed, parent or kid) re-plans the path from the page behind onward and rewrites that page. Output: path, page text, art prompt, bible and direction updates, parent question | `story-turn` function |
 | `Art` | Gemini page illustration (framing for the portrait page set at G0; see §3), background plate, character cutouts, cover | `art` function |
 | `MotionPromptBuilder` | Builds the Orbis prompt for **one page only** from a fixed template (below) | `motion-prompt` function |
 | `LiveScene` | Protocol: `prepare(image:prompt:)`, `start()`, `stop()`, event stream. Implementations: `ReactorWebScene` (also records each page's clip), `StillPanScene` (fallback) and `ClipReplayScene` (plays a saved page's recorded clip) | Reactor JS SDK |
@@ -155,15 +155,15 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 
 - Speech input (OpenAI Realtime; Apple speech as fallback), typed input, and the parent's/kid's turn toggle (the parent is the default speaker).
 - Kid profile (first name, reading level, interests) and the per-book story brief (interests, optional real moment, and an optional free-text "Anything you'd like this story to teach?" that simply goes into the prompt).
-- `StoryEngine` with a strict response schema, reading-level limits, page breaks, parent directions (add or change, carried into later pages), "You continue", and a revise-current action. It leaves surnames, addresses, schools and phone numbers out of the story text.
-- Page breaks while creating: the engine proposes a break and shows "fold to turn". Anything said after that drafts the next page, which appears when the parent folds. The engine never turns the page itself.
+- `StoryEngine` with a strict response schema, reading-level limits, a story path planned from the brief (always reaching an ending), and directions that re-plan the path from the page behind (P-04). It leaves surnames, addresses, schools and phone numbers out of the story text.
+- The page behind: while a page shows, the next page along the path is fully built. A direction rebuilds it; the page on screen never changes, and only the parent's fold turns the page.
 - `StoryBible` and character registry (fixed description plus reference image).
 - `Art` (Gemini): locked art style, character references, framing from D9 (16:9 with important content central until G0).
 - Kid-safety gate (PRD §8.6 rubric): `omni-moderation-latest` on text, prompts and pictures, plus an LLM rubric check on text and prompts at the kid's reading level, and each category's response (rewrite, redirect, regenerate the picture, placeholder).
-- `PagePipeline`: prepares the next page early, cancels work on revision, versions each page.
+- `PagePipeline`: keeps the page behind built, cancels it when a direction arrives, versions each page.
 - Persistence in Supabase (rows plus Storage); timing spans for every stage.
 
-**Exit:** a parent makes a 5-page book from a brief in the Duo simulator, by voice and by typing, using at least one direction and one "You continue". Pages fill with text and then art, and a latency table is recorded.
+**Exit:** a parent makes a 5-page book from a brief in the Duo simulator, by voice and by typing, with one mid-story direction that changes the path. Every fold shows a page that's already built, the story reaches an ending, and a latency table is recorded.
 
 ### Phase 3: Living page, Orbis per page (≈ 14 h · A 7, B 7)
 
@@ -224,15 +224,15 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 
 | If we have… | Build | Skip |
 |---|---|---|
-| **About 2 days (≈ 40 h)** | Phase 0 trimmed; Phase 1 (curl, slider allowed); Phase 2 with the brief, directions and "You continue"; Phase 3 without drift guard or tripwire (clip recording kept); Phase 4 with two layers; Phase 5 save and exact replay with a basic cover; Phase 9 golden path | Everything else |
+| **About 2 days (≈ 40 h)** | Phase 0 trimmed; Phase 1 (curl, slider allowed); Phase 2 with the story path, the page behind and directions; Phase 3 without drift guard or tripwire (clip recording kept); Phase 4 with two layers; Phase 5 save and exact replay with a basic cover; Phase 9 golden path | Everything else |
 | **1 week** | The MVP line + Phase 9 | Phases 6–7, cut-list features |
 | **2+ weeks** | Everything except talking characters | Talking characters |
 
 ## 8. Testing and verification
 
-- **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, directions and "You continue" (a direction carries into later pages), reading-level limits, `PagePipeline` cancellation, the kid-safety gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
+- **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, the story path (it always reaches an ending; a direction re-plans from the page behind and never changes the page on screen), reading-level limits, `PagePipeline` cancellation, the kid-safety gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
 - **Server function tests:** each function tested in Deno against recorded fixtures.
-- **Eval set:** 30 sessions (parent narration and directions, "You continue", kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something. It covers every kid-safety category at each reading level (PRD §8.6), personal details, and 40 labelled utterances for telling narration from directions (S3). Checked for safety, reading level and coherence; passing means 0 misses and false blocks on ≤ 5% of safe pages. Run before every demo.
+- **Eval set:** 30 sessions (parent narration and directions, kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something. It covers every kid-safety category at each reading level (PRD §8.6), personal details, and 40 labelled utterances for telling narration from directions (S3). Checked for safety, reading level and coherence; passing means 0 misses and false blocks on ≤ 5% of safe pages. Run before every demo.
 - **UI:** XCUITest on the iPhone Duo simulator for navigation. Duo postures are tested automatically through a scripted `HingeSource` and the debug slider, because `simctl` can't move the hinge; the real hinge is checked by hand with DeviceHub's hinge slider. Screenshots of both screens: `xcrun simctl io booted screenshot --display=1` (outer) and `--display=3` (inner).
 - **Latency:** a timing span per stage, with a p50 table in the debug overlay.
 

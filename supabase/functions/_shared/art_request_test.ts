@@ -26,9 +26,9 @@ Deno.test("buildArtPrompt always starts with the locked art style", () => {
   assertEquals(prompt.includes("watercolor"), true);
 });
 
-Deno.test("buildArtPrompt adds the chroma-green instruction only for cutout", () => {
-  assertEquals(buildArtPrompt("cutout", "Rex waving", [rex], "rex").includes("chroma-key green"), true);
-  assertEquals(buildArtPrompt("page", "Rex waving", [rex]).includes("chroma-key green"), false);
+Deno.test("buildArtPrompt adds the flat magenta backdrop instruction only for cutout", () => {
+  assertEquals(buildArtPrompt("cutout", "Rex waving", [rex], "rex").includes("solid magenta background"), true);
+  assertEquals(buildArtPrompt("page", "Rex waving", [rex]).includes("solid magenta background"), false);
 });
 
 Deno.test("buildArtPrompt adds the no-characters instruction only for plate", () => {

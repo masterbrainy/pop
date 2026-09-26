@@ -232,7 +232,7 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 
 - **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, the story path (it always reaches an ending; a direction re-plans from the page behind and never changes the page on screen), reading-level limits, `PagePipeline` cancellation, the kid-safety gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
 - **Server function tests:** each function tested in Deno against recorded fixtures.
-- **Eval set:** 30 sessions (parent narration and directions, kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something. It covers every kid-safety category at each reading level (PRD §8.6), personal details, and 40 labelled utterances for telling narration from directions (S3). Checked for safety, reading level and coherence; passing means 0 misses and false blocks on ≤ 5% of safe pages. Run before every demo.
+- **Eval set:** 30 sessions (parent narration and directions, kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something. It covers every kid-safety category at each reading level (PRD §8.6), personal details, and 40 labelled utterances for telling narration from directions (S3). Checked for safety, reading level, coherence and reaching a definite ending (S14); passing means 0 misses and false blocks on ≤ 5% of safe pages. Run before every demo.
 - **UI:** XCUITest on the iPhone Duo simulator for navigation. Duo postures are tested automatically through a scripted `HingeSource` and the debug slider, because `simctl` can't move the hinge; the real hinge is checked by hand with DeviceHub's hinge slider. Screenshots of both screens: `xcrun simctl io booted screenshot --display=1` (outer) and `--display=3` (inner).
 - **Latency:** a timing span per stage, with a p50 table in the debug overlay.
 
@@ -263,7 +263,7 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 |---|---|---|
 | Reactor down or slow | Pictures stay still with a slow pan | Carry on; the book still works. KILL in the debug panel if needed |
 | Network down | "Pop! is offline" note | Open the golden book from the bookshelf and demo reading, fold-to-turn and the pop-up |
-| Safety gate refuses a line | A gentle note asks for a friendlier direction | Give a gentler line; the eval set's false-block rate is 7% |
+| Safety gate refuses a line | A gentle note asks for a friendlier direction | Give a gentler line; the 80-case eval set blocked 0 of 44 safe cases (2026-09-26) |
 | Speech fails | A note under the story bar | Type instead |
 | Hinge lags | Folds don't turn | Triple-tap for the hinge panel and use Turn and Pop |
 

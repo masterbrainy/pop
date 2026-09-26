@@ -600,12 +600,13 @@ final class StoryMaker {
             if builds[current.index] == nil { startBuild(at: current.index, direction: nil) }
             return
         }
-        if current.stillPath == nil { paint(current) }
+        // A page that gave up on its picture is settled; it tries again only once it shows.
+        if !isPictureSettled(current) { paint(current) }
         for offset in 1...reader.lookahead {
             let index = current.index + offset
             guard bible.hasPage(after: index - 1), builds[index] == nil else { return }
             if let page = reader.ahead.first(where: { $0.index == index }) {
-                if page.stillPath == nil { paint(page) }
+                if !isPictureSettled(page) { paint(page) }
             } else {
                 startBuild(at: index, direction: nil)
                 return
@@ -643,7 +644,6 @@ final class StoryMaker {
               isNextToPaint(page) else { return }
         let book = reader.book
         let run = UUID()
-        picturelessPages.remove(page.id)
         let started = callPipeline { await pipeline.paint(page, book: book) }
         let task = Task { [weak self] in
             var painted = false
@@ -734,6 +734,8 @@ final class StoryMaker {
         guard builds[build.index]?.id == build.id else { return }
         wordsDone(build)
         refreshLatency()
+        // A failed build may have held back the pages after it.
+        ensureBuilds()
     }
 
     /// This build's words landed or failed: the page is no longer being written, and a
@@ -877,6 +879,7 @@ final class StoryMaker {
             // Only onto the same page and version; a page replaced meanwhile drops it.
             if let updated = reader.updatePage(id: key.id, version: key.version, { $0.with(stillPath: path) }) {
                 paintFailures[updated.id] = nil
+                picturelessPages.remove(updated.id)
                 lastPaintFailure = ""
                 // Pop-up layers are several more pictures, so only the page on screen makes them.
                 if updated.id == reader.currentPage?.id { prepareLayers(for: updated) }
@@ -942,6 +945,8 @@ final class StoryMaker {
         }
         refreshWorking()
         ensureBuilds()
+        // A page that gave up on its picture tries again now that it shows (not past the daily limit).
+        if picturelessPages.contains(page.id), !lastPaintFailure.contains("art-daily") { paint(page) }
         animate(page)
         if page.stillPath != nil, page.layers == nil, layerTasks[page.id] == nil { prepareLayers(for: page) }
     }

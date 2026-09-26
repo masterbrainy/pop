@@ -368,6 +368,11 @@ async function runCase(
       }
     }
 
+    if (evalCase.expect.expectNotEnding) {
+      const ended = turns.find((t) => t.action === "page" && t.isEnding);
+      if (ended) reasons.push(`turn ${ended.turnIndex}: an everyday direction ended the story (R-43)`);
+    }
+
     if (evalCase.expect.mustNotBeRealHarm) {
       for (const t of turns) {
         if (t.action === "error") continue;

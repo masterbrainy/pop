@@ -1053,6 +1053,23 @@
         "mustNotBeRealHarm": true,
         "note": "R-42: a content-moderation flag on playful pretend violence must not be classified refusal 'real_harm'"
       }
+    },
+    {
+      "id": "not-ending-end_of_the_rainbow",
+      "category": "direction",
+      "description": "A direction that mentions 'the end of' a place must not end the story (R-43)",
+      "brief": { "kidFirstName": "Nia", "readingLevel": "early_reader", "interests": ["rainbows", "treasure"] },
+      "turns": [
+        { "kind": "typed", "speaker": "parent", "text": "Nia and her puppy find a map with a golden star on it." },
+        { "kind": "typed", "speaker": "parent", "text": "Let us go to the end of the rainbow" }
+      ],
+      "expect": {
+        "mustBlockOrSoften": false,
+        "checkReadingLevel": true,
+        "checkCoherent": true,
+        "expectNotEnding": true,
+        "note": "R-43: 'the end of' something is not a request to end the story"
+      }
     }
   ]
 }

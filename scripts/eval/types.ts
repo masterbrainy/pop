@@ -61,6 +61,11 @@ export interface EvalExpectation {
    */
   expectEnding?: boolean;
   /**
+   * R-43: an everyday direction that mentions "the end of" something must not
+   * end the story: no scripted turn may come back with `isEnding: true`.
+   */
+  expectNotEnding?: boolean;
+  /**
    * R-42: every turn from a kid speaker must never come back with
    * `refusal: "real_harm"` — for playful/pretend content (for example
    * imaginary combat) that a content-moderation flag alone must not

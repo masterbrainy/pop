@@ -10,6 +10,7 @@ import { gentleParentNote, runSafetyGate, type SafetyDeps } from "./safety.ts";
 import { checkInputSafety, type InputSafetyDeps, type Refusal } from "./input_safety.ts";
 import { hasForeignScriptText } from "./language_check.ts";
 import { namesBrandedCharacter } from "./brand_check.ts";
+import { closeWithTheEnd } from "./ending.ts";
 import { detectsEndRequest } from "./end_request.ts";
 import { mergeBibleCharacters, stripRepeatedEarlierText, trimToLimit } from "./story_turn.ts";
 import type { StoryBible } from "./schemas.ts";
@@ -204,7 +205,7 @@ export async function runPathTurn(
       action: "page",
       page: {
         index,
-        text: attempt.output.pageText,
+        text: isEnding ? closeWithTheEnd(attempt.output.pageText, readingLevel) : attempt.output.pageText,
         artPrompt: attempt.output.artPrompt,
         question: attempt.output.readingQuestion.trim(),
         isEnding,
@@ -328,7 +329,7 @@ export async function runPageTurn(
     action: "page",
     page: {
       index,
-      text: attempt.output.pageText,
+      text: isEnding ? closeWithTheEnd(attempt.output.pageText, readingLevel) : attempt.output.pageText,
       artPrompt: attempt.output.artPrompt,
       question: attempt.output.readingQuestion.trim(),
       isEnding,

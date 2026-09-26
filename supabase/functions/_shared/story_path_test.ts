@@ -277,7 +277,7 @@ Deno.test("runPathTurn allows the kid's own non-Latin name in an 'en' story", as
   );
   const result = await runPathTurn("early_reader", 0, emptyBible, "李明", "en", null, deps);
   assertEquals(result.action, "page");
-  assertEquals(result.page.text, "李明 finds a red kite in the meadow.");
+  assertEquals(result.page.text, "李明 finds a red kite in the meadow. The end."); // the path's last page
 });
 
 Deno.test("runPathTurn allows a bible character's non-Latin name in an 'en' story", async () => {
@@ -454,7 +454,7 @@ Deno.test("runPageTurn rewrites once when the first attempt fails the gate", asy
     [false, true],
   );
   const result = await runPageTurn("early_reader", 0, bible, "Maya", "en", deps);
-  assertEquals(result.page.text, "Something gentle.");
+  assertEquals(result.page.text, "Something gentle. The end."); // the path's last page
 });
 
 Deno.test("runPageTurn falls back to none after two failed attempts", async () => {
@@ -474,7 +474,7 @@ Deno.test("runPageTurn drops a page that retells an earlier shown page", async (
     [true],
   );
   const result = await runPageTurn("reader", 1, bible, "Maya", "en", deps, earlier);
-  assertEquals(result.page.text, "She smiles and lifts it high.");
+  assertEquals(result.page.text, "She smiles and lifts it high. The end."); // the path's last page
 });
 
 Deno.test("runPageTurn trims an overlong page to the reading level's word limit instead of refusing it", async () => {
@@ -496,7 +496,7 @@ Deno.test("runPageTurn fails the output gate on a foreign-script leak in an 'en'
   );
   const result = await runPageTurn("reader", 0, bible, "Maya", "en", deps);
   assertEquals(result.action, "page");
-  assertEquals(result.page.text, "A friendly fox is nearby, and both look surprised.");
+  assertEquals(result.page.text, "A friendly fox is nearby, and both look surprised. The end."); // the path's last page
 });
 
 Deno.test("runPageTurn falls back to none with refusal 'unsafe' when the rewrite still leaks a foreign script", async () => {
@@ -527,7 +527,7 @@ Deno.test("runPageTurn allows the kid's own non-Latin name in an 'en' story", as
   const deps = pageDepsFor([pageOutput({ pageText: "李明 finds a red kite in the meadow." })], [true]);
   const result = await runPageTurn("early_reader", 0, bible, "李明", "en", deps);
   assertEquals(result.action, "page");
-  assertEquals(result.page.text, "李明 finds a red kite in the meadow.");
+  assertEquals(result.page.text, "李明 finds a red kite in the meadow. The end."); // the path's last page
 });
 
 Deno.test("runPageTurn allows a bible character's non-Latin name in an 'en' story", async () => {
@@ -539,7 +539,7 @@ Deno.test("runPageTurn allows a bible character's non-Latin name in an 'en' stor
   const deps = pageDepsFor([pageOutput({ pageText: "Maya waved to her friend Дима by the lake." })], [true]);
   const result = await runPageTurn("early_reader", 0, bible, "Maya", "en", deps);
   assertEquals(result.action, "page");
-  assertEquals(result.page.text, "Maya waved to her friend Дима by the lake.");
+  assertEquals(result.page.text, "Maya waved to her friend Дима by the lake. The end."); // the path's last page
 });
 
 Deno.test("runPageTurn gates a flagged successful parentNote even when the page text itself is safe", async () => {
@@ -553,4 +553,14 @@ Deno.test("runPageTurn gates a flagged successful parentNote even when the page 
   };
   const result = await runPageTurn("early_reader", 0, bible, "Maya", "en", deps);
   assertEquals(result.action, "none");
+});
+
+Deno.test("runPathTurn closes the path's last page with 'The end.' (S14)", async () => {
+  const deps = pathDepsFor(
+    [pathOutput({ pageText: "Maya and the fox curl up under the stars.", path: ["Maya and the fox curl up under the stars."] })],
+    [true],
+  );
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
+  assertEquals(result.page.isEnding, true);
+  assertEquals(result.page.text, "Maya and the fox curl up under the stars. The end.");
 });

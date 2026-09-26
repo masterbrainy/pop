@@ -1,7 +1,26 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import { planNewPath, runPageTurn, runPathTurn, type RunPageTurnDeps, type RunPathTurnDeps } from "./story_path.ts";
+import type { InputSafetyVerdict } from "./input_safety.ts";
 import type { StoryBible } from "./schemas.ts";
-import type { StoryPageModelOutput, StoryPathModelOutput } from "./story_path_schema.ts";
+import type { ModelQuestion, StoryPageModelOutput, StoryPathModelOutput } from "./story_path_schema.ts";
+
+const DEFAULT_ASK = "Will the kite fly to the tree or the pond?";
+
+const defaultQuestion: ModelQuestion = {
+  ask: DEFAULT_ASK,
+  kind: "choice",
+  choices: [
+    { label: "The tree", symbol: "tree.fill", direction: "The kite drifts into the old oak tree.", followsPath: true },
+    { label: "The pond", symbol: "drop.fill", direction: "The kite lands softly on the pond.", followsPath: false },
+  ],
+};
+
+const safeBrief = async (): Promise<InputSafetyVerdict> => ({ blocked: false, parentNote: null, refusal: null });
+
+/** The question gate's rubric call starts with the question's ask; the page gate's never does. */
+function isQuestionGateCall(combined: string): boolean {
+  return combined.startsWith(DEFAULT_ASK);
+}
 
 function pathOutput(overrides: Partial<StoryPathModelOutput> = {}): StoryPathModelOutput {
   return {
@@ -9,7 +28,7 @@ function pathOutput(overrides: Partial<StoryPathModelOutput> = {}): StoryPathMod
     isEnding: false,
     pageText: "Maya finds a red kite in the meadow.",
     artPrompt: "A young girl finding a red kite in a sunny meadow.",
-    readingQuestion: "What colour is the kite?",
+    question: defaultQuestion,
     bibleTitle: null,
     bibleSetting: "A sunny meadow",
     bibleCharacters: [{ id: "maya", name: "Maya", description: "a curious kid" }],
@@ -23,7 +42,7 @@ function pageOutput(overrides: Partial<StoryPageModelOutput> = {}): StoryPageMod
   return {
     pageText: "Maya finds a red kite in the meadow.",
     artPrompt: "A young girl finding a red kite in a sunny meadow.",
-    readingQuestion: "What colour is the kite?",
+    question: defaultQuestion,
     parentNote: null,
     ...overrides,
   };
@@ -39,28 +58,38 @@ function safeInputSafety() {
   };
 }
 
+/** `safe[i]` is the page gate's rubric verdict for attempt i; the question gate always passes. */
+function rubricBySafeList(safe: boolean[]) {
+  let pageGateCall = 0;
+  return async (combined: string) => {
+    if (isQuestionGateCall(combined)) return { safe: true, reason: "" };
+    const verdict = safe[pageGateCall++];
+    return { safe: verdict, reason: verdict ? "" : "too scary" };
+  };
+}
+
 function pathDepsFor(outputs: StoryPathModelOutput[], safe: boolean[]): RunPathTurnDeps {
   let modelCall = 0;
-  let safetyCall = 0;
   return {
     callModel: async () => ({ output: outputs[modelCall++], modelMs: 10 }),
     safety: {
       moderateText: async () => ({ flagged: false, categories: [] }),
-      checkRubric: async () => ({ safe: safe[safetyCall++], reason: safe[safetyCall - 1] ? "" : "too scary" }),
+      checkRubric: rubricBySafeList(safe),
     },
     inputSafety: safeInputSafety(),
+    checkBrief: safeBrief,
   };
 }
 
 function pageDepsFor(outputs: StoryPageModelOutput[], safe: boolean[]): RunPageTurnDeps {
   let modelCall = 0;
-  let safetyCall = 0;
   return {
     callModel: async () => ({ output: outputs[modelCall++], modelMs: 10 }),
     safety: {
       moderateText: async () => ({ flagged: false, categories: [] }),
-      checkRubric: async () => ({ safe: safe[safetyCall++], reason: safe[safetyCall - 1] ? "" : "too scary" }),
+      checkRubric: rubricBySafeList(safe),
     },
+    checkBrief: safeBrief,
   };
 }
 
@@ -188,6 +217,7 @@ Deno.test("runPathTurn falls back to none with a gentle parentNote after two fai
 Deno.test("runPathTurn blocks a flagged direction from a kid before any model call, returning none with refusal 'real_harm'", async () => {
   let modelCalled = false;
   const deps: RunPathTurnDeps = {
+    checkBrief: safeBrief,
     callModel: async () => {
       modelCalled = true;
       return { output: pathOutput(), modelMs: 10 };
@@ -211,6 +241,7 @@ Deno.test("runPathTurn blocks a flagged direction from a kid before any model ca
 
 Deno.test("runPathTurn blocks a flagged direction from a parent when the direction-safety second opinion also says unsafe, returning none with refusal 'unsafe'", async () => {
   const deps: RunPathTurnDeps = {
+    checkBrief: safeBrief,
     callModel: async () => ({ output: pathOutput(), modelMs: 10 }),
     safety: { moderateText: async () => ({ flagged: false, categories: [] }), checkRubric: async () => ({ safe: true, reason: "" }) },
     inputSafety: {
@@ -313,6 +344,7 @@ Deno.test("runPathTurn still catches a real foreign-script leak alongside an all
 
 Deno.test("runPathTurn gates a flagged bibleTitle even when the page text itself is safe", async () => {
   const deps: RunPathTurnDeps = {
+    checkBrief: safeBrief,
     callModel: async () => ({ output: pathOutput({ bibleTitle: "flagged title" }), modelMs: 10 }),
     safety: {
       moderateText: async (text) => ({ flagged: text === "flagged title", categories: text === "flagged title" ? ["unsafe"] : [] }),
@@ -326,6 +358,7 @@ Deno.test("runPathTurn gates a flagged bibleTitle even when the page text itself
 
 Deno.test("runPathTurn gates a flagged successful parentNote even when the page text itself is safe", async () => {
   const deps: RunPathTurnDeps = {
+    checkBrief: safeBrief,
     callModel: async () => ({ output: pathOutput({ parentNote: "flagged note" }), modelMs: 10 }),
     safety: {
       moderateText: async (text) => ({ flagged: text === "flagged note", categories: text === "flagged note" ? ["unsafe"] : [] }),
@@ -422,6 +455,7 @@ Deno.test("runPathTurn regression (ending-reader false block, R-41 root cause): 
   const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
   let modelCalled = false;
   const deps: RunPathTurnDeps = {
+    checkBrief: safeBrief,
     callModel: async () => {
       modelCalled = true;
       return { output: pathOutput({ path: ["Beat 1, and they settle down together"], isEnding: false }), modelMs: 10 };
@@ -471,6 +505,7 @@ Deno.test("runPageTurn past the path's end returns none with no model call", asy
   let modelCalled = false;
   const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
   const deps: RunPageTurnDeps = {
+    checkBrief: safeBrief,
     callModel: async () => {
       modelCalled = true;
       return { output: pageOutput(), modelMs: 10 };
@@ -583,6 +618,7 @@ Deno.test("runPageTurn allows a bible character's non-Latin name in an 'en' stor
 Deno.test("runPageTurn gates a flagged successful parentNote even when the page text itself is safe", async () => {
   const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
   const deps: RunPageTurnDeps = {
+    checkBrief: safeBrief,
     callModel: async () => ({ output: pageOutput({ parentNote: "flagged note" }), modelMs: 10 }),
     safety: {
       moderateText: async (text) => ({ flagged: text === "flagged note", categories: text === "flagged note" ? ["unsafe"] : [] }),
@@ -601,4 +637,251 @@ Deno.test("runPathTurn closes the path's last page with 'The end.' (S14)", async
   const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
   assertEquals(result.page.isEnding, true);
   assertEquals(result.page.text, "Maya and the fox curl up under the stars. The end.");
+});
+
+// --- IMP-25: the page's question and choices ---
+
+/** Safety deps whose moderation flags exactly the texts in `flagged`; the rubric always passes. */
+function flaggingSafety(flagged: string[]) {
+  return {
+    moderateText: async (text: string) => ({ flagged: flagged.includes(text), categories: flagged.includes(text) ? ["x"] : [] }),
+    checkRubric: async () => ({ safe: true, reason: "" }),
+  };
+}
+
+Deno.test("runPathTurn ships the page's question with its kind and choices", async () => {
+  const deps = pathDepsFor([pathOutput({ path: ["Beat 0", "Beat 1", "Beat 2"] })], [true]);
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
+  assertEquals(result.page.question, DEFAULT_ASK);
+  assertEquals(result.page.questionKind, "choice");
+  assertEquals(result.page.choices.map((c) => c.label), ["The tree", "The pond"]);
+  assertEquals(result.page.choices.map((c) => c.followsPath), [true, false]);
+});
+
+Deno.test("runPathTurn drops only the question when a choice fails its own gate; the page still ships", async () => {
+  const deps: RunPathTurnDeps = {
+    ...pathDepsFor([pathOutput({ path: ["Beat 0", "Beat 1"] })], [true]),
+    safety: flaggingSafety(["The kite lands softly on the pond."]),
+  };
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
+  assertEquals(result.action, "page");
+  assertEquals(result.page.text, "Maya finds a red kite in the meadow.");
+  assertEquals(result.page.question, "");
+  assertEquals("questionKind" in result.page, false);
+  assertEquals(result.page.choices, []);
+});
+
+Deno.test("runPathTurn never lets a flagged question sink the page (no rewrite for the question alone)", async () => {
+  let modelCalls = 0;
+  const deps: RunPathTurnDeps = {
+    ...pathDepsFor([pathOutput(), pathOutput()], [true, true]),
+    callModel: async () => {
+      modelCalls += 1;
+      return { output: pathOutput({ path: ["Beat 0", "Beat 1"] }), modelMs: 10 };
+    },
+    safety: flaggingSafety([DEFAULT_ASK]),
+  };
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
+  assertEquals(result.action, "page");
+  assertEquals(modelCalls, 1);
+  assertEquals(result.page.question, "");
+});
+
+Deno.test("runPathTurn drops a question that leaks a foreign script or names a brand", async () => {
+  const foreign = pathOutput({ path: ["Beat 0", "Beat 1"], question: { ...defaultQuestion, ask: "Куда полетит kite?" } });
+  const branded = pathOutput({
+    path: ["Beat 0", "Beat 1"],
+    question: {
+      ...defaultQuestion,
+      choices: [defaultQuestion.choices[0], { ...defaultQuestion.choices[1], label: "Ask Elsa" }],
+    },
+  });
+  for (const output of [foreign, branded]) {
+    const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, pathDepsFor([output], [true]));
+    assertEquals(result.action, "page");
+    assertEquals(result.page.question, "");
+    assertEquals(result.page.choices, []);
+  }
+});
+
+Deno.test("runPathTurn uses and gates the rewrite attempt's question when the first page failed", async () => {
+  const secondQuestion: ModelQuestion = {
+    ...defaultQuestion,
+    choices: [defaultQuestion.choices[0], { ...defaultQuestion.choices[1], direction: "The kite hides in a scary cave." }],
+  };
+  const deps: RunPathTurnDeps = {
+    ...pathDepsFor(
+      [
+        pathOutput({ pageText: "Something scary happens.", path: ["Beat 0", "Beat 1"] }),
+        pathOutput({ pageText: "Something gentle happens.", path: ["Beat 0", "Beat 1"], question: secondQuestion }),
+      ],
+      [false, true],
+    ),
+  };
+  const moderation = flaggingSafety(["The kite hides in a scary cave."]).moderateText;
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, {
+    ...deps,
+    safety: { ...deps.safety, moderateText: moderation },
+  });
+  assertEquals(result.page.text, "Something gentle happens.");
+  assertEquals(result.page.question, "");
+  assertEquals(result.page.choices, []);
+});
+
+Deno.test("runPathTurn applies the question plan with the real planned path: a listener's ending is talk-only", async () => {
+  const deps = pathDepsFor([pathOutput({ path: ["Maya falls asleep. The end."] })], [true]);
+  const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
+  const result = await runPathTurn("listener", 1, bible, "Maya", "en", { text: "time for bed", speaker: "parent" }, deps);
+  assertEquals(result.page.isEnding, true);
+  assertEquals(result.page.questionKind, "talkOnly");
+  assertEquals(result.page.choices, []);
+  assertEquals(result.page.question, DEFAULT_ASK);
+});
+
+Deno.test("runPathTurn gives a listener talk-only on page 0 and 2 choices on page 1", async () => {
+  const page0 = await runPathTurn("listener", 0, emptyBible, "Maya", "en", null, pathDepsFor([pathOutput({ path: ["B0", "B1", "B2"] })], [true]));
+  assertEquals(page0.page.questionKind, "talkOnly");
+  assertEquals(page0.page.choices, []);
+
+  const bible: StoryBible = { ...emptyBible, path: ["B0"] };
+  const page1 = await runPathTurn(
+    "listener",
+    1,
+    bible,
+    "Maya",
+    "en",
+    { text: "the kite flies away", speaker: "parent" },
+    pathDepsFor([pathOutput({ path: ["B1", "B2", "B3"] })], [true]),
+  );
+  assertEquals(page1.page.questionKind, "choice");
+  assertEquals(page1.page.choices.length, 2);
+});
+
+Deno.test("runPageTurn ships a normalized question and drops a flagged one without refusing the page", async () => {
+  const bible: StoryBible = { ...emptyBible, path: ["Beat 0", "Beat 1", "Beat 2"] };
+  const ok = await runPageTurn("reader", 0, bible, "Maya", "en", pageDepsFor([pageOutput()], [true]));
+  assertEquals(ok.page.questionKind, "open");
+  assertEquals(ok.page.choices.length, 2);
+
+  const flagged = await runPageTurn("reader", 0, bible, "Maya", "en", {
+    ...pageDepsFor([pageOutput()], [true]),
+    safety: flaggingSafety(["The tree"]),
+  });
+  assertEquals(flagged.action, "page");
+  assertEquals(flagged.page.question, "");
+  assertEquals(flagged.page.choices, []);
+});
+
+Deno.test("runPageTurn's ending page is talk-only", async () => {
+  const bible: StoryBible = { ...emptyBible, path: ["Beat 0", "Beat 1"] };
+  const result = await runPageTurn("early_reader", 1, bible, "Maya", "en", pageDepsFor([pageOutput()], [true]));
+  assertEquals(result.page.questionKind, "talkOnly");
+  assertEquals(result.page.choices, []);
+});
+
+Deno.test("a refused page carries an empty question and no choices", async () => {
+  const deps = pathDepsFor([pathOutput({ pageText: "Bad one" }), pathOutput({ pageText: "Still bad" })], [false, false]);
+  const result = await runPathTurn("listener", 0, emptyBible, "Maya", "en", null, deps);
+  assertEquals(result.action, "none");
+  assertEquals(result.page.question, "");
+  assertEquals(result.page.choices, []);
+  assertEquals("questionKind" in result.page, false);
+});
+
+// --- IMP-25: a tapped choice as input ---
+
+Deno.test("runPathTurn moderates a tapped choice only (no real-harm rubric), then re-plans from it", async () => {
+  let realHarmCalled = false;
+  const deps: RunPathTurnDeps = {
+    ...pathDepsFor([pathOutput({ path: ["The dragon looks under the bed.", "B2"] })], [true]),
+    inputSafety: {
+      ...safeInputSafety(),
+      checkRealHarm: async () => {
+        realHarmCalled = true;
+        return { safe: true, reason: "" };
+      },
+    },
+  };
+  const bible: StoryBible = { ...emptyBible, path: ["B0"] };
+  const result = await runPathTurn("early_reader", 1, bible, "Maya", "en", { text: "The dragon looks under the bed.", speaker: "kid", kind: "choice" }, deps);
+  assertEquals(result.action, "page");
+  assertEquals(realHarmCalled, false);
+});
+
+// --- IMP-24: brief safety runs before any model call ---
+
+const blockedBrief = async (): Promise<InputSafetyVerdict> => ({ blocked: true, parentNote: "brief note", refusal: "unsafe" });
+
+Deno.test("runPathTurn refuses an unsafe brief before any model call", async () => {
+  let modelCalled = false;
+  const deps: RunPathTurnDeps = {
+    ...pathDepsFor([pathOutput()], [true]),
+    callModel: async () => {
+      modelCalled = true;
+      return { output: pathOutput(), modelMs: 10 };
+    },
+    checkBrief: blockedBrief,
+  };
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", null, deps);
+  assertEquals(result.action, "none");
+  assertEquals(result.parentNote, "brief note");
+  assertEquals(result.refusal, "unsafe");
+  assertEquals(modelCalled, false);
+});
+
+Deno.test("runPathTurn checks the brief and the direction together, both before the model", async () => {
+  const order: string[] = [];
+  const deps: RunPathTurnDeps = {
+    ...pathDepsFor([pathOutput()], [true]),
+    callModel: async () => {
+      order.push("model");
+      return { output: pathOutput(), modelMs: 10 };
+    },
+    checkBrief: async () => {
+      order.push("brief");
+      return { blocked: false, parentNote: null, refusal: null };
+    },
+    inputSafety: {
+      ...safeInputSafety(),
+      moderateText: async () => {
+        order.push("direction");
+        return { flagged: false, categories: [] };
+      },
+    },
+  };
+  await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", { text: "add a puppy", speaker: "parent" }, deps);
+  assertEquals(order.slice(0, 2).sort(), ["brief", "direction"]);
+  assertEquals(order[2], "model");
+});
+
+Deno.test("runPathTurn prefers the brief's real-harm verdict over the direction's generic one", async () => {
+  const deps: RunPathTurnDeps = {
+    ...pathDepsFor([pathOutput()], [true]),
+    checkBrief: async () => ({ blocked: true, parentNote: "real harm note", refusal: "real_harm" }),
+    inputSafety: {
+      ...safeInputSafety(),
+      moderateText: async () => ({ flagged: true, categories: ["violence"] }),
+      checkDirectionSafety: async () => ({ safe: false, reason: "unsafe" }),
+    },
+  };
+  const result = await runPathTurn("early_reader", 0, emptyBible, "Maya", "en", { text: "something", speaker: "parent" }, deps);
+  assertEquals(result.refusal, "real_harm");
+  assertEquals(result.parentNote, "real harm note");
+});
+
+Deno.test("runPageTurn refuses an unsafe brief before any model call", async () => {
+  let modelCalled = false;
+  const bible: StoryBible = { ...emptyBible, path: ["Beat 0", "Beat 1"] };
+  const deps: RunPageTurnDeps = {
+    ...pageDepsFor([pageOutput()], [true]),
+    callModel: async () => {
+      modelCalled = true;
+      return { output: pageOutput(), modelMs: 10 };
+    },
+    checkBrief: blockedBrief,
+  };
+  const result = await runPageTurn("early_reader", 0, bible, "Maya", "en", deps);
+  assertEquals(result.action, "none");
+  assertEquals(result.parentNote, "brief note");
+  assertEquals(modelCalled, false);
 });

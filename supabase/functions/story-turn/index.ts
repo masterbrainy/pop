@@ -5,7 +5,12 @@
 // `mode: "turn"` (the pre-P-04 append/new_page/revise_current engine) was
 // removed once the app moved to `path`/`page` and the full eval passed on
 // them (see docs/CONTRACTS.md §3 for the removal note).
+//
+// IMP-24/25: both modes check the brief's free text before any model call
+// (checkBriefSafety), and each page comes back with its question, kind and
+// choices; `input.kind: "choice"` is a tapped choice tile.
 import { requireUser } from "../_shared/auth.ts";
+import { checkBriefSafety } from "../_shared/brief_safety.ts";
 import { requireEnv } from "../_shared/env.ts";
 import { servePop } from "../_shared/handler.ts";
 import { STORY_MODEL, TITLE_MODEL } from "../_shared/models.ts";
@@ -45,6 +50,7 @@ async function callPathModelFor(apiKey: string, body: PathRequest, rewriteReason
 
 async function handlePath(apiKey: string, body: PathRequest) {
   const readingLevel = body.kid.readingLevel as ReadingLevel;
+  const inputSafety = buildInputSafetyDeps(apiKey);
   return runPathTurn(
     readingLevel,
     body.index,
@@ -55,7 +61,8 @@ async function handlePath(apiKey: string, body: PathRequest) {
     {
       callModel: (rewriteReason) => callPathModelFor(apiKey, body, rewriteReason),
       safety: buildSafetyDeps(apiKey),
-      inputSafety: buildInputSafetyDeps(apiKey),
+      inputSafety,
+      checkBrief: () => checkBriefSafety(body.brief, body.kid, inputSafety),
     },
     body.pages.slice().sort((a, b) => a.index - b.index).map((page) => page.text),
   );
@@ -84,6 +91,7 @@ async function handlePage(apiKey: string, body: PageRequest) {
     {
       callModel: (rewriteReason) => callPageModelFor(apiKey, body, rewriteReason),
       safety: buildSafetyDeps(apiKey),
+      checkBrief: () => checkBriefSafety(body.brief, body.kid, buildInputSafetyDeps(apiKey)),
     },
     body.pages.slice().sort((a, b) => a.index - b.index).map((page) => page.text),
   );

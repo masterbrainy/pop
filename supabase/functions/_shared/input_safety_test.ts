@@ -179,3 +179,38 @@ Deno.test("checkInputSafety still gives a parent's flagged speech the second opi
   const verdict = await checkInputSafety("something scary", "parent", "Maya", deps, "speech");
   assertEquals(verdict, { blocked: true, parentNote: gentleParentNote(), refusal: "unsafe" });
 });
+
+// --- IMP-25: a tapped choice ---
+
+function countingDeps(flagged: boolean) {
+  const calls = { moderate: 0, realHarm: 0, secondOpinion: 0 };
+  const deps = fakeDeps({
+    moderateText: async () => {
+      calls.moderate += 1;
+      return { flagged, categories: flagged ? ["violence"] : [] };
+    },
+    checkRealHarm: async () => {
+      calls.realHarm += 1;
+      return { safe: true, reason: "" };
+    },
+    checkDirectionSafety: async () => {
+      calls.secondOpinion += 1;
+      return { safe: true, reason: "" };
+    },
+  });
+  return { deps, calls };
+}
+
+Deno.test("checkInputSafety moderates a choice only: no real-harm rubric and no second opinion", async () => {
+  const { deps, calls } = countingDeps(false);
+  const verdict = await checkInputSafety("The dragon looks under the bed.", "kid", "Maya", deps, "choice");
+  assertEquals(verdict, { blocked: false, parentNote: null, refusal: null });
+  assertEquals(calls, { moderate: 1, realHarm: 0, secondOpinion: 0 });
+});
+
+Deno.test("checkInputSafety blocks a moderation-flagged choice with the gentle note and refusal 'unsafe'", async () => {
+  const { deps, calls } = countingDeps(true);
+  const verdict = await checkInputSafety("something the app should never send", "kid", "Maya", deps, "choice");
+  assertEquals(verdict, { blocked: true, parentNote: gentleParentNote(), refusal: "unsafe" });
+  assertEquals(calls, { moderate: 1, realHarm: 0, secondOpinion: 0 });
+});

@@ -16,13 +16,33 @@ export type EvalTurn =
   | { next: true; speaker: Speaker }
   | { kind: TurnKind; speaker: Speaker; text: string };
 
+/** IMP-24: a guided-setup card's answer, sent on the brief as-is (a tile id, or the family's own words). */
+export type EvalBriefAnswer = { tile: string } | { text: string; via: "typed" | "speech" };
+
+/** IMP-24 guided setup answers, sent on the request's brief. */
+export interface EvalSetup {
+  hero?: EvalBriefAnswer | null;
+  place?: EvalBriefAnswer | null;
+  problem?: EvalBriefAnswer | null;
+  mood?: "silly" | "cosy" | "brave" | null;
+  purpose?: "fun" | "bedtime" | "realMoment" | "teach" | null;
+}
+
 export interface EvalBrief {
   kidFirstName: string;
   readingLevel: ReadingLevel;
+  /** Sent as the brief's own interests (and, unless profileInterests is set, the kid profile's too). */
   interests: string[];
+  /**
+   * IMP-24 "book interests win": the kid profile's saved interests, sent as
+   * `kid.interests` when set (the brief keeps `interests` above). Unset keeps
+   * the old behaviour of sending `interests` for both.
+   */
+  profileInterests?: string[];
   /** The optional "Anything you'd like this story to teach?" field. */
   teach?: string | null;
   realMoment?: string | null;
+  setup?: EvalSetup;
 }
 
 export interface EvalExpectation {

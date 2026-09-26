@@ -107,6 +107,53 @@ Deno.test("requestSchema accepts a well-formed page request (no input)", () => {
   assert(result.success);
 });
 
+const pathBase = {
+  mode: "path",
+  bookId: "123e4567-e89b-12d3-a456-426614174000",
+  kid: { ...kid, interests: [] },
+  settings,
+  bible,
+  pages: [],
+  index: 0,
+};
+
+Deno.test("requestSchema accepts a guided-setup brief with tiles, text answers, mood and purpose", () => {
+  const result = requestSchema.safeParse({
+    ...pathBase,
+    brief: {
+      interests: [],
+      realMoment: null,
+      teach: null,
+      language: "en",
+      hero: { tile: "dragon" },
+      place: { text: "Grandma's garden", via: "speech" },
+      problem: null,
+      mood: "silly",
+      purpose: "bedtime",
+    },
+  });
+  assert(result.success);
+});
+
+Deno.test("requestSchema accepts an unknown tile id (the prompt ignores it) but rejects a malformed answer", () => {
+  assert(requestSchema.safeParse({ ...pathBase, brief: { ...brief, hero: { tile: "hoverboard" } } }).success);
+  assertFalse(requestSchema.safeParse({ ...pathBase, brief: { ...brief, hero: "a dragon" } }).success);
+  assertFalse(requestSchema.safeParse({ ...pathBase, brief: { ...brief, place: { text: "x", via: "typed", tile: "castle" } } }).success);
+  assertFalse(requestSchema.safeParse({ ...pathBase, brief: { ...brief, problem: { text: "", via: "typed" } } }).success);
+});
+
+Deno.test("requestSchema accepts a tapped choice and rejects one over 120 characters", () => {
+  const withChoice = (text: string) => ({
+    ...pathBase,
+    brief,
+    bible: { ...bible, path: ["Beat 0"] },
+    index: 1,
+    input: { kind: "choice", speaker: "kid", text },
+  });
+  assert(requestSchema.safeParse(withChoice("The dragon looks under the bed.")).success);
+  assertFalse(requestSchema.safeParse(withChoice("a".repeat(121))).success);
+});
+
 Deno.test("requestSchema rejects a path or page request with a negative index", () => {
   const base = { mode: "path", bookId: "123e4567-e89b-12d3-a456-426614174000", kid, brief, settings, bible, pages: [] };
   assertFalse(requestSchema.safeParse({ ...base, index: -1 }).success);

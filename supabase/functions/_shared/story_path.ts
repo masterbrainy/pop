@@ -4,15 +4,37 @@
 // `turn` (moderation + rubric, one rewrite, then `none`), plus the input-side
 // gate (R-37) before any model call. Deps are injected (as story_turn.ts does)
 // so this is fully unit-testable without any network call.
+//
+// IMP-24/25: the brief's free text is checked alongside the direction before
+// any model call (checkBrief); each page carries a question fitted to the
+// question plan (question_plan.ts) and gated on its own, in parallel with the
+// page (question_gate.ts), so a flagged question drops only itself.
 import type { ReadingLevel } from "./reading_levels.ts";
 import { withinWordLimit } from "./reading_levels.ts";
 import { gentleParentNote, runSafetyGate, type SafetyDeps } from "./safety.ts";
-import { checkInputSafety, type InputSafetyDeps, type Refusal } from "./input_safety.ts";
+import {
+  checkInputSafety,
+  firstBlockingVerdict,
+  type InputKind,
+  type InputSafetyDeps,
+  type InputSafetyVerdict,
+  type Refusal,
+  SAFE_INPUT,
+} from "./input_safety.ts";
 import { hasForeignScriptText } from "./language_check.ts";
 import { namesBrandedCharacter } from "./brand_check.ts";
 import { closeWithTheEnd } from "./ending.ts";
 import { detectsEndRequest } from "./end_request.ts";
 import { isOpeningIdea } from "./opening_idea.ts";
+import { gateQuestion } from "./question_gate.ts";
+import {
+  NO_QUESTION,
+  normalizeQuestion,
+  type PageChoice,
+  type PageQuestion,
+  type QuestionKind,
+  questionKindFor,
+} from "./question_plan.ts";
 import { mergeBibleCharacters, stripRepeatedEarlierText, trimToLimit } from "./story_turn.ts";
 import type { StoryBible } from "./schemas.ts";
 import type { StoryPageModelOutput, StoryPathModelOutput } from "./story_path_schema.ts";
@@ -21,7 +43,11 @@ export interface PathPageResponse {
   index: number;
   text: string;
   artPrompt: string;
+  /** "" when there's no question (none written, or it failed its own gate). */
   question: string;
+  /** Present exactly when `question` isn't "". */
+  questionKind?: QuestionKind;
+  choices: PageChoice[];
   isEnding: boolean;
 }
 
@@ -34,6 +60,8 @@ export interface StoryPathResponseData {
   refusal: Refusal;
   timings: { modelMs: number; safetyMs: number };
 }
+
+type Timings = StoryPathResponseData["timings"];
 
 const PAST_ENDING_NOTE = "The story has reached its ending.";
 
@@ -60,16 +88,28 @@ function trimBeatToCharLimit(beat: string): string {
   return `${trimmed.slice(0, MAX_BEAT_CHARS - 1).trimEnd()}.`;
 }
 
+function pageResponse(index: number, text: string, artPrompt: string, isEnding: boolean, question: PageQuestion): PathPageResponse {
+  return {
+    index,
+    text,
+    artPrompt,
+    question: question.question,
+    ...(question.questionKind ? { questionKind: question.questionKind } : {}),
+    choices: question.choices,
+    isEnding,
+  };
+}
+
 function noneResponse(
   index: number,
   existingBible: StoryBible,
-  timings: { modelMs: number; safetyMs: number },
+  timings: Timings,
   parentNote: string = gentleParentNote(),
   refusal: Refusal = "unsafe",
 ): StoryPathResponseData {
   return {
     action: "none",
-    page: { index, text: "", artPrompt: "", question: "", isEnding: false },
+    page: pageResponse(index, "", "", false, NO_QUESTION),
     bible: existingBible,
     parentNote,
     refusal,
@@ -83,60 +123,101 @@ function preparePageText(pageText: string, level: ReadingLevel, earlierTexts: st
   return withinWordLimit(stripped, level) ? stripped.trim() : trimToLimit(stripped, level);
 }
 
-/** True when any of the three output texts leaked a foreign-script letter (see language_check.ts). `allowedNames` (R-42) exempts the kid's own name and bible character names. */
-function hasForeignScript(
-  pageText: string,
-  artPrompt: string,
-  readingQuestion: string,
-  language: string,
-  allowedNames: string[],
-): boolean {
-  return hasForeignScriptText(pageText, language, allowedNames) ||
-    hasForeignScriptText(artPrompt, language, allowedNames) ||
-    hasForeignScriptText(readingQuestion, language, allowedNames);
+/** True when the page text or art prompt leaked a foreign-script letter (see language_check.ts). `allowedNames` (R-42) exempts the kid's own name and bible character names. */
+function hasForeignScript(pageText: string, artPrompt: string, language: string, allowedNames: string[]): boolean {
+  return hasForeignScriptText(pageText, language, allowedNames) || hasForeignScriptText(artPrompt, language, allowedNames);
 }
 
-async function passesOutputGate(
-  pageText: string,
-  artPrompt: string,
-  readingQuestion: string,
-  readingLevel: ReadingLevel,
-  language: string,
-  safety: SafetyDeps,
-  allowedNames: string[],
-  extraGateTexts: (string | null)[] = [],
-): Promise<{ safe: boolean; safetyMs: number }> {
+/** What one model attempt puts through the gate: the page itself, plus its already-normalized question. */
+interface GateInput {
+  pageText: string;
+  artPrompt: string;
+  /** R-42: bibleTitle and a successful parentNote reach the parent's screen too. */
+  extraGateTexts: (string | null)[];
+  question: PageQuestion;
+  /** Always starts with the kid's own first name. */
+  allowedNames: string[];
+}
+
+interface GateResult {
+  safe: boolean;
+  /** The question that may ship with this attempt: unchanged, or NO_QUESTION when it failed its own gate. */
+  question: PageQuestion;
+  safetyMs: number;
+}
+
+async function passesPageGate(input: GateInput, level: ReadingLevel, language: string, safety: SafetyDeps): Promise<boolean> {
+  const gateTexts = [input.pageText, input.artPrompt, ...input.extraGateTexts.map((t) => t ?? "")];
+  const verdict = await runSafetyGate(gateTexts, level, safety);
+  const wordLimitOk = withinWordLimit(input.pageText, level);
+  const languageOk = !hasForeignScript(input.pageText, input.artPrompt, language, input.allowedNames);
+  const brandOk = !namesBrandedCharacter(gateTexts, input.allowedNames[0]);
+  return verdict.safe && wordLimitOk && languageOk && brandOk;
+}
+
+/** The page gate and the question's own gate, run in parallel (IMP-25). */
+async function gateAttempt(input: GateInput, level: ReadingLevel, language: string, safety: SafetyDeps): Promise<GateResult> {
   const start = performance.now();
-  // R-42: bibleTitle and a successful parentNote reach the parent's screen
-  // too, so they go through the same moderation + rubric gate as the page
-  // text, art prompt and reading question (extraGateTexts).
-  const gateTexts = [pageText, artPrompt, readingQuestion, ...extraGateTexts.map((t) => t ?? "")];
-  const verdict = await runSafetyGate(gateTexts, readingLevel, safety);
-  const wordLimitOk = withinWordLimit(pageText, readingLevel);
-  const languageOk = !hasForeignScript(pageText, artPrompt, readingQuestion, language, allowedNames);
-  // allowedNames always starts with the kid's own first name (see its callers).
-  const brandOk = !namesBrandedCharacter(gateTexts, allowedNames[0]);
-  return { safe: verdict.safe && wordLimitOk && languageOk && brandOk, safetyMs: Math.round(performance.now() - start) };
+  const [safe, gated] = await Promise.all([
+    passesPageGate(input, level, language, safety),
+    gateQuestion(input.question, level, language, input.allowedNames, safety),
+  ]);
+  return { safe, question: gated.question, safetyMs: Math.round(performance.now() - start) };
 }
 
-function rewriteReasonFor(
-  pageText: string,
-  artPrompt: string,
-  readingQuestion: string,
-  readingLevel: ReadingLevel,
-  language: string,
-  allowedNames: string[],
-): string {
-  if (!withinWordLimit(pageText, readingLevel)) {
+function rewriteReasonFor(input: GateInput, level: ReadingLevel, language: string): string {
+  if (!withinWordLimit(input.pageText, level)) {
     return "The page was too long for this reading level's word limit.";
   }
-  if (hasForeignScript(pageText, artPrompt, readingQuestion, language, allowedNames)) {
+  if (hasForeignScript(input.pageText, input.artPrompt, language, input.allowedNames)) {
     return "The page mixed in a word from another language or script. Write it again using only the brief's language.";
   }
-  if (namesBrandedCharacter([pageText, artPrompt, readingQuestion], allowedNames[0])) {
+  if (namesBrandedCharacter([input.pageText, input.artPrompt], input.allowedNames[0])) {
     return "The page named a branded or famous character. Replace it with an original character of your own.";
   }
   return "The page did not pass the kid-safety rubric.";
+}
+
+type WriteOutcome<A> =
+  | { attempt: A; question: PageQuestion; timings: Timings }
+  | { attempt: null; timings: Timings };
+
+/** Both modes' write loop: one attempt, one rewrite if the page failed its gate, then give up. */
+async function writeWithOneRewrite<A extends { modelMs: number }>(
+  callModel: (rewriteReason: string | null) => Promise<A>,
+  gateInputFor: (attempt: A) => GateInput,
+  level: ReadingLevel,
+  language: string,
+  safety: SafetyDeps,
+): Promise<WriteOutcome<A>> {
+  const first = await callModel(null);
+  const firstInput = gateInputFor(first);
+  const firstGate = await gateAttempt(firstInput, level, language, safety);
+  if (firstGate.safe) {
+    return { attempt: first, question: firstGate.question, timings: { modelMs: first.modelMs, safetyMs: firstGate.safetyMs } };
+  }
+
+  const second = await callModel(rewriteReasonFor(firstInput, level, language));
+  const secondGate = await gateAttempt(gateInputFor(second), level, language, safety);
+  const timings = { modelMs: first.modelMs + second.modelMs, safetyMs: firstGate.safetyMs + secondGate.safetyMs };
+  return secondGate.safe ? { attempt: second, question: secondGate.question, timings } : { attempt: null, timings };
+}
+
+function inputKindOf(kind: string | undefined): InputKind {
+  return kind === "speech" || kind === "choice" ? kind : "typed";
+}
+
+/** The brief's free text and this turn's direction, checked together before any model call. */
+async function checkInputs(
+  input: { text: string; speaker: "parent" | "kid"; kind?: string } | null,
+  kidFirstName: string,
+  checkBrief: () => Promise<InputSafetyVerdict>,
+  inputSafety: InputSafetyDeps | null,
+): Promise<InputSafetyVerdict> {
+  const direction = input && inputSafety
+    ? checkInputSafety(input.text, input.speaker, kidFirstName, inputSafety, inputKindOf(input.kind))
+    : Promise.resolve(SAFE_INPUT);
+  return firstBlockingVerdict(await Promise.all([checkBrief(), direction]));
 }
 
 export interface PathModelAttempt {
@@ -149,14 +230,16 @@ export interface RunPathTurnDeps {
   callModel: (rewriteReason: string | null) => Promise<PathModelAttempt>;
   safety: SafetyDeps;
   inputSafety: InputSafetyDeps;
+  /** IMP-24: the brief's own free-text check (brief_safety.ts checkBriefSafety), run before any model call. */
+  checkBrief: () => Promise<InputSafetyVerdict>;
 }
 
 /**
  * `mode: "path"` (docs/CONTRACTS.md): plans or re-plans the path from `index`
  * onward, then writes page `index`. `input` is null when the brief alone
  * drives the path; at index 0 with no shown pages it's the opening idea
- * (opening_idea.ts); otherwise a direction. Either way it's moderated before
- * any model call.
+ * (opening_idea.ts); otherwise a direction. Either way it's moderated
+ * (together with the brief) before any model call.
  */
 export async function runPathTurn(
   readingLevel: ReadingLevel,
@@ -168,103 +251,56 @@ export async function runPathTurn(
   deps: RunPathTurnDeps,
   earlierTexts: string[] = [],
 ): Promise<StoryPathResponseData> {
-  if (input) {
-    const verdict = await checkInputSafety(input.text, input.speaker, kidFirstName, deps.inputSafety, input.kind === "speech" ? "speech" : "typed");
-    if (verdict.blocked) {
-      return noneResponse(
-        index,
-        existingBible,
-        { modelMs: 0, safetyMs: 0 },
-        verdict.parentNote ?? gentleParentNote(),
-        verdict.refusal,
-      );
-    }
+  const inputVerdict = await checkInputs(input, kidFirstName, deps.checkBrief, deps.inputSafety);
+  if (inputVerdict.blocked) {
+    return noneResponse(index, existingBible, { modelMs: 0, safetyMs: 0 }, inputVerdict.parentNote ?? gentleParentNote(), inputVerdict.refusal);
   }
 
   // R-42/ending-eval product rule: a direction that explicitly asks to end
   // the story now (docs/CONTRACTS.md) forces the re-planned path to end at
-  // this very page, regardless of what the model returns. Never for the
-  // opening idea (opening_idea.ts): an ending it describes is how the story
-  // should close, not a request to stop on page 1. `earlierTexts` is the
-  // request's shown `pages`, so its length is the shown-page count.
+  // this very page, regardless of what the model returns.
   const forceEnd = input !== null &&
     !isOpeningIdea(index, earlierTexts.length, input.text) &&
     detectsEndRequest(input.text);
 
-  const prepare = (attempt: PathModelAttempt): PathModelAttempt => ({
-    ...attempt,
-    output: { ...attempt.output, pageText: preparePageText(attempt.output.pageText, readingLevel, earlierTexts) },
-  });
+  const callModel = async (rewriteReason: string | null): Promise<PathModelAttempt> => {
+    const attempt = await deps.callModel(rewriteReason);
+    return { ...attempt, output: { ...attempt.output, pageText: preparePageText(attempt.output.pageText, readingLevel, earlierTexts) } };
+  };
+  const plannedFor = (attempt: PathModelAttempt) => planNewPath(existingBible.path, index, attempt.output.path, forceEnd);
 
-  /** R-42: the kid's own name and every known bible character name are never a "foreign script" leak. */
-  const allowedNamesFor = (attempt: PathModelAttempt): string[] => [
-    kidFirstName,
-    ...existingBible.characters.map((c) => c.name),
-    ...attempt.output.bibleCharacters.map((c) => c.name),
-  ];
-
-  const buildSuccess = (
-    attempt: PathModelAttempt,
-    timings: { modelMs: number; safetyMs: number },
-  ): StoryPathResponseData => {
-    const { path, isEnding } = planNewPath(existingBible.path, index, attempt.output.path, forceEnd);
+  const gateInputFor = (attempt: PathModelAttempt): GateInput => {
+    // The question plan uses the real planned path, so the ending is always talk-only.
+    const { path, isEnding } = plannedFor(attempt);
     return {
-      action: "page",
-      page: {
-        index,
-        text: isEnding ? closeWithTheEnd(attempt.output.pageText) : attempt.output.pageText,
-        artPrompt: attempt.output.artPrompt,
-        question: attempt.output.readingQuestion.trim(),
-        isEnding,
-      },
-      bible: {
-        title: attempt.output.bibleTitle,
-        setting: attempt.output.bibleSetting,
-        characters: mergeBibleCharacters(existingBible.characters, attempt.output.bibleCharacters),
-        directions: attempt.output.bibleDirections,
-        path,
-      },
-      parentNote: attempt.output.parentNote,
-      refusal: null,
-      timings,
+      pageText: attempt.output.pageText,
+      artPrompt: attempt.output.artPrompt,
+      extraGateTexts: [attempt.output.bibleTitle, attempt.output.parentNote],
+      question: normalizeQuestion(attempt.output.question, questionKindFor(readingLevel, index, path.length), isEnding),
+      // R-42: the kid's own name and every known bible character name are never a "foreign script" leak.
+      allowedNames: [kidFirstName, ...existingBible.characters.map((c) => c.name), ...attempt.output.bibleCharacters.map((c) => c.name)],
     };
   };
 
-  const first = prepare(await deps.callModel(null));
-  const firstNames = allowedNamesFor(first);
-  const firstGate = await passesOutputGate(
-    first.output.pageText,
-    first.output.artPrompt,
-    first.output.readingQuestion,
-    readingLevel,
-    language,
-    deps.safety,
-    firstNames,
-    [first.output.bibleTitle, first.output.parentNote],
-  );
-  if (firstGate.safe) return buildSuccess(first, { modelMs: first.modelMs, safetyMs: firstGate.safetyMs });
+  const outcome = await writeWithOneRewrite(callModel, gateInputFor, readingLevel, language, deps.safety);
+  if (outcome.attempt === null) return noneResponse(index, existingBible, outcome.timings);
 
-  const second = prepare(
-    await deps.callModel(
-      rewriteReasonFor(first.output.pageText, first.output.artPrompt, first.output.readingQuestion, readingLevel, language, firstNames),
-    ),
-  );
-  const secondNames = allowedNamesFor(second);
-  const secondGate = await passesOutputGate(
-    second.output.pageText,
-    second.output.artPrompt,
-    second.output.readingQuestion,
-    readingLevel,
-    language,
-    deps.safety,
-    secondNames,
-    [second.output.bibleTitle, second.output.parentNote],
-  );
-  const modelMs = first.modelMs + second.modelMs;
-  const safetyMs = firstGate.safetyMs + secondGate.safetyMs;
-  if (secondGate.safe) return buildSuccess(second, { modelMs, safetyMs });
-
-  return noneResponse(index, existingBible, { modelMs, safetyMs });
+  const { output } = outcome.attempt;
+  const { path, isEnding } = plannedFor(outcome.attempt);
+  return {
+    action: "page",
+    page: pageResponse(index, isEnding ? closeWithTheEnd(output.pageText) : output.pageText, output.artPrompt, isEnding, outcome.question),
+    bible: {
+      title: output.bibleTitle,
+      setting: output.bibleSetting,
+      characters: mergeBibleCharacters(existingBible.characters, output.bibleCharacters),
+      directions: output.bibleDirections,
+      path,
+    },
+    parentNote: output.parentNote,
+    refusal: null,
+    timings: outcome.timings,
+  };
 }
 
 /**
@@ -300,6 +336,8 @@ export interface PageModelAttempt {
 export interface RunPageTurnDeps {
   callModel: (rewriteReason: string | null) => Promise<PageModelAttempt>;
   safety: SafetyDeps;
+  /** IMP-24: the brief's own free-text check (brief_safety.ts checkBriefSafety), run before any model call. */
+  checkBrief: () => Promise<InputSafetyVerdict>;
 }
 
 /**
@@ -320,64 +358,38 @@ export async function runPageTurn(
   if (index >= existingBible.path.length) {
     return noneResponse(index, existingBible, { modelMs: 0, safetyMs: 0 }, PAST_ENDING_NOTE, null);
   }
+  const briefVerdict = await checkInputs(null, kidFirstName, deps.checkBrief, null);
+  if (briefVerdict.blocked) {
+    return noneResponse(index, existingBible, { modelMs: 0, safetyMs: 0 }, briefVerdict.parentNote ?? gentleParentNote(), briefVerdict.refusal);
+  }
+
   const isEnding = index === existingBible.path.length - 1;
+  const plan = questionKindFor(readingLevel, index, existingBible.path.length);
   // R-42: the kid's own name and every known bible character name are never a "foreign script" leak.
   const allowedNames = [kidFirstName, ...existingBible.characters.map((c) => c.name)];
 
-  const prepare = (attempt: PageModelAttempt): PageModelAttempt => ({
-    ...attempt,
-    output: { ...attempt.output, pageText: preparePageText(attempt.output.pageText, readingLevel, earlierTexts) },
+  const callModel = async (rewriteReason: string | null): Promise<PageModelAttempt> => {
+    const attempt = await deps.callModel(rewriteReason);
+    return { ...attempt, output: { ...attempt.output, pageText: preparePageText(attempt.output.pageText, readingLevel, earlierTexts) } };
+  };
+  const gateInputFor = (attempt: PageModelAttempt): GateInput => ({
+    pageText: attempt.output.pageText,
+    artPrompt: attempt.output.artPrompt,
+    extraGateTexts: [attempt.output.parentNote],
+    question: normalizeQuestion(attempt.output.question, plan, isEnding),
+    allowedNames,
   });
 
-  const buildSuccess = (
-    attempt: PageModelAttempt,
-    timings: { modelMs: number; safetyMs: number },
-  ): StoryPathResponseData => ({
+  const outcome = await writeWithOneRewrite(callModel, gateInputFor, readingLevel, language, deps.safety);
+  if (outcome.attempt === null) return noneResponse(index, existingBible, outcome.timings);
+
+  const { output } = outcome.attempt;
+  return {
     action: "page",
-    page: {
-      index,
-      text: isEnding ? closeWithTheEnd(attempt.output.pageText) : attempt.output.pageText,
-      artPrompt: attempt.output.artPrompt,
-      question: attempt.output.readingQuestion.trim(),
-      isEnding,
-    },
+    page: pageResponse(index, isEnding ? closeWithTheEnd(output.pageText) : output.pageText, output.artPrompt, isEnding, outcome.question),
     bible: existingBible,
-    parentNote: attempt.output.parentNote,
+    parentNote: output.parentNote,
     refusal: null,
-    timings,
-  });
-
-  const first = prepare(await deps.callModel(null));
-  const firstGate = await passesOutputGate(
-    first.output.pageText,
-    first.output.artPrompt,
-    first.output.readingQuestion,
-    readingLevel,
-    language,
-    deps.safety,
-    allowedNames,
-    [first.output.parentNote],
-  );
-  if (firstGate.safe) return buildSuccess(first, { modelMs: first.modelMs, safetyMs: firstGate.safetyMs });
-
-  const second = prepare(
-    await deps.callModel(
-      rewriteReasonFor(first.output.pageText, first.output.artPrompt, first.output.readingQuestion, readingLevel, language, allowedNames),
-    ),
-  );
-  const secondGate = await passesOutputGate(
-    second.output.pageText,
-    second.output.artPrompt,
-    second.output.readingQuestion,
-    readingLevel,
-    language,
-    deps.safety,
-    allowedNames,
-    [second.output.parentNote],
-  );
-  const modelMs = first.modelMs + second.modelMs;
-  const safetyMs = firstGate.safetyMs + secondGate.safetyMs;
-  if (secondGate.safe) return buildSuccess(second, { modelMs, safetyMs });
-
-  return noneResponse(index, existingBible, { modelMs, safetyMs });
+    timings: outcome.timings,
+  };
 }

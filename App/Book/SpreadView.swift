@@ -49,7 +49,8 @@ struct SpreadView<Controls: View>: View {
             TextPageView(text: "", level: level, pageNumber: pageNumber, placeholder: emptyText)
         } else {
             TextPageView(text: page?.text ?? "", level: level, pageNumber: pageNumber, highlight: highlight,
-                         question: showsQuestion ? page?.question : nil)
+                         question: showsQuestion ? page?.question : nil,
+                         backdrop: StillImageLoader.frameImage(for: page?.stillPath), backdropKey: page?.stillPath)
         }
     }
 }

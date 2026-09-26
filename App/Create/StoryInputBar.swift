@@ -1,10 +1,5 @@
+import PopKit
 import SwiftUI
-
-/// Who is talking: the parent narrates and directs by default; the kid can take a turn (PRD S2).
-enum Speaker: String, Sendable, CaseIterable {
-    case parent
-    case kid
-}
 
 /// The creation controls under the text page: the mic, a text field, whose turn it is, and
 /// "You continue" (the story engine writes the next bit on its own, PRD S5).

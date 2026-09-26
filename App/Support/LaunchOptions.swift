@@ -33,4 +33,10 @@ enum LaunchOptions {
         (UserDefaults.standard.string(forKey: "storyTurns") ?? "")
             .split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
+
+    /// `-hingeAngle 95` sweeps the debug hinge from flat to this angle at launch and holds it
+    /// (for screenshots of the curl and pop-up).
+    static var hingeAngle: Double? {
+        UserDefaults.standard.object(forKey: "hingeAngle") == nil ? nil : UserDefaults.standard.double(forKey: "hingeAngle")
+    }
 }

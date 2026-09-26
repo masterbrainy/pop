@@ -29,6 +29,11 @@ final class StoryMaker {
     @ObservationIgnored private var turnTask: Task<Void, Never>?
     @ObservationIgnored private var noteTask: Task<Void, Never>?
     @ObservationIgnored private var scriptLog: FileLog?
+    @ObservationIgnored private var layerTasks: [UUID: Task<Void, Never>] = [:]
+    /// Set by the book view: a scripted "finish" step ends and saves the book.
+    @ObservationIgnored var onScriptedFinish: @MainActor () async -> Void = {}
+    /// Set by the book view: a scripted "pop" step folds to about 90° and back.
+    @ObservationIgnored var onScriptedPop: @MainActor () async -> Void = {}
 
     init(reader: BookReader, kid: KidProfile, settings: ParentSettings, services: AppServices = .shared) {
         self.reader = reader
@@ -65,6 +70,17 @@ final class StoryMaker {
         for turn in LaunchOptions.storyTurns {
             switch turn.lowercased() {
             case "fold": reader.turnForward()
+            case "wait": try? await Task.sleep(for: .seconds(20))
+            case "pop":
+                log.append("pop: layers \(reader.currentPage?.layers.map { "\($0.cutouts.count) cutouts" } ?? "none")")
+                await onScriptedPop()
+            case "finish":
+                // Let the page on screen go live and record its clip first.
+                try? await Task.sleep(for: .seconds(35))
+                log.append("finishing: clips \(reader.book.pages.filter { $0.clipPath != nil }.count)/\(reader.book.pages.count)")
+                await onScriptedFinish()
+                log.append("finished: \(reader.book.title ?? "?") · status \(reader.book.status)")
+                return
             case "you continue": continueStory()
             default: submit(turn)
             }
@@ -197,8 +213,29 @@ final class StoryMaker {
         do {
             let path = try await services.media.store(from: remote, named: "\(reader.book.id)-p\(pageIndex)-v\(page.version).png")
             reader.updatePage(index: pageIndex) { $0.with(stillPath: path) }
+            if let updated = pageWith(index: pageIndex) { prepareLayers(for: updated) }
         } catch {
             note("A picture didn't arrive. It will be tried again on the next turn.")
+        }
+    }
+
+    /// Pop-up layers for a page with a picture, made in the background (Phase 4).
+    private func prepareLayers(for page: PageContent) {
+        guard let server = services.server else { return }
+        layerTasks[page.id]?.cancel()
+        let book = reader.book
+        let media = services.media
+        layerTasks[page.id] = Task { [weak self] in
+            do {
+                let layers = try await LayerMaker.makeLayers(for: page, book: book, server: server, media: media)
+                guard !Task.isCancelled, let self else { return }
+                // Only if the page is still the version these layers were drawn for.
+                guard self.pageWith(index: page.index)?.version == page.version else { return }
+                self.reader.updatePage(index: page.index) { $0.with(layers: layers) }
+                self.scriptLog?.append("layers ready for page \(page.index + 1): \(layers.cutouts.count) cutouts")
+            } catch {
+                self?.scriptLog?.append("layers failed for page \(page.index + 1): \(error.localizedDescription)")
+            }
         }
     }
 
@@ -219,6 +256,29 @@ final class StoryMaker {
               let path = page.stillPath, let data = StillImageLoader.data(for: path)
         else { return }
         Task { await live.show(page, still: data, prompt: prompt) }
+    }
+
+    /// Before saving: animate and record any page whose clip isn't complete yet (ROADMAP
+    /// Phase 5), so the saved book replays every page. Pages without a picture or motion
+    /// prompt keep their still. Each page waits at most `perPage`.
+    func completeClips(perPage: Duration = .seconds(45)) async -> (recorded: Int, missing: Int) {
+        var recorded = 0
+        var missing = 0
+        for page in reader.book.pages where page.clipPath == nil && !page.text.isEmpty {
+            guard live.canAnimate, let prompt = motionPrompts[page.id], let data = StillImageLoader.data(for: page.stillPath) else {
+                missing += 1
+                continue
+            }
+            await live.pageWillChange()
+            await live.show(page, still: data, prompt: prompt)
+            let deadline = ContinuousClock.now.advanced(by: perPage)
+            while ContinuousClock.now < deadline, reader.page(id: page.id)?.clipPath == nil {
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            if reader.page(id: page.id)?.clipPath != nil { recorded += 1 } else { missing += 1 }
+        }
+        scriptLog?.append("completed clips: recorded \(recorded), still missing \(missing)")
+        return (recorded, missing)
     }
 
     private func attachClip(_ url: URL, to pageId: UUID) {

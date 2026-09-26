@@ -32,7 +32,7 @@ struct BookView: View {
             if showsDebugPanel {
                 DebugHingePanel(hinge: hinge)
                     .padding(.horizontal, 16)
-                    .padding(.bottom, maker == nil ? 20 : 170)
+                    .padding(.bottom, maker == nil ? 20 : 84)
             }
         }
         .overlay(alignment: .top) { banner }
@@ -54,15 +54,18 @@ struct BookView: View {
             CoverView(book: reader.book, kid: kid)
         } else if let maker {
             SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,
-                       curl: hinge.state.curl, popDepth: reader.popDepth, live: maker.live) {
-                StoryInputBar(
-                    speaker: Binding(get: { maker.speaker }, set: { maker.speaker = $0 }),
-                    isListening: maker.isListening, partial: maker.partial, isWorking: maker.isWorking,
-                    onToggleMic: { Task { await maker.toggleMic() } },
-                    onSubmit: { maker.submit($0) },
-                    onContinue: { maker.continueStory() }
-                )
-            }
+                       curl: hinge.state.curl, popDepth: reader.popDepth, live: maker.live)
+                .overlay(alignment: .bottom) {
+                    StoryInputBar(
+                        speaker: Binding(get: { maker.speaker }, set: { maker.speaker = $0 }),
+                        isListening: maker.isListening, partial: maker.partial, isWorking: maker.isWorking,
+                        onToggleMic: { Task { await maker.toggleMic() } },
+                        onSubmit: { maker.submit($0) },
+                        onContinue: { maker.continueStory() }
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 14)
+                }
         } else {
             SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,
                        curl: hinge.state.curl, popDepth: reader.popDepth, replaysClips: true,
@@ -127,6 +130,11 @@ struct BookView: View {
             }
         }
         hinge.start(script: LaunchOptions.hingeScript)
+        maker?.onScriptedFinish = { await finish() }
+        maker?.onScriptedPop = {
+            hinge.play([.pop], interval: .milliseconds(80))
+            try? await Task.sleep(for: .seconds(6))
+        }
         await maker?.begin()
     }
 
@@ -143,6 +151,7 @@ struct BookView: View {
     private func finish() async {
         guard let maker, !finishing else { return }
         finishing = true
+        _ = await maker.completeClips()
         await maker.end()
         let title = await BookFinisher.title(for: reader.book, kid: kid, settings: maker.settings)
         let cover = reader.book.pages.first(where: { $0.stillPath != nil })?.stillPath

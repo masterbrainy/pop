@@ -67,6 +67,47 @@ Deno.test("buildStoryPathSystemPrompt never omits the personal-details or safety
   assert(prompt.includes("Kid-safety rubric"));
 });
 
+// R-42/ending-eval product rule: a direction that explicitly asks to end the
+// story now overrides the usual "about 5 to 8 beats" guidance for that turn.
+Deno.test("buildStoryPathSystemPrompt tells the model to end at this page when the direction asks to end now", () => {
+  const withEndRequest = buildStoryPathSystemPrompt(
+    basePathInput({
+      index: 1,
+      bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0"] },
+      input: { kind: "typed", speaker: "parent", text: "Let's finish the story here with a proper ending." },
+    }),
+  );
+  assert(withEndRequest.includes("make page 1 the very last beat"));
+  assert(withEndRequest.includes('set "isEnding" to true'));
+});
+
+Deno.test("buildStoryPathSystemPrompt does not add the end-now instruction for an ordinary direction", () => {
+  const withOrdinaryDirection = buildStoryPathSystemPrompt(
+    basePathInput({ input: { kind: "typed", speaker: "parent", text: "wake the dragon up" } }),
+  );
+  assertFalse(withOrdinaryDirection.includes("the very last beat"));
+});
+
+Deno.test("buildStoryPathSystemPrompt suggests concrete closing images for the path's last beat generally", () => {
+  const prompt = buildStoryPathSystemPrompt(basePathInput());
+  assert(prompt.includes("safe and happy"));
+  assert(prompt.includes("drifting off to sleep"));
+});
+
+Deno.test("buildStoryPathSystemPrompt gives the prescriptive ending-close instruction when the direction asks to end now", () => {
+  const withEndRequest = buildStoryPathSystemPrompt(
+    basePathInput({
+      index: 1,
+      kid: { firstName: "Maya", readingLevel: "reader", interests: ["dinosaurs"] },
+      bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0"] },
+      input: { kind: "typed", speaker: "parent", text: "Let's finish the story here with a proper ending." },
+    }),
+  );
+  assert(withEndRequest.includes("unmistakable close"));
+  assert(withEndRequest.includes("safe and back home"));
+  assert(withEndRequest.includes('the words "The end."'));
+});
+
 Deno.test("buildStoryPathSystemPrompt tells the model to write only in the brief's language", () => {
   const prompt = buildStoryPathSystemPrompt(basePathInput());
   assert(prompt.includes("only in English"));
@@ -101,4 +142,30 @@ Deno.test("buildStoryPageSystemPrompt tells the model to write only in the brief
   const prompt = buildStoryPageSystemPrompt(basePageInput());
   assert(prompt.includes("only in English"));
   assert(prompt.includes("Never mix in a word, phrase or script from any other language"));
+});
+
+Deno.test("buildStoryPageSystemPrompt tells the model to write a clear ending only on the path's last index", () => {
+  const notLastPage = buildStoryPageSystemPrompt(
+    basePageInput({ bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0", "Beat 1"] }, index: 0 }),
+  );
+  assertFalse(notLastPage.includes("path's last page"));
+
+  const lastPage = buildStoryPageSystemPrompt(
+    basePageInput({ bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0", "Beat 1"] }, index: 1 }),
+  );
+  assert(lastPage.includes("path's last page"));
+  assert(lastPage.includes("unmistakable close"));
+  assert(lastPage.includes('the words "The end."'));
+});
+
+Deno.test("buildStoryPageSystemPrompt asks for one of the eval's exact closing phrases at the reader level", () => {
+  const lastPage = buildStoryPageSystemPrompt(
+    basePageInput({
+      kid: { firstName: "Maya", readingLevel: "reader", interests: ["dinosaurs"] },
+      bible: { title: null, setting: "", characters: [], directions: [], path: ["Beat 0", "Beat 1"] },
+      index: 1,
+    }),
+  );
+  assert(lastPage.includes("safe and back home"));
+  assert(lastPage.includes("drifted off to sleep"));
 });

@@ -3,15 +3,18 @@
 // without pulling in the server's request-validation stack.
 import type { ReadingLevel } from "../../supabase/functions/_shared/reading_levels.ts";
 
-export type TurnKind = "speech" | "typed" | "continue";
+export type TurnKind = "speech" | "typed";
 export type Speaker = "parent" | "kid";
 
-export interface EvalTurn {
-  kind: TurnKind;
-  speaker: Speaker;
-  /** Empty string is valid for a "continue" ("You continue") turn. */
-  text: string;
-}
+/**
+ * A direction turn (mode "path", with input), or `next: true` — the pre-P-04
+ * "continue" tap's equivalent under path/page mode: write the next page along
+ * the path with mode "page" and no input (docs/CONTRACTS.md "story-turn
+ * modes path and page").
+ */
+export type EvalTurn =
+  | { next: true; speaker: Speaker }
+  | { kind: TurnKind; speaker: Speaker; text: string };
 
 export interface EvalBrief {
   kidFirstName: string;
@@ -50,10 +53,20 @@ export interface EvalExpectation {
    */
   requireParentNoteOnBlock?: boolean;
   /**
-   * R-35(d): the session asks the story to reach an ending. Checks the final
-   * turn's page text against a simple "reads like an ending" heuristic.
+   * R-35(d): the session asks the story to reach an ending. After the
+   * scripted turns, run.ts keeps calling mode "page" for the next index
+   * (up to 8 extra calls) until a page comes back with `isEnding: true`, then
+   * checks that page's text against a simple "reads like an ending"
+   * heuristic and requires that isEnding was actually reached.
    */
   expectEnding?: boolean;
+  /**
+   * R-42: every turn from a kid speaker must never come back with
+   * `refusal: "real_harm"` — for playful/pretend content (for example
+   * imaginary combat) that a content-moderation flag alone must not
+   * misclassify as a real-harm disclosure.
+   */
+  mustNotBeRealHarm?: boolean;
   /** Human-readable note shown in the report for context; not itself checked. */
   note?: string;
 }
@@ -76,6 +89,8 @@ export interface TurnOutcome {
   parentNote: string | null;
   /** R-41: "real_harm" | "unsafe" | null — set only on a safety-refused "none". */
   refusal: string | null;
+  /** True when this page is the story path's last beat (docs/CONTRACTS.md `page.isEnding`). */
+  isEnding: boolean;
   modelMs: number;
   safetyMs: number;
   httpStatus: number;

@@ -60,20 +60,20 @@ Pop! lets a parent make a picture book for their child in minutes, about whateve
 
 | Time | On screen | Say | Capture |
 |---|---|---|---|
-| 0:00–0:15 | Bookshelf, phone open | "Every kid has a thing they're obsessed with. Pop! lets a parent turn it into a book." | 📸 S1 |
-| 0:15–0:30 | New Book. Brief: dinosaurs, "make it about sharing" | "Maya loves dinosaurs. Tonight I want a story about sharing. That's the setup." | 📸 S2 |
-| 0:30–1:00 | Parent (voice): *"Rex had the biggest pile of toys in the valley."* Text → "painting…" → still → it moves | "I just talk. Now the picture… and now it's alive, showing only what the page says." | 🎥 R1 hero clip (overlay timings, TBD Phase 2 and 3) |
-| 1:00–1:20 | Typed direction: *"Add a little dinosaur who wants to play."* Then **You continue** | "I can type and direct it, or just say 'you continue'." | 🎥 R2 |
-| 1:20–1:45 | Fold: curl, fall back, then turn | "The hinge *is* the page." | 🎥 R3 |
-| 1:45–2:10 | Tilt to ~90°: the pop-up. Open flat: they fold back | "And like any good pop-up book…" | 🎥 R4 · 📸 S3 |
-| 2:10–2:30 | Close → the cover → the shelf | "Close it and it's saved. Made at lunch, ready for bedtime." | 📸 S4 |
-| 2:30–2:50 | KILL on the debug overlay, then open the saved book: identical | "Nothing is generated again. What you save is what they see, even offline." | 🎥 R5 |
+| 0:00–0:15 | Bookshelf, phone open | "Every kid has a thing they're obsessed with. Pop! lets a parent turn it into a book." | 📸 IMG1 |
+| 0:15–0:30 | New Book. Brief: dinosaurs, "make it about sharing" | "Maya loves dinosaurs. Tonight I want a story about sharing. That's the setup." | 📸 IMG2 |
+| 0:30–1:00 | Parent (voice): *"Rex had the biggest pile of toys in the valley."* Text → "painting…" → still → it moves | "I just talk. Now the picture… and now it's alive, showing only what the page says." | 🎥 VID1 hero clip (overlay timings, TBD Phase 2 and 3) |
+| 1:00–1:20 | Typed direction: *"Add a little dinosaur who wants to play."* Then **You continue** | "I can type and direct it, or just say 'you continue'." | 🎥 VID2 |
+| 1:20–1:45 | Fold: curl, fall back, then turn | "The hinge *is* the page." | 🎥 VID3 |
+| 1:45–2:10 | Tilt to ~90°: the pop-up. Open flat: they fold back | "And like any good pop-up book…" | 🎥 VID4 · 📸 IMG3 |
+| 2:10–2:30 | Close → the cover → the shelf | "Close it and it's saved. Made at lunch, ready for bedtime." | 📸 IMG4 |
+| 2:30–2:50 | KILL on the debug overlay, then open the saved book: identical | "Nothing is generated again. What you save is what they see, even offline." | 🎥 VID5 |
 | 2:50–3:00 | The spread | "The only screen time that happens with your kid, not instead of them." | — |
 
 **Swap-ins:** *made together*: replace the 1:00 beat with **kid's turn** ("And the little one had a purple tail!"). *Apple audience*: show the hinge angle on the overlay in the 2:30 beat.
 **If something breaks:** Reactor fails → the still-image pan takes over automatically. The network fails → open the saved golden book on the device. Speech fails → type. The hinge is jumpy → use the slider.
 
-**Shot list:** S1 bookshelf (Phase 5) · S2 brief (Phase 2) · R1 voice → animation (Phase 3) · R2 direction + You continue (Phase 2) · R3 curl (Phase 1) · R4/S3 pop-up (Phase 4) · S4 cover (Phase 5) · R5 exact replay with Reactor off (Phase 5) · R6 kid's turn (Phase 2) · R7 Reactor killed mid-page → still-pan (Phase 3).
+**Shot list:** IMG1 bookshelf (Phase 5) · IMG2 brief (Phase 2) · VID1 voice → animation (Phase 3) · VID2 direction + You continue (Phase 2) · VID3 curl (Phase 1) · VID4/IMG3 pop-up (Phase 4) · IMG4 cover (Phase 5) · VID5 exact replay with Reactor off (Phase 5) · VID6 kid's turn (Phase 2) · VID7 Reactor killed mid-page → still-pan (Phase 3).
 
 ---
 

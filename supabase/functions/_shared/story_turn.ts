@@ -71,7 +71,7 @@ function toResponseData(
   return {
     action: output.action,
     page: {
-      index: pageIndex,
+      index: output.action === "new_page" ? pageIndex + 1 : pageIndex,
       text: output.pageText,
       artPrompt: output.artPrompt,
       breakSuggested: output.breakSuggested,
@@ -80,6 +80,18 @@ function toResponseData(
     parentNote: output.parentNote,
     timings,
   };
+}
+
+/**
+ * An "append" returns the whole page. If the model sent only the new words, put the
+ * page's existing words back in front, so nothing already told disappears.
+ */
+export function keepExistingWords(output: StoryModelOutput, currentText: string): StoryModelOutput {
+  const existing = currentText.trim();
+  if (output.action !== "append" || existing === "") return output;
+  const squash = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+  if (squash(output.pageText).startsWith(squash(existing))) return output;
+  return { ...output, pageText: `${existing} ${output.pageText.trim()}` };
 }
 
 /** The safe fallback when even the rewrite fails the gate (PRD §8.6 responses). */
@@ -120,7 +132,11 @@ export async function runStoryTurn(
   existingBible: StoryBible,
   deps: StoryTurnDeps,
 ): Promise<StoryTurnResponseData> {
-  const first = await deps.callModel(null);
+  const keepPage = (attempt: ModelAttempt): ModelAttempt => ({
+    ...attempt,
+    output: keepExistingWords(attempt.output, currentText),
+  });
+  const first = keepPage(await deps.callModel(null));
   const firstGate = await passesGate(first.output, readingLevel, deps.safety);
   if (firstGate.safe) {
     return toResponseData(first.output, currentIndex, existingBible.characters, {
@@ -132,7 +148,7 @@ export async function runStoryTurn(
   const rewriteReason = !withinWordLimit(first.output.pageText, readingLevel)
     ? "The page was too long for this reading level's word limit."
     : "The page did not pass the kid-safety rubric.";
-  const second = await deps.callModel(rewriteReason);
+  const second = keepPage(await deps.callModel(rewriteReason));
   const secondGate = await passesGate(second.output, readingLevel, deps.safety);
   const modelMs = first.modelMs + second.modelMs;
   const safetyMs = firstGate.safetyMs + secondGate.safetyMs;

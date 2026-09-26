@@ -75,16 +75,27 @@ struct BookView: View {
                        pictureUnavailable: maker.showsImagineCard(for: shown),
                        emptyText: maker.openingText)
                 .overlay(alignment: .bottom) {
-                    StoryInputBar(
-                        speaker: Binding(get: { maker.speaker }, set: { maker.speaker = $0 }),
-                        isListening: maker.isListening, partial: maker.partial, isWorking: maker.isWorking,
-                        isStarting: !maker.hasShownPage, returnedPrompt: maker.returnedPrompt?.text,
-                        returnedPromptId: maker.returnedPrompt?.id,
-                        onToggleMic: { Task { await maker.toggleMic() } },
-                        onSubmit: { maker.submit($0) }
-                    )
+                    Group {
+                        // The page's question stands in for the input bar while it shows (IMP-25).
+                        if let question = maker.activeQuestion {
+                            QuestionStripView(question: question, level: kid.readingLevel,
+                                              onChoose: { maker.answer($0) },
+                                              onSomethingElse: { Task { await maker.somethingElse() } },
+                                              onSkip: { maker.skipQuestion() })
+                        } else {
+                            StoryInputBar(
+                                speaker: Binding(get: { maker.speaker }, set: { maker.speaker = $0 }),
+                                isListening: maker.isListening, partial: maker.partial, isWorking: maker.isWorking,
+                                isStarting: !maker.hasShownPage, returnedPrompt: maker.returnedPrompt?.text,
+                                returnedPromptId: maker.returnedPrompt?.id,
+                                onToggleMic: { Task { await maker.toggleMic() } },
+                                onSubmit: { maker.submit($0) }
+                            )
+                        }
+                    }
                     .padding(.horizontal, 12)
                     .padding(.bottom, 14)
+                    .animation(.easeInOut(duration: 0.2), value: maker.activeQuestion)
                 }
         } else {
             SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,

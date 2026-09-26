@@ -84,7 +84,6 @@ private extension PageContent {
     /// This page, numbered after `occupant` (the page it replaces at the same index).
     func succeeding(_ occupant: PageContent?) -> PageContent {
         let next = max(version, (occupant?.version ?? 0) + 1)
-        return PageContent(id: id, index: index, version: next, text: text, artPrompt: artPrompt, stillPath: stillPath,
-                           layers: layers, motion: motion, clipPath: clipPath, question: question)
+        return renumbered(index: index, version: next)
     }
 }

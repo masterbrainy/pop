@@ -17,7 +17,8 @@ final class AppModel {
     @ObservationIgnored private let root = URL.applicationSupportDirectory.appending(path: "books", directoryHint: .isDirectory)
 
     init() {
-        kid = Self.loadValue(KidProfile.self, key: Self.kidKey) ?? SampleBooks.kid
+        // The sample kid's placeholder interests would steer every new book towards foxes (IMP-24).
+        kid = (Self.loadValue(KidProfile.self, key: Self.kidKey) ?? SampleBooks.kid).droppingSampleInterests()
         settings = Self.loadValue(ParentSettings.self, key: Self.settingsKey) ?? ParentSettings()
         store = try? FileBookStore(root: root)
     }
@@ -83,9 +84,7 @@ final class AppModel {
                 PageLayers(platePath: absolute(layers.platePath) ?? layers.platePath,
                            cutouts: layers.cutouts.map { Cutout(characterId: $0.characterId, path: absolute($0.path) ?? $0.path) })
             }
-            return PageContent(id: page.id, index: page.index, version: page.version, text: page.text, artPrompt: page.artPrompt,
-                               stillPath: absolute(page.stillPath), layers: layers, motion: page.motion, clipPath: absolute(page.clipPath),
-                               question: page.question)
+            return page.with(stillPath: absolute(page.stillPath)).with(layers: layers).with(clipPath: absolute(page.clipPath))
         }
         return Book(id: book.id, kidId: book.kidId, brief: book.brief, bible: book.bible, pages: pages, status: book.status,
                     title: book.title, coverPath: absolute(book.coverPath), createdAt: book.createdAt, finishedAt: book.finishedAt)

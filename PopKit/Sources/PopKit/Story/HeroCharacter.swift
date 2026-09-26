@@ -47,6 +47,6 @@ extension StoryBrief {
     func addingInterest(_ interest: String) -> StoryBrief {
         let trimmed = interest.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !interests.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return self }
-        return StoryBrief(interests: interests + [trimmed], realMoment: realMoment, teach: teach, language: language)
+        return with(interests: interests + [trimmed])
     }
 }

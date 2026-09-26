@@ -20,7 +20,8 @@ struct RootView: View {
 }
 
 /// For end-to-end checks: `-screen create` makes and saves a new book; `-screen latest`
-/// opens the newest saved book to read (its clips replay without Reactor).
+/// opens the newest saved book to read (its clips replay without Reactor). `-setup` answers the
+/// guided setup's cards for the new book.
 private struct AutomationBookView: View {
     let opensLatest: Bool
     @State private var model = AppModel()
@@ -44,7 +45,7 @@ private struct AutomationBookView: View {
                 log.append("opened \(latest.title ?? "?") · pages \(latest.pages.count) · clips on disk \(latest.pages.filter { $0.clipPath.map { FileManager.default.fileExists(atPath: $0) } ?? false }.count)")
                 book = latest
             } else {
-                book = model.newBook(brief: StoryBrief(interests: model.kid.interests))
+                book = model.newBook(brief: LaunchOptions.setup ?? StoryBrief(interests: model.kid.interests))
             }
         }
     }

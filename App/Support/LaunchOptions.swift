@@ -47,6 +47,12 @@ enum LaunchOptions {
         return HeroDrawing(imageData: data, description: UserDefaults.standard.string(forKey: "heroName") ?? "the hero")
     }
 
+    /// `-setup "hero:kid,place:pond,problem:lost,mood:silly"` answers the guided setup's cards for
+    /// `-screen create` (IMP-24), instead of starting from the kid profile.
+    static var setup: StoryBrief? {
+        UserDefaults.standard.string(forKey: "setup").map(SetupCards.brief(fromScript:))
+    }
+
     /// `-hingeAngle 95` sweeps the debug hinge from flat to this angle at launch and holds it
     /// (for screenshots of the curl and pop-up).
     static var hingeAngle: Double? {

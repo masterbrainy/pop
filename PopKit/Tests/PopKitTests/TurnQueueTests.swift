@@ -96,6 +96,24 @@ struct TurnQueueTests {
         #expect(toRun?.text == "A new turn begins.")
     }
 
+    /// IMP-25: a tapped choice is its own turn; it's never joined to anyone's words, even the kid's.
+    @Test func aQueuedChoiceNeverMergesWithWordsBeforeOrAfterIt() async {
+        let queue = TurnQueue()
+        _ = await queue.submit(input("Once upon a time"))
+        _ = await queue.submit(input("make it purple", speaker: .kid))
+        _ = await queue.submit(input("Pip climbs a tree.", speaker: .kid, kind: .choice))
+        _ = await queue.submit(input("and a hat", speaker: .kid))
+        _ = await queue.submit(input("Pip sails away.", speaker: .kid, kind: .choice))
+        _ = await queue.submit(input("Pip naps.", speaker: .kid, kind: .choice))
+
+        #expect(await queue.drain() == input("make it purple", speaker: .kid))
+        #expect(await queue.drain() == input("Pip climbs a tree.", speaker: .kid, kind: .choice))
+        #expect(await queue.drain() == input("and a hat", speaker: .kid))
+        #expect(await queue.drain() == input("Pip sails away.", speaker: .kid, kind: .choice))
+        #expect(await queue.drain() == input("Pip naps.", speaker: .kid, kind: .choice))
+        #expect(await queue.drain() == nil)
+    }
+
     @Test func resetClearsQueuedInputsAndMarksTheQueueIdle() async {
         let queue = TurnQueue()
         _ = await queue.submit(input("Once upon a time"))

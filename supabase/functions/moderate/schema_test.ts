@@ -25,3 +25,13 @@ Deno.test("requestSchema rejects an image body missing mimeType", () => {
   const result = requestSchema.safeParse({ imageBase64: "aGVsbG8=" });
   assertFalse(result.success);
 });
+
+Deno.test("requestSchema rejects imageBase64 longer than the cap", () => {
+  const result = requestSchema.safeParse({ imageBase64: "a".repeat(3_000_001), mimeType: "image/png" });
+  assertFalse(result.success);
+});
+
+Deno.test("requestSchema accepts imageBase64 right at the cap", () => {
+  const result = requestSchema.safeParse({ imageBase64: "a".repeat(3_000_000), mimeType: "image/png" });
+  assert(result.success);
+});

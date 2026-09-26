@@ -1,8 +1,36 @@
 # Pop! — Review & QA
 
-*Owner: **Pop! · Review & QA** · Final readiness audit of `main` @ `6fb90ca` (PRD v3.1, ROADMAP v3.1, with P-03) · 2026-09-25*
+*Owner: **Pop! · Review & QA** · Readiness audit of `main` @ `6fb90ca` (PRD v3.1, ROADMAP v3.1, with P-03), then commit reviews during the build · 2026-09-25*
 
-## Readiness verdict: **Ready**
+**Open findings:** R-26, R-27 (MEDIUM) and R-29 (LOW). None blocks.
+
+## Commit reviews
+
+### `fa21caf..7a35ce8`: skeleton, probes 0.1/0.2/0.3a, live-scene bridge, PostureMachine, contracts (2026-09-25)
+
+**Verdict: nothing blocking.** No CRITICAL or HIGH findings. Fix R-26 before Phase 4 wires the pop-up and R-27 in the 0.6 migration; R-29 is a tidy-up; QA fixed R-28.
+- **Tests:** PopKit 33/33 passed (40/40 with QA's R-28 tests); `web/live-scene` 9/9 passed and `tsc` is clean; `scripts/sim.sh build` exits 0 with no warnings.
+- **Coverage (PopKit sources, lines):** 81.0%, rising to **96.5%** with R-28. `PostureMachine` is at 99.0%.
+- **Generated files match their sources:**
+  - Rebuilding `web/live-scene` reproduces `App/LiveScene/Web/` byte for byte.
+  - `xcodegen generate` reproduces `Pop.xcodeproj` exactly.
+  - Both were checked in a scratch copy of `7a35ce8`.
+- **Security:** clean.
+  - No key patterns in the diff, the bundle or the wasm, and the project ref is in no tracked file.
+  - The scripts pass keys through header files and print only statuses.
+  - The dev token is written with mode 600, and the probe deletes it after reading it.
+  - `SceneSchemeHandler` serves only a fixed allow-list, with no path traversal.
+  - The JWT reaches JS as a `callAsyncJavaScript` argument; it is never interpolated into the script.
+  - `isInspectable` is DEBUG-only.
+  - `config/Supabase.xcconfig` holds empty values, and there are no ATS exceptions.
+- **Facts:**
+  - `MotionPromptBuilder` matches the ROADMAP §2 template.
+  - `ReadingLevel` matches PRD §8.7 and P1.
+  - CONTRACTS §1 matches `Models.swift` field for field.
+  - BUILD_LOG's "about $0.30 per 30 s" matches Stable's $0.582/min.
+  - The outer-screen size in ROADMAP §3 (466×678 pt) matches QA's earlier measurement.
+
+## Readiness verdict (build gate): **Ready**
 
 Every blocking finding is fixed and re-verified. There are **no open CRITICAL, HIGH or MEDIUM findings**.
 - **Docs:** the builder fixed R-01–R-18 and R-22 in `ad45b2f`, and I re-checked each one against the new text. P-03 resolved R-20.
@@ -11,7 +39,7 @@ Every blocking finding is fixed and re-verified. There are **no open CRITICAL, H
 
 **Settled with Brian:** Gemini billing is on (R-11; builder's test picture returned HTTP 200), D7 the vendor split (R-17), and R-23, the Reactor account (his own). Nothing is left for Brian except saying go.
 
-**Open findings: none.** All 25 are fixed, resolved or closed.
+All 25 readiness findings (R-01 to R-25) are fixed, resolved or closed.
 
 ## Findings
 
@@ -44,6 +72,10 @@ Severity: **CRITICAL** = a security hole or data loss; stop now · **HIGH** = bl
 | R-23 | LOW | **Confirm whose Reactor account the key belongs to.** It shows 26 past sessions (0 open now). If it's shared with the teammate, a "kill all" stops their sessions too, and the credit budget mixes with theirs. | Reactor `GET /accounts/{id}/sessions`: 26 total, 0 open | Brian confirms it's his own account, or kills are limited to Pop!'s own session ids | Brian | **Resolved** 2026-09-25: Brian confirmed the Reactor key is on his own account, so a kill-all touches only his sessions |
 | R-24 | LOW | **A P-03 leftover in the architecture diagram.** ROADMAP §2 still lists `SingleReader` (the non-Duo reader) under Book UI, and Phase 1 still says `HingeSource` (Duo, slider, none), though P-03 removed both and §2's unit table lists only the Duo and slider versions. | ROADMAP lines 34 and 136 @ `ad45b2f`; P-03 in `3e2b999` | Remove `SingleReader` from the diagram and "none" from Phase 1 | Builder | **Fixed** (verified): `SingleReader` left the §2 diagram in `e9ad206`, and Phase 1 says `HingeSource` (Duo and debug slider) in `597b0f9` |
 | R-25 | LOW | **Small doc updates after QA's environment work.** Xcode 27.1 has no Simulator.app; its replacement is DeviceHub.app, and the Duo only renders past the Apple logo while DeviceHub is open (R-21). ROADMAP §2's access model still waits on R-23, which Brian has since confirmed (his own Reactor account). | ROADMAP line 122 (0.1) and line 224 (§8) say "Simulator.app"; line 67 (R-23 caveat) @ `ad45b2f` | Say "DeviceHub.app's fold controls" in 0.1 and §8, and note in §1 or §3 that DeviceHub must be open. Drop the R-23 caveat: `reactor-sessions` can kill every session on the account | Builder | **Fixed** in `e9ad206` (verified): DeviceHub is named in ROADMAP §1, §3, 0.1 and §8, and in CLAUDE.md's Environment; the R-23 caveat is gone (line 67). §3's new DeviceHub note checks out: `Xcode-beta.app/Contents/SharedFrameworks/DeviceKit.framework/…/CoreDevicePopDeviceKitExtension.devicekitplugin` contains `deviceChrome.hingeSlider`, `HingeController` and "Disable Hinge Interpolation". That the slider sweeps through the fold by default is inferred from that setting and confirmed in 0.1 |
+| R-26 | MEDIUM | **`PostureMachine` has no hysteresis for the pop-up or for settling back.** (1) `popBegan` and `popEnded` share one threshold (130°), so a hinge resting near 130° flaps between them. In Phase 4 each flap swaps video and diorama, and a `popEnded` may restart the page's animation (a new Orbis start). (2) The curl starts at exactly 170°, so jitter there repeats `turnCancelled` and flickers the curl. Turning is already debounced; these two aren't. UIKit's hinge update rate is "system policy", and a hand-held fold rests near angles, so real jitter is likely | Scratch test on `7a35ce8` (all angles `.partiallyOpen`): `[180, 139, 131, 129.5, 130.5, 129.5, 130.5, 129.5]` gives `pageSettled, turnCommitted, popBegan, popEnded, popBegan, popEnded, popBegan`, and `[180, 165, 171, 169, 171, 169, 171]` gives `pageSettled` then 3 × `turnCancelled`. `PostureMachine.swift` `fold(to:armed:from:)` and `popDepth(at:)`. No test feeds jitter around 130° or 170° | Add a separate `popEndAngle` to `PostureConfig` (for example, begin below 130°, end only above about 135°; `isValid` checks the order), and a small dead band before the curl starts (or cancel only once the curl has passed a minimum). Add two jitter tests like `foldingPastTheTurnPointTurnsExactlyOnce`, using the sequences in Evidence | Builder | Open |
+| R-27 | MEDIUM | **CONTRACTS §4 doesn't say that `rate_limits` and `reactor_sessions` are server-only.** "RLS on every table: a user sees only their own rows" reads like the usual own-rows policy. If the 0.6 migration gives the app's signed-in user write access to those two tables, anyone with the app's sign-in can reset their own rate-limit counts or delete their session records through the REST API, which undoes the per-user limit and `reactor-token`'s `cleanup` bookkeeping. Separately, anonymous sign-in gives every new user a fresh limit, so per-user limits alone don't cap Reactor spend | CONTRACTS.md §4 @ `7a35ce8`; ROADMAP §2 access model; PRD §12 risk "Someone who finds the server functions' address burns the demo's Reactor credit". `supabase/` isn't on `main` yet (only `config.toml`) | In CONTRACTS §4 say that `rate_limits` and `reactor_sessions` have RLS on with **no** client policies, so only the functions' service role reads or writes them. Optionally cap `reactor-token` mints across all users per hour, as the real demo-credit guard. QA checks the migration when it lands | Builder (backend track) | Open |
+| R-28 | LOW | **The domain copy helpers had no tests.** `PageContent.with(…)` (5 of them), `Book.with(…)` (2), `Book.finished` and `ReadingLevel.title/ages/sentencesPerPage` never ran in the tests. `Models.swift` had 60.6% line coverage and `ReadingLevel.swift` 40.0% | `swift test --enable-code-coverage` on `7a35ce8` and the per-function counts in the codecov JSON | Add tests | QA | **Fixed** by QA: `PopKit/Tests/PopKitTests/DomainCopyTests.swift` (7 tests; covers field-by-field copies, that the original is untouched, `finished`, and the PRD §8.7 table). Both files now have 100% coverage, and PopKit 96.5% |
+| R-29 | LOW | **`scripts/sim.sh log` uses the route that ROADMAP §3 says fails.** `log_recent` runs `simctl spawn … log show`, but §3 records that `simctl spawn … log` fails on this Mac (`getpwuid_r`), which is why probes write `Documents/<probe>.log`. BUILD_LOG doesn't list `log`, so it's only a trap for whoever tries it | `scripts/sim.sh` lines 43–47; ROADMAP §3 "Logs" @ `7a35ce8`. QA didn't reproduce the error: the Duo was shut down at 23:36 (`simctl` 405 "device is not booted") | Make `log` tail `$(app_documents)/*.log` instead (`lib-env.sh` already has `app_documents`), or remove it | Builder | Open |
 
 ## Checks the pivots asked for
 
@@ -87,5 +119,6 @@ Severity: **CRITICAL** = a security hole or data loss; stop now · **HIGH** = bl
 ## Not verified
 
 - **That Supabase's secrets hold the same values as the local `.env`.** The names match and each local key works. The value comparison was declined, so it wasn't done.
-- **Whether the simulator delivers a continuous hinge angle.** That's Phase 0.1's job.
-- **Server functions.** None exist yet.
+- **Whether the simulator delivers a continuous hinge angle, and `PostureMachine` driven by the real hinge.** Only DeviceHub's slider moves the hinge (ROADMAP §3), so this is a manual check. QA didn't run it.
+- **Server functions and migrations.** None are on `main` as of `7a35ce8`; R-27 is checked when 0.6 lands.
+- **The inner-spread sizes in 0.2.** They're measured once the hinge is opened by hand (ROADMAP §3).

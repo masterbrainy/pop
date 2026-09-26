@@ -76,7 +76,7 @@ Response `data`: `{ "path": "userId/bookId/…png", "url": "signed URL, 1 h", "w
 - One locked art style for every picture. `page`, `plate` and `cutout` are 16:9; `cover` is 2:3; `character` is a 1:1 reference sheet on a plain background.
 - Character reference images are sent to Gemini with the prompt for consistency.
 - The picture passes `omni-moderation-latest`; if it's flagged it's regenerated once with a safer prompt, and otherwise `placeholder: true` comes back with no picture.
-- `cutout` draws one character on flat chroma green (#00FF00) for keying on the device; `plate` is the scene without the characters.
+- `cutout` draws one character on flat magenta (#FF00FF), which the device removes by flood-filling the border-connected backdrop (`BackgroundKey`); `plate` is the scene without the characters.
 
 ### `motion-prompt`: the page's animation prompt (P4)
 Request: `{ "bookId", "pageIndex", "text": "…", "stillPath": "…" }` → `data`: `{ "scene": "…", "motion": "one gentle motion clause" }`. Gemini reads the page text and the still. The app builds the final prompt from the ROADMAP §2 template. Both parts pass the safety gate.

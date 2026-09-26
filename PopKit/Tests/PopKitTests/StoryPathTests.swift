@@ -115,24 +115,21 @@ import Testing
         return server
     }
 
-    @Test func buildingAPageWritesItThenPaintsItThenPreparesItsMotion() async throws {
-        let pipeline = PagePipeline(server: await server())
+    @Test func writingAPageReleasesItsWordsWithoutWaitingForItsPicture() async throws {
+        let server = await server()
+        let pipeline = PagePipeline(server: server)
         let book = Book(kidId: kid.id, brief: StoryBrief(interests: []), createdAt: Date(timeIntervalSince1970: 0))
         let request = StoryEngine.pageRequest(book: book, kid: kid, settings: ParentSettings(), shownPages: [], index: 1)
-        let events = await collect(await pipeline.buildPage(request, book: book))
+        let events = await collect(await pipeline.writePage(request, book: book))
 
-        guard events.count == 3, case let .pageWritten(outcome) = events[0] else {
+        guard events.count == 1, case let .pageWritten(outcome) = events[0] else {
             Issue.record("unexpected events \(events)")
             return
         }
         #expect(outcome.page?.index == 1)
-        #expect(events[1] == .stillReady(pageIndex: 1, path: "u/b/page-1.png", url: "https://example.test/p.png"))
-        if case let .motionReady(index, prompt) = events[2] {
-            #expect(index == 1)
-            #expect(!prompt.isEmpty)
-        } else {
-            Issue.record("expected motionReady, got \(events[2])")
-        }
+        // The words end the text lane; painting is the art lane's job.
+        let artCallCount = await server.artCalls.count
+        #expect(artCallCount == 0)
     }
 
     @Test func aNewBuildForTheSamePageCancelsTheOldOneQuietly() async throws {
@@ -140,11 +137,11 @@ import Testing
         let pipeline = PagePipeline(server: server)
         let book = Book(kidId: kid.id, brief: StoryBrief(interests: []), createdAt: Date(timeIntervalSince1970: 0))
         let request = StoryEngine.pageRequest(book: book, kid: kid, settings: ParentSettings(), shownPages: [], index: 1)
-        let first = await pipeline.buildPage(request, book: book)
-        let second = await pipeline.buildPage(request, book: book)
+        let first = await pipeline.writePage(request, book: book)
+        let second = await pipeline.writePage(request, book: book)
         let firstEvents = await collect(first)
         let secondEvents = await collect(second)
         #expect(firstEvents.isEmpty)
-        #expect(secondEvents.count == 3)
+        #expect(secondEvents.count == 1)
     }
 }

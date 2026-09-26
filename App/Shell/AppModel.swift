@@ -29,8 +29,9 @@ final class AppModel {
             return
         }
         do {
-            let saved = try await store.loadAll().map(resolvingPaths)
-            books = saved + [SampleBooks.fox]
+            let shelf = try await store.loadShelf()
+            books = shelf.books.map(resolvingPaths) + [SampleBooks.fox]
+            loadError = shelf.unreadableCount > 0 ? "Some saved books couldn't be opened." : nil
         } catch {
             loadError = "Some saved books couldn't be opened."
             books = [SampleBooks.fox]
@@ -54,8 +55,12 @@ final class AppModel {
 
     func delete(_ book: Book) async {
         guard book.id != SampleBooks.fox.id else { return }
-        try? await store?.delete(book.id)
-        books.removeAll { $0.id == book.id }
+        do {
+            try await store?.delete(book.id)
+            books.removeAll { $0.id == book.id }
+        } catch {
+            loadError = "The book couldn't be deleted: \(error.localizedDescription)"
+        }
     }
 
     func update(kid: KidProfile, settings: ParentSettings) {

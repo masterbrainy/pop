@@ -152,6 +152,16 @@ struct APITests {
         #expect(try object(from: encoder.encode(ReactorTokenRequest.cleanup()))["action"] as? String == "cleanup")
     }
 
+    /// The deployed `reactor-token` sends `expiresAt` in milliseconds; the app reads seconds.
+    /// Anything above 1e12 can only be milliseconds (1e12 s is the year 33658).
+    @Test func reactorMintExpiryInMillisecondsIsReadAsSeconds() throws {
+        let millis = try decoder.decode(ReactorMintResponse.self, from: Data(#"{"jwt":"j","expiresAt":1790000000123}"#.utf8))
+        #expect(millis.expiresAt == 1_790_000_000.123)
+        let seconds = try decoder.decode(ReactorMintResponse.self, from: Data(#"{"jwt":"j","expiresAt":1790000000}"#.utf8))
+        #expect(seconds.expiresAt == 1_790_000_000)
+        #expect(ReactorMintResponse(jwt: "j", expiresAt: 1_790_000_000_000).expiresAt == 1_790_000_000)
+    }
+
     @Test func motionPromptResponseDecodesAsMotionParts() throws {
         let parts = try decoder.decode(MotionParts.self, from: Data(#"{"scene":"a quiet meadow","motion":"grass sways"}"#.utf8))
         #expect(parts == MotionParts(scene: "a quiet meadow", motion: "grass sways"))

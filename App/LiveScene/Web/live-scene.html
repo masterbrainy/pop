@@ -6,11 +6,12 @@
   <title>Pop! live scene</title>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
-    /* The native page still sits behind this view; the video fades in on its first frame. */
+    /* The native page still sits behind this view. The video shows from its first frame;
+       SwiftUI does the one crossfade (ArtPageView), so there is no CSS transition here. */
     video {
       position: fixed; inset: 0; width: 100%; height: 100%;
       object-fit: cover; background: transparent;
-      opacity: 0; transition: opacity 300ms ease;
+      opacity: 0;
     }
     video.live { opacity: 1; }
   </style>

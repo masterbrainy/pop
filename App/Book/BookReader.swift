@@ -3,8 +3,9 @@ import Observation
 import PopKit
 
 /// The book being read or made: which page shows, and what posture events do to it.
-/// While creating, the story pipeline updates pages through `update(book:)` and
-/// `replace(_:)`, and a folded-to page takes the engine's pending draft if there is one.
+/// While creating, the story pipeline places written pages with `place(_:)`, changes pages by
+/// id and version with `updatePage(id:version:_:)`, and changes the bible with `updateStory(_:)`,
+/// always on the latest copy; a folded-to page takes the page built behind if there is one.
 @MainActor
 @Observable
 final class BookReader {
@@ -13,12 +14,14 @@ final class BookReader {
     /// Set when the phone stays closed past the hold; the book finishes and saves then (Phase 5).
     private(set) var closedAt: Date?
     /// The page built behind the one on screen (P-04); it appears when the parent folds.
-    var pendingNext: PageContent?
+    private(set) var pendingNext: PageContent?
     /// How deep the page now showing pops up (0…1), from the posture machine.
     private(set) var popDepth: Double = 0
 
     @ObservationIgnored var onPageChange: @MainActor (PageContent?) -> Void = { _ in }
     @ObservationIgnored var onClosedHold: @MainActor () -> Void = {}
+    /// A turn while creating, before the page behind has its words: nothing turns.
+    @ObservationIgnored var onTurnBlocked: @MainActor () -> Void = {}
 
     init(book: Book, mode: BookMode) {
         let starting = mode == .creating && book.pages.isEmpty ? book.with(pages: [PageContent(index: 0, text: "")]) : book
@@ -56,8 +59,13 @@ final class BookReader {
         if case let .newPage(index) = outcome {
             // A page only follows one that has words, and nothing follows the story's ending.
             guard let current = currentPage, !current.text.isEmpty, !book.bible.isEnding(pageIndex: current.index) else { return }
-            let page = pendingNext.map { $0.index == index ? $0 : PageContent(index: index, text: $0.text, artPrompt: $0.artPrompt, stillPath: $0.stillPath, question: $0.question) }
-                ?? PageContent(index: index, text: "")
+            // The next page opens only once it has its words; its picture may still be painting.
+            guard let pending = pendingNext, !pending.text.isEmpty else {
+                onTurnBlocked()
+                return
+            }
+            let page = pending.index == index ? pending
+                : PageContent(index: index, text: pending.text, artPrompt: pending.artPrompt, stillPath: pending.stillPath, question: pending.question)
             pendingNext = nil
             book = book.with(pages: book.pages + [page])
             navigator = next.with(pageCount: book.pages.count)
@@ -72,36 +80,40 @@ final class BookReader {
         onPageChange(currentPage)
     }
 
-    /// Takes the pipeline's book (bible and pages) while keeping pages the reader added since.
-    func update(book updated: Book) {
-        let extra = book.pages.filter { page in !updated.pages.contains { $0.index == page.index } }
-        book = updated.with(pages: (updated.pages + extra).sorted { $0.index < $1.index })
-        navigator = navigator.with(pageCount: book.pages.count)
+    /// Changes the story (bible, brief) on the current book; pages always stay the reader's.
+    func updateStory(_ change: (Book) -> Book) {
+        book = change(book).with(pages: book.pages)
     }
 
-    /// Replaces the page with the same index (a newer draft, a picture, a clip).
-    func replace(_ page: PageContent) {
-        if pendingNext?.index == page.index {
-            pendingNext = page
-            return
-        }
-        guard let position = book.pages.firstIndex(where: { $0.index == page.index }) else { return }
-        var pages = book.pages
-        pages[position] = page
-        book = book.with(pages: pages)
+    /// Places a page the story engine just wrote: an empty page on screen takes it, else it
+    /// becomes the page behind. A page the reader has seen never changes.
+    func place(_ written: PageContent) -> PagePlacement {
+        let (next, placement) = draft.placing(written, currentIndex: currentPage?.index)
+        adopt(next)
+        return placement
     }
 
-    /// Changes the page with this index, whether it's in the book or the pending draft.
-    func updatePage(index: Int, _ change: (PageContent) -> PageContent) {
-        if let pending = pendingNext, pending.index == index {
-            pendingNext = change(pending)
-        } else if let page = book.pages.first(where: { $0.index == index }) {
-            replace(change(page))
-        }
+    /// Changes the page with this id (and version, when given), in the book or behind it.
+    /// Returns the changed page, or nil if it was replaced meanwhile.
+    @discardableResult
+    func updatePage(id: UUID, version: Int? = nil, _ change: (PageContent) -> PageContent) -> PageContent? {
+        guard let (next, page) = draft.updatingPage(id: id, version: version, change) else { return nil }
+        adopt(next)
+        return page
     }
 
     func page(id: UUID) -> PageContent? {
-        book.pages.first { $0.id == id } ?? (pendingNext?.id == id ? pendingNext : nil)
+        draft.page(id: id)
+    }
+
+    private var draft: DraftPages { DraftPages(pages: book.pages, pendingNext: pendingNext) }
+
+    private func adopt(_ next: DraftPages) {
+        if next.pages != book.pages {
+            book = book.with(pages: next.pages)
+            navigator = navigator.with(pageCount: book.pages.count)
+        }
+        if next.pendingNext != pendingNext { pendingNext = next.pendingNext }
     }
 
     func finish(title: String, coverPath: String?) {

@@ -1,15 +1,16 @@
 import PopKit
 import SwiftUI
 
-/// A book on the Duo: the spread while open, the cover while closed. Folding turns and pops
-/// pages through `HingeModel`. While creating, the story controls sit under the text page,
-/// and keeping the phone closed (or tapping Finish) ends the book (PRD H3, Phase 5).
+/// A book on the Duo: the spread while open, the cover while closed. A page turns only when the
+/// Duo folds to 80° or below and opens again, or from the corner arrow; folding to about 90°
+/// pops the page up (`PostureConfig.closeToTurn`). While creating, the story controls sit under
+/// the text page, and only Finish ends the book, so a slow close never finishes it by accident.
 struct BookView: View {
     let kid: KidProfile
     var onClose: () -> Void = {}
     var onFinish: (Book) -> Void = { _ in }
 
-    @State private var hinge = HingeModel()
+    @State private var hinge = HingeModel(config: .closeToTurn)
     @State private var reader: BookReader
     @State private var maker: StoryMaker?
     @State private var readAloud = ReadAloud()
@@ -42,6 +43,7 @@ struct BookView: View {
         }
         .overlay(alignment: .top) { banner }
         .overlay(alignment: .topLeading) { if hinge.state.phase != .closed { topBar } }
+        .overlay(alignment: .topTrailing) { if hinge.state.phase != .closed { nextPageButton } }
         .readsHinge(into: hinge)
         .onTapGesture(count: 3) { showsDebugPanel.toggle() }
         .onChange(of: hinge.state.popDepth) { _, depth in reader.setPopDepth(depth) }
@@ -67,7 +69,8 @@ struct BookView: View {
             CoverView(book: reader.book, kid: kid)
         } else if let maker, reader.book.status == .draft {
             SpreadView(page: reader.currentPage, pageNumber: reader.pageNumber, level: kid.readingLevel,
-                       curl: hinge.state.curl, popDepth: reader.popDepth, live: maker.live)
+                       curl: hinge.state.curl, popDepth: reader.popDepth, live: maker.live,
+                       pictureUnavailable: reader.currentPage.map { maker.unavailablePictures.contains($0.id) } ?? false)
                 .overlay(alignment: .bottom) {
                     StoryInputBar(
                         speaker: Binding(get: { maker.speaker }, set: { maker.speaker = $0 }),
@@ -85,6 +88,9 @@ struct BookView: View {
         }
     }
 
+    /// Making the book (not reading a finished one): only then do the story banners show.
+    private var isCreating: Bool { maker != nil && reader.book.status == .draft }
+
     @ViewBuilder private var banner: some View {
         VStack(spacing: 8) {
             if let note = maker?.parentNote {
@@ -93,23 +99,39 @@ struct BookView: View {
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(.ultraThinMaterial, in: .capsule)
             }
-            if maker?.isOnLastPage == true, hinge.state.phase != .closed {
-                Label("The end. Close the book to finish", systemImage: "book.closed")
+            if isCreating, maker?.isOnLastPage == true, hinge.state.phase != .closed {
+                Label("The end. Tap Finish to save the book", systemImage: "book.closed")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14).padding(.vertical, 8)
                     .background(Theme.accent, in: .capsule)
-            } else if reader.pendingNext != nil, hinge.state.phase != .closed {
-                Label("Next page ready. Fold to turn", systemImage: "book.pages")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Theme.accent, in: .capsule)
+            } else if isCreating, hinge.state.phase != .closed, let status = maker?.nextPageStatus {
+                nextPageBanner(status)
             }
         }
         .padding(.top, 24)
         .animation(.easeInOut, value: maker?.parentNote)
-        .animation(.easeInOut, value: reader.pendingNext?.id)
+        .animation(.easeInOut, value: maker?.nextPageStatus)
+    }
+
+    /// Says a direction was heard while it re-writes the page behind, then that the page is ready.
+    @ViewBuilder private func nextPageBanner(_ status: NextPageStatus) -> some View {
+        switch status {
+        case let .rewriting(direction, _):
+            Label {
+                Text("Rewriting the next page: “\(direction)”").lineLimit(2)
+            } icon: {
+                ProgressView().controlSize(.small).tint(.white)
+            }
+            .modifier(NextPageBannerStyle())
+        case let .ready(rewritten):
+            Label(rewritten ? "Next page rewritten · fold shut and open, or tap ›"
+                            : "Next page ready · fold shut and open, or tap ›",
+                  systemImage: rewritten ? "sparkles" : "book.pages")
+                .modifier(NextPageBannerStyle())
+        case .none, .writing:
+            EmptyView()
+        }
     }
 
     private var topBar: some View {
@@ -138,9 +160,37 @@ struct BookView: View {
         .padding(20)
     }
 
+    /// The corner arrow: turns to the next page, the same as folding the Duo shut and opening it.
+    /// While creating it waits (a spinner) until the page behind has its words, and pulses while
+    /// a direction re-writes it (turning then shows the page behind as it was, PRD S7).
+    @ViewBuilder private var nextPageButton: some View {
+        let creating = maker != nil && reader.book.status == .draft
+        let hasNext = creating ? maker?.isOnLastPage == false : reader.pageNumber < reader.book.pages.count
+        if hasNext {
+            let status = creating ? maker?.nextPageStatus : nil
+            let ready = creating ? status?.canTurn == true : true
+            let rewriting = if case .rewriting = status { true } else { false }
+            Button(action: { reader.turnForward() }) {
+                ZStack {
+                    if ready {
+                        Image(systemName: "chevron.right").font(.headline)
+                            .symbolEffect(.pulse, isActive: rewriting)
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .background(.ultraThinMaterial, in: .circle)
+            }
+            .foregroundStyle(Theme.ink)
+            .padding(20)
+            .accessibilityLabel(!ready ? "The next page is still being written"
+                                : rewriting ? "Next page, as it was before your change" : "Next page")
+        }
+    }
+
     private func start() async {
         hinge.onEvent = { [reader] event in reader.handle(event) }
-        reader.onClosedHold = { Task { await finishIfCreating() } }
         if maker == nil {
             reader.onPageChange = { page in
                 guard ParentPreferences.readAlong, let page else { return }
@@ -160,21 +210,28 @@ struct BookView: View {
         if readAloud.isReading { readAloud.stop() } else { readAloud.read(reader.currentPage?.text ?? "") }
     }
 
-    private func finishIfCreating() async {
-        guard maker != nil, !finishing, reader.book.pages.contains(where: { !$0.text.isEmpty }) else { return }
-        await finish()
-    }
+    /// How long Finish may take at most. Pages whose clip isn't recorded by then keep their
+    /// still; a title or cover not ready by then falls back to the first words and first picture.
+    private static let finishBudget: Duration = .seconds(20)
 
-    /// Ends the book: a title from the story engine, the first picture as the cover, then save.
+    /// Ends the book (IMP-13): the title and cover start at once and run while missing clips
+    /// are recorded, everything stops at `finishBudget`, then the book saves.
     private func finish() async {
         guard let maker, !finishing else { return }
         finishing = true
-        _ = await maker.completeClips()
+        let deadline = ContinuousClock.now.advanced(by: Self.finishBudget)
+        let book = reader.book
+        let settings = maker.settings
+        let titleTask = Task { await BookFinisher.title(for: book, kid: kid, settings: settings) }
+        let coverTask = Task { await BookFinisher.coverArt(for: book, title: await titleTask.value, log: maker.record) }
+
+        let clips = await maker.completeClips(until: deadline)
         await maker.end()
-        let title = await BookFinisher.title(for: reader.book, kid: kid, settings: maker.settings)
+        let title = await TaskDeadline.value(of: titleTask, until: deadline) ?? BookFinisher.fallbackTitle(for: book)
         let firstStill = reader.book.pages.first(where: { $0.stillPath != nil })?.stillPath
-        let cover = await BookFinisher.coverArt(for: reader.book, title: title, log: maker.record) ?? firstStill
-        reader.finish(title: title, coverPath: cover)
+        let cover = await TaskDeadline.value(of: coverTask, until: deadline) ?? nil
+        maker.record("finished in \(Int((Self.finishBudget - (deadline - .now)) / .seconds(1))) s · clips recorded \(clips.recorded), stills kept \(clips.missing) · cover \(cover == nil ? "first picture" : "painted")")
+        reader.finish(title: title, coverPath: cover ?? firstStill)
         onFinish(reader.book)
         finishing = false
     }
@@ -187,6 +244,17 @@ struct BookView: View {
     }
 }
 
+/// The accent capsule the next-page banner uses.
+private struct NextPageBannerStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(Theme.accent, in: .capsule)
+    }
+}
+
 /// Asks the story engine for a title; falls back to the book's first words.
 @MainActor
 enum BookFinisher {
@@ -195,6 +263,11 @@ enum BookFinisher {
             let request = StoryEngine.titleRequest(book: book, kid: kid, settings: settings)
             if let response = try? await server.storyTitle(request), !response.title.isEmpty { return response.title }
         }
+        return fallbackTitle(for: book)
+    }
+
+    /// The story's own title if it has one, else its first few words.
+    static func fallbackTitle(for book: Book) -> String {
         if let title = book.bible.title, !title.isEmpty { return title }
         let words = (book.pages.first?.text ?? "A new story").split(separator: " ").prefix(5).joined(separator: " ")
         return words.isEmpty ? "A new story" : words

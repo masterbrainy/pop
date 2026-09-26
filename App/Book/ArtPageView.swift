@@ -11,6 +11,8 @@ struct ArtPageView: View {
     var popDepth: Double = 0
     /// Saved books replay their clips; while creating, the live scene runs instead.
     var replaysClips = false
+    /// Moderation turned this page's picture away (IMP-10): no picture is coming.
+    var pictureUnavailable = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -18,6 +20,8 @@ struct ArtPageView: View {
                 Theme.paperShade
                 if let image = StillImageLoader.image(for: page?.stillPath) {
                     picture(image, size: proxy.size)
+                } else if showsImagineCard {
+                    ImagineCard()
                 } else {
                     PaintingPlaceholder(isEmpty: page?.text.isEmpty ?? true)
                 }
@@ -37,9 +41,12 @@ struct ArtPageView: View {
                     .transition(.opacity)
             }
             if let live {
+                // The one crossfade: in over the still's settle (same duration), out at once so
+                // a page's video never lingers over the next page's still.
+                let showsLive = live.isShowingLive(page)
                 LiveSceneView(bridge: live.bridge)
-                    .opacity(live.isLive ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.8), value: live.isLive)
+                    .opacity(showsLive ? 1 : 0)
+                    .animation(showsLive ? .easeInOut(duration: StillPanMotion.settleDuration) : nil, value: showsLive)
                     .allowsHitTesting(false)
             }
         }
@@ -59,7 +66,28 @@ struct ArtPageView: View {
     }
 
     private var showsLiveVideo: Bool {
-        (live?.isLive ?? false) || (replaysClips && page?.clipPath != nil)
+        (live?.isShowingLive(page) ?? false) || (replaysClips && page?.clipPath != nil)
+    }
+
+    /// A page with words but no picture that will never arrive: moderation turned it away, or
+    /// it's a saved book being read (nothing is painting then), so "Painting…" would wait forever.
+    private var showsImagineCard: Bool {
+        guard let page, !page.text.isEmpty else { return false }
+        return pictureUnavailable || live == nil
+    }
+}
+
+private struct ImagineCard: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 44))
+            Text("Picture this page in your mind!")
+                .font(Theme.storyFont(size: 20))
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
+        .foregroundStyle(Theme.softInk)
     }
 }
 

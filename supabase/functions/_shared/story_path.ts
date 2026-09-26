@@ -9,6 +9,7 @@ import { withinWordLimit } from "./reading_levels.ts";
 import { gentleParentNote, runSafetyGate, type SafetyDeps } from "./safety.ts";
 import { checkInputSafety, type InputSafetyDeps, type Refusal } from "./input_safety.ts";
 import { hasForeignScriptText } from "./language_check.ts";
+import { namesBrandedCharacter } from "./brand_check.ts";
 import { detectsEndRequest } from "./end_request.ts";
 import { mergeBibleCharacters, stripRepeatedEarlierText, trimToLimit } from "./story_turn.ts";
 import type { StoryBible } from "./schemas.ts";
@@ -111,7 +112,9 @@ async function passesOutputGate(
   const verdict = await runSafetyGate(gateTexts, readingLevel, safety);
   const wordLimitOk = withinWordLimit(pageText, readingLevel);
   const languageOk = !hasForeignScript(pageText, artPrompt, readingQuestion, language, allowedNames);
-  return { safe: verdict.safe && wordLimitOk && languageOk, safetyMs: Math.round(performance.now() - start) };
+  // allowedNames always starts with the kid's own first name (see its callers).
+  const brandOk = !namesBrandedCharacter(gateTexts, allowedNames[0]);
+  return { safe: verdict.safe && wordLimitOk && languageOk && brandOk, safetyMs: Math.round(performance.now() - start) };
 }
 
 function rewriteReasonFor(
@@ -127,6 +130,9 @@ function rewriteReasonFor(
   }
   if (hasForeignScript(pageText, artPrompt, readingQuestion, language, allowedNames)) {
     return "The page mixed in a word from another language or script. Write it again using only the brief's language.";
+  }
+  if (namesBrandedCharacter([pageText, artPrompt, readingQuestion], allowedNames[0])) {
+    return "The page named a branded or famous character. Replace it with an original character of your own.";
   }
   return "The page did not pass the kid-safety rubric.";
 }

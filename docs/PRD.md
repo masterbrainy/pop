@@ -1,6 +1,6 @@
 # Pop! — Product Requirements Document
 
-*Status: DRAFT v3.1 · 2026-09-26 · P-01 (parents drive creation; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · P-04 (story path; page built behind the current one) · v3.1 adds the readiness fixes from REVIEW.md · Owner: Brian Huang · Companion doc: [ROADMAP.md](ROADMAP.md)*
+*Status: DRAFT v3.1 · 2026-09-26 · P-01 (parents drive creation; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · P-04 (story path; page built behind the current one) · v3.1 adds the readiness fixes from REVIEW.md · **Proposed, pending Brian:** guided setup, one question per page, collections, and the Orbis session plan ([IMPROVEMENTS.md](IMPROVEMENTS.md) Part 2); each proposed line is marked · Owner: Brian Huang · Companion doc: [ROADMAP.md](ROADMAP.md)*
 
 **Pop! is a free, hackathon-style pitch and demo, not a release, and it runs only on the iPhone Duo.** Nothing is sold, and no other iPhone layout is built. This document covers what makes the demo great, reliable and safe.
 
@@ -20,6 +20,10 @@ Parents of 3–8 year olds know their child best: what they love, what they're g
 - Assumption: a story about the child's own interests holds a 3–8 year old's attention better than a generic book. *Needs validation through observed sessions (time on task, pages per book, what the child remembers).*
 - Assumption: seeing words become pictures within seconds keeps the parent, and a watching child, engaged for a 5–10 page book. *Needs validation through observed prototype sessions.*
 - No user research, analytics or quotes have been supplied yet. Every "why" in this doc is a hypothesis.
+- External evidence behind the proposed guidance *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-25)*:
+  - **Dialogic reading** (the adult asks, the child answers) improves young children's oral language: about +19 percentile points on average ([WWC 2007](https://ies.ed.gov/ncee/wwc/Docs/InterventionReports/WWC_Dialogic_Reading_020807.pdf)), d = .42 overall and d = .59 on the words children say ([Mol et al. 2008](https://eric.ed.gov/?id=EJ787378)).
+  - Enhanced e-books reduced parent–child story talk ([Munzer et al. 2019](https://pubmed.ncbi.nlm.nih.gov/30910918/)), so any prompt should be voiced by the parent, not the screen.
+  - About 80% of apps used by 3–5 year olds contain manipulative design ([Radesky et al. 2022](https://faculty.washington.edu/alexisr/childrenManipulativeDesign.pdf)).
 
 ## 3. Users
 
@@ -47,6 +51,9 @@ We'll know we're right when **parents in test sessions finish books** (at least 
 | Direction → page behind rebuilt (text and picture) | p50 ≤ 15 s *(TBD, Phase 2)*, normally before the parent folds | Same |
 | Fold → next page's text and picture shown | ≤ 300 ms when the page behind is ready (the normal case); otherwise its text with "painting…". A fold while a direction is still rebuilding the page behind shows that page as it was, and the direction moves on to the new page behind | Same |
 | Page flip → animation playing | p50 ≤ 5 s *(TBD, measured in probe 0.3)*. The still shows until then. Not counted during Orbis's warm-up at the start of a book, when the still with a slow pan counts as a pass | Same |
+| Guided setup *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-24)* | Open → Go in ≤ 45 s with no typing; page 1 text ≤ 5 s after the last card | Timing spans; 5 real runs |
+| A tapped choice rebuilds the page behind *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-25)* | p50 ≤ 15 s | Timing spans |
+| Reopening and closing a saved book *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-23, IMP-26)* | Keeps every picture, layer and clip | Automated save → load → save test |
 | Unsafe output shown to the child | 0 in a 30-session red-team set that covers every kid-safety category (§8.6) at each reading level, with false blocks on ≤ 5% of safe pages | Eval script; a person checks borderline cases |
 | Page curl tracks the hinge | No visible lag when driven by the simulator's hinge controls | Manual check with screen recording |
 | Pop-up response | Layers start rising ≤ 300 ms after the pop angle is reached | Timing span |
@@ -55,18 +62,21 @@ We'll know we're right when **parents in test sessions finish books** (at least 
 
 1. **Made by the parent, shared with the child.** Every book is meant to be read together. When the child is watching, the parent's controls never interrupt the child's flow.
 2. **The parent drives, the AI keeps it together.** The parent directs the story, and the child can join in. The AI never overrides their ideas. It only makes them coherent, safe and readable. If the parent asks the story to teach something, it comes through the story, not a lecture.
-3. **Calm and safe by default.** Nothing scary, no dark patterns, no error codes. A failure always looks like "the illustrator is still painting…".
+3. **Calm and safe by default.** Nothing scary, no dark patterns (no pleading characters, timers, stickers, streaks, book counts or autoplay into the next book), no error codes. A failure always looks like "the illustrator is still painting…".
 4. **The hinge is for magic, not navigation.** Hinge angle drives effects (curl, pop-up). Layout comes from the posture and user toggles, never from the angle. This follows Apple's guidance.
 5. **The page stays on topic.** Each page's picture and animation show only what that page's text says.
 6. **What you save is what they see.** A saved book plays back exactly as it was made: the same text, pictures and animations.
+7. **Guide, don't script** *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-24, IMP-25)*. The app offers a few picture choices and one question a page; the parent says the question aloud, and there's always "something else". Fewer choices for younger kids: 2 for Listeners, 3 plus "something else" for older ones.
 
 ## 7. The core experience
 
 There is **one way to make a book**. The parent can do it alone ahead of time or with the child beside them; the steps are identical, and the only difference is who's watching.
 
-1. **Parent starts a book** with a short story brief: what the child loves (from the kid profile, for example dinosaurs, trucks, their cat), an optional real moment (first day of school, a new sibling, the dentist), and an optional free-text field: "Anything you'd like this story to teach?" (for example sharing, or why we brush our teeth). The child's first name and reading level come from the kid profile. The live animation engine starts warming up now, because it takes minutes to be ready.
+1. **Parent starts a book** with a short story brief: what the child loves (from the kid profile, for example dinosaurs, trucks, their cat), an optional real moment (first day of school, a new sibling, the dentist), and an optional free-text field: "Anything you'd like this story to teach?" (for example sharing, or why we brush our teeth). The child's first name and reading level come from the kid profile. The live animation engine connects as the story path is planned; start-up takes seconds (probe 0.3a), and Reactor bills from the moment a session is ready, so it isn't warmed earlier.
+   - *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-24)* **Guided setup.** The brief becomes four picture cards anyone can answer by tapping or speaking: *Who's the hero?* · *Where?* · *What goes wrong?* · *How should it feel?*. Each has "Surprise me", and "Just start" is always there. The real moment and "teach something" stay as optional extras. Cards are read aloud when the child is there (a toggle, off when making a book alone). The story path is planned as soon as the last card is answered.
 2. **A story path is planned from the brief.** The AI plans the whole story as a path of pages that always reaches an ending. Page 1 is built first, and **the next page is always built behind the one on screen** (text, picture, pop-up layers and animation prompt), so folding never waits.
 3. **The parent steers it**, by voice or by typing, at any time. They can say what happens next or give a direction ("wake the dragon up", "add a friendly dragon", "she should learn to wait her turn"). The AI re-plans the path from the next page on (the ending can change, but there is always one) and rebuilds the page behind, consistent with everything so far. The page on screen doesn't change. Rambling speech becomes clean page text at the right reading level. If the child is there, a "parent's turn / kid's turn" toggle lets them add ideas the same way.
+   - *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-25)* **One question a page.** A strip under the text page gives the parent one line to say aloud ("Uh-oh, did Rex lose his ball or his hat?") with 2–3 picture tiles, "something else" and Skip. Tapping a tile is a kid's-turn input that steers the page behind.
 4. **Each page shows** left to right:
    - **Left page:** the story text appears first.
    - **Right page:** a "painting…" placeholder, then the finished illustration, then the illustration **comes alive**. The live animation is a gentle, repeating motion of this page's moment (for example, the dragon that flew into a tree lies knocked out on the ground, bobbing gently). It never moves the plot on; the next page does.
@@ -74,6 +84,7 @@ There is **one way to make a book**. The parent can do it alone ahead of time or
 6. **Keep folding to about 90° to pop up.** The page now showing pops up: its characters rise out of the spine in front of the background, deeper as the angle grows. Opening flat folds them back into the picture and its animation starts. Opening the book from its cover pops page 1 up the same way.
 7. **Finish and save.** When the parent is happy, closing the phone (or tapping Save) finishes the book. It has to stay closed for about a second, so a brief overshoot while turning doesn't count; reopening sooner just carries on. The cover screen shows AI cover art and a title such as *"Rex Learns to Share, a story for Maya."* The book is saved to the bookshelf exactly as it was made: text, pictures, pop-up layers and each page's recorded animation clip.
 8. **Show it.** Opening a saved book plays it back exactly as it was made, with the same fold-to-turn and pop-up, and needs no new generation. A book made live with the child is saved and shown the same way.
+   - *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-26)* **Collections.** The bookshelf groups books into series ("Rex's adventures"). From a book's cover menu, the parent can start **another adventure** with the same characters, who keep their looks from their reference sheets.
 
 ## 8. Functional requirements
 
@@ -96,6 +107,8 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 | S11 | Real-moment tone | P1 | When the brief has a real moment, the tone stays calm and hopeful and the story ends reassuringly |
 | S12 | Page built behind the current one | P0 | While page N shows, page N+1 is fully built along the path: text, picture, pop-up layers and animation prompt. A fold shows it straight away |
 | S13 | Save and show exactly | P0 | A saved book stores each page's text, picture, pop-up layers and recorded animation clip, and keeps a copy on the device. Showing it replays all of them unchanged, with no generation calls, and works without a network. A page whose clip didn't finish recording (for example, it was turned early) is re-animated and recorded before the book is saved. Only pages that were shown are saved; the unseen page behind is dropped |
+| S15 | Guided setup *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-24)* | P0 (proposed) | Four picture cards (hero, place, problem, feeling), each with "Surprise me"; answerable with no typing; 2 options for Listeners, 3 plus "something else" for older kids. Typed extras pass input moderation first. Open → Go ≤ 45 s |
+| S16 | One question per page *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-25)* | P0 (proposed) | At most one question a page, written in the same call as the page and safety-checked on its own (a failing question is dropped, not the page). A tapped choice is moderated again and passed into the next page's build. Listeners get about 2 choice questions per book; Readers get open questions with choices as a floor. Replaces C3 |
 
 ### 8.2 The page (book mode, fully open)
 
@@ -107,6 +120,7 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 | P4 | **Animation stays relevant:** motion shows only what this page's text and picture contain | P0 | The animation prompt comes only from this page's text and picture. The camera and scene stay fixed. Motion is a gentle, repeating action of the page's moment that doesn't move the plot on. Nothing new appears. A drift guard re-anchors the animation to the still if it wanders. On topic means an LLM judge scores frames sampled every 10 s over 60 s at 4 or more out of 5 against the page's text, on 10 pages |
 | P5 | **New page, new animation:** every flip starts a fresh animation for the page now showing | P0 | A flip ends the previous page's animation; the new one begins from the new page's picture. In a saved book, the page's recorded clip plays instead (S13) |
 | P6 | Graceful fallback when the animation service is down | P0 | The right page shows the still with a slow pan-and-zoom. The child never sees an error |
+| P7 | Page behind animated before the fold *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-04, IMP-27)* | P0 (proposed) | One session: the page on screen loops its recorded clip, and the session animates and records the page behind. Fold → motion p50 ≤ 0.3 s when the page behind is ready. A second session is built only if rehearsal logs show the session busy when the page behind became ready |
 
 ### 8.3 Posture interactions (iPhone Duo)
 
@@ -125,6 +139,8 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 | B2 | Show a saved book | P0 | Pages show the saved text and art, and each page plays its recorded clip (S13). Curl and pop-up work as they did when it was made |
 | B3 | Share as PDF | P1 | The parent exports the book as a PDF from behind a parental gate |
 | B4 | Share as video | P2 | Recorded page clips stitched together with narration |
+| B5 | Reliable reopen *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-23, IMP-26)* | P0 (proposed) | Reopening and closing a book keeps all its media; one corrupt book doesn't hide the others; a reopened draft keeps its animation prompts |
+| B6 | Series and "another adventure" *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-26)* | P1 (proposed) | The shelf groups books by series. "Another adventure" (parent's cover menu only) starts a new book with the saved characters and their reference sheets; its page 1 art uses at least one of them |
 
 ### 8.5 Cut-list features (kept in this order; talking characters is cut first)
 
@@ -132,7 +148,7 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 |---|---|---|---|
 | C1 | Read-along: narration with word-by-word highlighting | P2 (kept longest) | Apple's on-device voice reads the page, and each word highlights as it's spoken, in sync by eye. Narration can be paused and replayed per page |
 | C2 | Kid's drawing as the hero: the kid finger-draws a character that stars in the book | P2 | The drawing becomes a character in the book's art style, recognisably the kid's design, and appears on the pages that follow |
-| C3 | Reading together: on the parent's half, a co-pilot strip with the next question to ask about the page | P2 | Each page shows one question about that page, at the kid's reading level |
+| C3 | Reading together: on the parent's half, a co-pilot strip with the next question to ask about the page. *Proposed to become S16 (IMP-25)* | P2 | Each page shows one question about that page, at the kid's reading level |
 | C4 | Talking characters: tap a character to hear its line in its own voice | P3 (cut first) | Tapping a character plays its line within 2 s, in a voice kept for that character (OpenAI `tts`) |
 
 ### 8.6 Parent controls and safety
@@ -172,16 +188,16 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 ## 9. Non-functional requirements
 
 - **Latency:** see the budget in §5. Generation time is hidden by building the page behind the current one: a fold shows a ready page, and only the new page's animation starts after the fold, with its still showing first (decision D2).
-- **Privacy:** Pop! never stores audio; it's streamed to OpenAI only to transcribe it. OpenAI's API terms let it keep inputs for abuse monitoring (reportedly up to 30 days), and Gemini's unpaid tier may use prompts to improve Google's products, so the Gemini key's Google project must have billing on. Gemini's image models have no free tier anyway. The only personal data Pop! keeps is the kid's first name and the interests the parent enters, and the story text leaves out surnames, addresses, schools and phone numbers (K1 rubric). What is saved: book text, pictures, pop-up layers and animation clips.
-- **Security:** every server function requires a signed-in app user (anonymous sign-in is enough for the demo) and has per-user rate limits. API keys stay on the server; the app holds only its sign-in and short-lived Reactor tokens (1 h, at most 2 sessions). Account-wide cleanup of Orbis sessions is admin-only and never exposed to the app.
-- **Demo Reactor credit budget:** live animation is billed per second, about $0.58 per minute on Orbis Stable (about $9 for 15 live minutes). It runs only while a book is being made; showing a saved book plays recorded clips and uses no credit. Budget enough credit for rehearsals plus the demo, watch the credit meter in the debug overlay, warm and shut down sessions on purpose, and have the server clean up stray sessions. Unknown until probe 0.3: whether billing starts at connect or at generation, how long a Stable session can live, and what idle time between pages costs. If billing starts at connect, an hour of warm-up alone costs about $35.
+- **Privacy:** Pop! never stores audio; it's streamed to OpenAI only to transcribe it. OpenAI's API terms let it keep inputs for abuse monitoring (reportedly up to 30 days), and Gemini's unpaid tier may use prompts to improve Google's products, so the Gemini key's Google project must have billing on. Gemini's image models have no free tier anyway. The only personal data Pop! keeps is the kid's first name and the interests the parent enters, and the story text leaves out surnames, addresses, schools and phone numbers (K1 rubric). What is saved: book text, pictures, pop-up layers and animation clips. *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-26)* Collections also keep each character's first name, look and reference picture, with a gated "Forget this character"; still no audio or transcripts.
+- **Security:** every server function requires a signed-in app user (anonymous sign-in is enough for the demo) and has per-user rate limits. API keys stay on the server; the app holds only its sign-in and short-lived Reactor tokens (1 h, at most 2 sessions; *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-27)* at least 4 sessions and a 30-minute session cap, since a token's count includes reconnects). Reactor allows 5 concurrent sessions per account across all keys, so a second session needs no second key. Account-wide cleanup of Orbis sessions is admin-only and never exposed to the app.
+- **Demo Reactor credit budget:** live animation is billed per session-minute from the moment a session is ready, idle time included, and connecting is free ([Reactor billing](https://docs.reactor.inc/resources/billing)). The project assumes about $0.58 per minute on Orbis Stable (about $9 for 15 live minutes); Reactor's page lists the price as TBD, so confirm it. It runs only while a book is being made; showing a saved book plays recorded clips and uses no credit. Budget enough credit for rehearsals plus the demo, watch the credit meter in the debug overlay, warm and shut down sessions on purpose, and have the server clean up stray sessions. Unknown until probe 0.3: whether billing starts at connect or at generation, how long a Stable session can live, and what idle time between pages costs. If billing starts at connect, an hour of warm-up alone costs about $35.
 - **Reliability:** every external service has a child-safe fallback: Apple on-device speech recognition, the still-image pan, a gentle "let's try that again" line, or a placeholder.
 - **Accessibility:** large tap targets for small hands, Dynamic Type on the parent's screens, captions via read-along.
 - **Build environment:** built and demoed only on the iPhone Duo simulator in Xcode 27.1 beta. Mic input comes from the Mac. No camera, haptics or motion sensors. Pictures come in only through finger drawing or the photo picker.
 
 ## 10. Scope
 
-**MVP (the demo):** one parent-driven creation flow (story brief with interests, an optional real moment and an optional "teach something" note · a story path to an ending, with the next page built behind the current one · voice or typed directions that re-plan it · kid's turn when the child is there) · live text → art → animation per page · fold-to-turn curl · pop-up · closing to finish, with a cover · save and show exactly (recorded clips, bookshelf) · iPhone Duo only.
+**MVP (the demo):** one parent-driven creation flow (story brief with interests, an optional real moment and an optional "teach something" note · a story path to an ending, with the next page built behind the current one · voice or typed directions that re-plan it · kid's turn when the child is there) · live text → art → animation per page · fold-to-turn curl · pop-up · closing to finish, with a cover · save and show exactly (recorded clips, bookshelf) · iPhone Duo only. *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) Part 2)*: guided setup · one question a page · series and "another adventure" on the device (cloud sync later).
 
 **Out of scope for now**
 - Physical iPhone Duo, haptics, motion sensors, camera input: the build and demo are simulator-only.
@@ -193,10 +209,10 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 
 ## 11. Assumptions and constraints
 
-- **Duo APIs.** The iOS 27.1 SDK in Xcode 27.1 beta (27A9269) was checked on 2026-09-25 and contains the hinge API (status plus a continuous angle), the two-pane `ArrangementView`, and reserved regions for the fold and camera. There is **no dedicated cover-display API**, but the simulator's Duo has two screens: an outer 466×678 pt screen and an inner 951×669 pt screen that folds down the middle, so each page is about 475×669 pt, portrait. The closed posture is assumed to run the app on the outer screen. Still unverified until the Phase 0 probe: whether the *simulator* delivers a continuous angle, and whether the app moves to the outer screen when closed. An in-app hinge slider is the fallback for development and the demo.
+- **Duo APIs.** The iOS 27.1 SDK in Xcode 27.1 beta (27A9269) was checked on 2026-09-25 and contains the hinge API (status plus a continuous angle), the two-pane `ArrangementView`, and reserved regions for the fold and camera. There is **no dedicated cover-display API**, but the simulator's Duo has two screens: an outer 466×678 pt screen and an inner 951×669 pt screen that folds down the middle, so each page is about 475×669 pt, portrait. The closed posture is assumed to run the app on the outer screen. Probe 0.1 confirmed the app runs on the outer screen when closed. DeviceHub's hinge slider drives the real hinge when the Mac isn't overloaded (ROADMAP §3), but the app's hinge updates are sparse, so a quick fold can miss the turn point. The in-app hinge panel stays the reliable demo control.
 - **Vendors:** Reactor (Orbis) for animation · Google Gemini for illustrations, layer images and animation prompts · OpenAI for speech-to-text, the story model, moderation, and voices for talking characters (C4) and video export (B4) · Apple's on-device voice for read-along (C1), because OpenAI's text-to-speech gives no word timings · Supabase for storage and the server functions that hold the keys. *This split is decision D7, confirmed by Brian on 2026-09-25.*
 - The Orbis integration builds on a teammate's hackathon starter, used with permission (see the roadmap's reuse table).
-- **Clip recording.** Exact replay (S13) assumes each page's Orbis stream can be recorded to a clip from the in-app web view, most likely with the browser's `MediaRecorder`. This is unverified until the Phase 0 probe (0.3). If it can't be done, a saved book shows the still and re-animates it live from the same picture and prompt, which is close but not exact.
+- **Clip recording.** Exact replay (S13) assumes each page's Orbis stream can be recorded to a clip from the in-app web view, most likely with the browser's `MediaRecorder`. This is unverified until the Phase 0 probe (0.3). If it can't be done, a saved book shows the still and re-animates it live from the same picture and prompt, which is close but not exact. *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-04)* The bundled Reactor SDK also offers server-side `requestClip`, independent of the web view; a short paid probe checks it's enabled for Orbis.
 - **Page shape.** Each page is portrait (about 475×669 pt), but Orbis makes 16:9 video, so cropping one page out of it keeps only about 40% of the frame's width. Probe 0.3 compares ways to fill the page (ROADMAP §3), and G0 decides (D9).
 
 ## 12. Risks
@@ -204,7 +220,9 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Orbis animation warps characters' faces or drifts off the page's content | Med | High | Motion prompts ask for gentle motion and a locked camera. Drift guard re-anchors. Phase 0 spike compares Orbis Stable and Dynamic. Fallback: animate only the background and keep characters as crisp cutouts |
-| Orbis takes minutes to warm up | High | Med | Warm when the book starts (demo: well before going on stage). Show stills until ready |
+| Orbis start-up is slow | Low | Med | Probe 0.3a measured connect at 3.5 s, so connect as the story path is planned, not earlier (idle time is billed). Show stills until ready |
+| Guided questions pull attention to the screen *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-25)* | Med | Med | The parent says the question aloud; nothing on the child's page flashes; Skip is always there |
+| Fixed choices hold back confident storytellers *(Proposed, pending Brian: [IMPROVEMENTS](IMPROVEMENTS.md) IMP-25)* | Med | Low | Always offer "something else"; Readers get open questions |
 | The demo runs short of Reactor credit, or a stray session keeps billing | Med | High (no animation on stage) | Demo credit budget (§9). Credit meter in the debug overlay. Kill switch and server-side cleanup of stray sessions. Saved books need no credit. Still-image fallback |
 | Orbis clips can't be recorded from the in-app web view | Med | High (exact replay) | Phase 0 probe 0.3 tries `MediaRecorder` inside the page first, then native capture (ReplayKit, if it works in the simulator). Last resort: still plus live re-animation (not exact) |
 | Orbis's 16:9 video looks soft on a portrait page (a one-page crop keeps about 40% of its width) | High | Med | Probe 0.3 compares four framings (ROADMAP §3); G0 decides (D9) |
@@ -230,6 +248,9 @@ Priority: **P0** = must-have for the demo · **P1** = core product · **P2** = c
 | D7 | Which vendor does what | ✅ Confirmed by Brian on 2026-09-25. Gemini: images and animation prompts only. OpenAI: speech-to-text, story, moderation, and voices for talking characters and video export. Read-along uses Apple's on-device voice |
 | D8 | Timeline and demo date | ✅ Resolved: no deadline. The full scope is built, including all cut-list features |
 | D9 | How the 16:9 animation fills a portrait page | Decide at G0 from probe 0.3's comparison (ROADMAP §3). Spanning the animation across both pages would change the layout, so that option would go to Brian as a pivot |
+| D10 | Accept guided setup and one question a page (S15, S16; C3 promoted) | Proposed: accept ([IMPROVEMENTS](IMPROVEMENTS.md) IMP-24, IMP-25) |
+| D11 | Collections scope for the demo | Proposed: device-only (reliable reopen, series, "another adventure"); cloud sync later (IMP-26) |
+| D12 | A second Orbis session | Proposed: not for the demo; one session with record-then-loop, plus a logged trigger for a second (IMP-27). Needs a ~$6 probe first |
 
 *D5 and D6 were removed on 2026-09-26 (P-02): everything is free.*
 

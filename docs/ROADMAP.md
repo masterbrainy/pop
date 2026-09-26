@@ -1,6 +1,6 @@
 # Pop! — Execution Roadmap
 
-*Status: DRAFT v3 · 2026-09-26 · P-01 (parents drive creation; saved books replay exactly; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · Implements: [PRD.md](PRD.md)*
+*Status: DRAFT v3.1 · 2026-09-26 · P-01 (parents drive creation; saved books replay exactly; lessons optional) · P-02 superseded (everything is free) · P-03 (iPhone Duo only) · v3.1 adds the readiness fixes from REVIEW.md · Implements: [PRD.md](PRD.md)*
 
 **Planning assumptions.** Two engineers (Brian plus a teammate) building with Claude Code. Estimates are in **focused hours** and include tests. **There's no deadline (D8, resolved), so we build the full scope in phase order.** The cut lines in §7 are kept only as a fallback. Everything is built and demoed **only on the iPhone Duo simulator in Xcode 27.1 beta**.
 
@@ -19,7 +19,7 @@
 | App-side Supabase URL and publishable key in git-ignored `config/Supabase.local.xcconfig` | ✅ |
 | Private GitHub repo `masterbrainy/pop` | ✅ |
 | Claude Code ↔ Xcode tools (`xcrun mcpbridge`) | ✅ |
-| Claude Code ↔ iOS Simulator panel attached to the **iPhone Duo** (466×678 pt reported at first boot; posture to be confirmed in Phase 0.1) | ✅ |
+| Claude Code ↔ iOS Simulator panel attached to the **iPhone Duo**. The 466×678 pt seen at first boot is the Duo's **outer** screen (it booted closed); the inner screen is 951×669 pt | ✅ |
 | Sibling sessions running: Review & QA and Pivots & Ideas (roles in `CLAUDE.md`) | ✅ |
 | **Build gate:** Brian verifies the setup and says to start | ⏳ |
 
@@ -45,21 +45,27 @@
 
 | Unit | Responsibility | Depends on |
 |---|---|---|
-| `HingeSource` | Emits posture updates `(status, angle)`. Two versions: Duo (`onHingeChange`) and a debug slider. iPhone Duo only (P-03) | — |
-| `PostureMachine` | Pure function from a stream of angles to effects: curl progress, turn committed or cancelled, pop depth, closed | `HingeSource` values |
+| `HingeSource` | Emits posture updates `(status, angle)`. Two versions: Duo (`onHingeChange`) and a debug slider. iPhone Duo only (P-03). A nil hinge means "unknown" (it can be brief on a Duo, when the view leaves a hierarchy that gets hinge updates), so the last posture is kept | — |
+| `PostureMachine` | Pure function from a stream of angles to effects: curl progress, turn committed or cancelled (with hysteresis), pop depth for the page now showing, and closed (after a ~1 s hold). Angles are normalised to the range measured in 0.1 | `HingeSource` values |
 | `PagePipeline` | Per page: input → text → art → layers → animation prompt. Prepares the next page early; cancels work when a direction changes the page | StoryEngine, Art, Moderation |
 | `StoryEngine` | One LLM call per turn. Input: the story brief (interests, optional real moment, optional "teach something" note), the bible, and the parent's or kid's words (spoken or typed) or a "You continue" tap. Structured output: `append / new_page / revise_current`, text, art prompt, bible and direction updates, parent question | `story-turn` function |
-| `Art` | Gemini page illustration (16:9, important content kept central), background plate, character cutouts, cover | `art` function |
+| `Art` | Gemini page illustration (framing for the portrait page set at G0; see §3), background plate, character cutouts, cover | `art` function |
 | `MotionPromptBuilder` | Builds the Orbis prompt for **one page only** from a fixed template (below) | `motion-prompt` function |
 | `LiveScene` | Protocol: `prepare(image:prompt:)`, `start()`, `stop()`, event stream. Implementations: `ReactorWebScene` (also records each page's clip), `StillPanScene` (fallback) and `ClipReplayScene` (plays a saved page's recorded clip) | Reactor JS SDK |
 | `SessionController` | Orbis session lifecycle: warm-up, token, reconnect with backoff, kill, server-side cleanup of stray sessions, credit meter | `reactor-*` functions |
 | `BookStore` | Saves a finished book (rows, pictures, layers, clips) and keeps a copy on the device, so a saved book shows exactly and works offline | Supabase |
 
 **Per-page animation sequence (PRD P3–P5).** On page shown (fully open):
-`reset → set_image(page still) → set_prompt(page motion prompt) → wait for conditions_ready → start`. The still stays on screen until the first frames arrive, because the first chunk after start contains none. A drift guard re-anchors, or pauses and holds the frame, after *T* seconds, where *T* comes from the Phase 0 spike. On flip, the same sequence runs for the next page. Orbis audio is off during creation. While the final version of a page plays, its clip is recorded (length set at G0) and saved with the page. When a saved book is shown, `ClipReplayScene` plays that clip instead and no Reactor session is needed.
+`reset → set_image(page still) → set_prompt(page motion prompt) → wait for conditions_ready → start`. The still stays on screen until the first frames arrive, because the first chunk after start contains none. A drift guard re-anchors, or pauses and holds the frame, after *T* seconds, where *T* comes from the Phase 0 spike. On flip, the same sequence runs for the next page. Orbis audio is off during creation. While the final version of a page plays, its clip is recorded (length and looping set at G0) and saved with the page. A page turned before its clip is complete is re-animated and recorded before the book is saved. When a saved book is shown, `ClipReplayScene` plays that clip instead and no Reactor session is needed.
 
 **Motion prompt template.** This applies the teammate's continuity lesson. `SCENE` (from this page's text plus its illustration) and `CAMERA` stay identical within the page, and only one gentle motion clause varies:
 `"The same {SCENE}, the same {CAMERA: locked-off, still}. {ONE GENTLE MOTION CLAUSE}. Nothing new enters the scene. Continuous slow motion, no cuts."`
+
+**Server access model (built in 0.6).** Anyone who reaches the functions' address must not be able to spend the demo's Reactor credit or kill its session.
+- The app signs in anonymously with Supabase Auth. Every server function requires that sign-in and has a per-user rate limit.
+- `reactor-token` mints Reactor tokens that last 1 h and allow 2 sessions (one live plus one reconnect); the app asks for a fresh one when a token expires or runs out. The app reports each Orbis session it opens, and the same function cleans up that user's own leftover sessions (at launch, and before minting).
+- `reactor-sessions` (list, and kill every Pop! session) is admin-only: it needs a server-side admin secret and the app never calls it. The run-book uses it after a demo. Until Brian confirms the Reactor account is his alone (REVIEW R-23), it kills only sessions Pop! reported.
+- API keys never leave the server. 0.3b checks whether a running session survives its token expiring; if it doesn't, G0 sets the token lifetime and the run-book's warm-up time together.
 
 ## 3. Platform facts
 
@@ -69,32 +75,36 @@ These were checked by reading the SDK's `SwiftUICore` interface file on 2026-09-
 
 | API | Signature | Use in Pop! |
 |---|---|---|
-| Hinge | `func onHingeChange(isEnabled: Bool = true, _ action: @escaping (_ oldContext: DeviceHingeContext, _ newContext: DeviceHingeContext) -> Void) -> some View` · `DeviceHingeContext.hinge: DeviceHinge?` (nil when there's no hinge) · `DeviceHinge.status`: a **struct with static members** `.closed / .partiallyOpen / .fullyOpen`, **not an enum**, so compare with `==`, and any `switch` needs a `default` · `DeviceHinge.angle: Angle` (UIKit's `UIHinge.angle` is a `CGFloat` in **radians**) · **The rate and granularity of angle updates are "system policy"** (`UIHinge.h`), so don't rely on update frequency or precision | `status` → mode (book or cover); `angle` → curl progress and pop depth, **animated smoothly between samples** |
+| Hinge | `func onHingeChange(isEnabled: Bool = true, _ action: @escaping (_ oldContext: DeviceHingeContext, _ newContext: DeviceHingeContext) -> Void) -> some View` · `DeviceHingeContext.hinge: DeviceHinge?` (nil when there's no hinge, and also when the view leaves a hierarchy that gets hinge updates, so nil can be brief on a Duo: `UIHingeInteraction.h`) · `DeviceHinge.status`: a **struct with static members** `.closed / .partiallyOpen / .fullyOpen`, **not an enum**, so compare with `==`, and any `switch` needs a `default`. `.fullyOpen` means "open as far as the device allows", so the flat angle isn't documented · `DeviceHinge.angle: Angle` (UIKit's `UIHinge.angle` is a `CGFloat` in **radians**) · **The rate and granularity of angle updates are "system policy"** (`UIHinge.h`), so don't rely on update frequency or precision · UIKit's handler is called with the initial state; 0.1 checks whether `onHingeChange` is too | `status` → mode (book or cover); `angle` → curl progress and pop depth, **animated smoothly between samples** |
 | Two-pane layout | `ArrangementView { primary } secondary: { secondary }`: both are `@ContentBuilder` closures, and there are only ever two panes · `.arrangementViewStyle(.split / .overlay)` · `.splitArrangementLayoutRatio(_:)` | The spread: primary = text page, secondary = art page |
-| Reserved regions | `GeometryProxy.reservedRegions(kind: .occlusion / .division, options: [.includeInactive], layoutDirectionBehavior: LayoutDirectionBehavior = .mirrors) -> [ReservedRegion]`, each with `frame`, `margins`, `isActive` | Pad text and position the art away from the fold (`.division`) and camera (`.occlusion`). *These kind meanings are inferred from the names.* |
+| Reserved regions | `GeometryProxy.reservedRegions(kind: .occlusion / .division, options: [.includeInactive], layoutDirectionBehavior: LayoutDirectionBehavior = .mirrors) -> [ReservedRegion]`, each with `frame`, `margins`, `isActive` | Pad text and position the art away from the fold (`.division`) and camera (`.occlusion`). UIKit's docs (`UIViewReservedRegion.h`): `.occlusion` is "a region that is occluded by an element" (the camera) and `.division` is "a region where an element should divide into two separate regions" (the fold); `frame` includes margins for interactive content |
 | UIKit versions | `UIHingeInteraction`, `UIArrangementViewController` | Not needed (the app is SwiftUI) |
-| Cover display | **No dedicated API in the SDK** | `.closed` → cover view. Verify how the simulator shows the outer screen (Phase 0) |
+| Cover display | **No dedicated API in the SDK.** The simulator's Duo has two screens (its `capabilities.plist`): outer 466×678 pt, and inner 951×669 pt folding down the middle, so each page is about 475×669 pt, portrait | `.closed` → cover view on the outer screen. 0.1 confirms the app's scene moves there when closed |
 
 ### Reactor Orbis, from Reactor's docs and the teammate's starter
 
 - There is **no Swift SDK**. Stable documents JavaScript (`@reactor-team/js-sdk` 3.x) and Python; Dynamic also lists raw WebRTC. So we host the JS SDK inside a `WKWebView`, bundled into the app rather than loaded from the web.
 - `set_image` works only before `start`; changing it needs `reset` + `start`. `set_prompt` works mid-run and takes effect at the next ~1.8 s chunk. The first chunk after `start` has no frames.
-- Session startup takes **minutes**. Tokens come from `POST https://api.reactor.inc/tokens` (up to 6 h, capped by a maximum session count). A failed connect can leave a session running that only the API key can delete.
-- **Stable:** 832×480 at 18 fps native, delivered at up to 4K, $0.582/min. **Dynamic:** 640×368, $1.254/min, can change resolution live, sessions up to ~60 min. Whether billing counts from connection or from generation is **unclear**.
-- Input images work best at 16:9; other shapes get squashed. We generate 16:9 art with the important content in the centre and crop it to the right page.
+- Session startup takes **minutes**. Tokens come from `POST https://api.reactor.inc/tokens` (up to 6 h, capped by a maximum session count); Pop! mints 1 h tokens for 2 sessions (§2 access model). A failed connect can leave a session running that only the API key can delete.
+- **Stable:** 832×480 at 18 fps native, delivered at up to 4K, $0.582/min. **Dynamic:** 640×368, $1.254/min, can change resolution live, sessions up to ~60 min. Still **unknown** (0.3b asks, and we ask Reactor): whether billing counts from connection or from generation, how long a Stable session can live, and what idle time between pages costs. If billing starts at connect, an hour of warm-up alone costs about $35.
+- Input images work best at 16:9; other shapes get squashed. **Each Duo page is portrait (about 475×669 pt, aspect 0.71), so cropping a 16:9 frame to one page keeps only about 40% of its width**: about 332 of Stable's 832 native pixels, stretched about 4× across the page. 0.3b compares four ways to fill the page, and G0 decides (D9):
+  - (a) span the animation across the whole spread (keeps about 80%), with the text on a calm band. This changes the page layout, so it goes to Brian as a pivot if chosen;
+  - (b) compose the picture in portrait at the centre of the 16:9 frame and crop to it (the current plan);
+  - (c) Dynamic's live resolution change, if it allows a portrait shape;
+  - (d) stretch the portrait picture sideways to 16:9, send that, and squeeze the video back to the page's shape, which keeps all 832 pixels across (check that motion still looks natural).
 
 ### Other facts that affect the design
 
 - Apple's Vision background removal (`VNGenerateForegroundInstanceMaskRequest`) reportedly **doesn't run in the Simulator** (Apple Developer Forums). So pop-up layers are generated directly: a background plate plus character cutouts on a flat colour that Core Image keys out.
-- OpenAI text-to-speech **returns no word timings**, so read-along uses `AVSpeechSynthesizer`'s `willSpeakRangeOfSpeechString` callback.
+- OpenAI text-to-speech **returns no word timings**, so read-along uses `AVSpeechSynthesizer`'s `willSpeakRangeOfSpeechString` callback. OpenAI's `tts` is used only for talking characters and video export.
 - OpenAI Realtime supports transcription-only sessions, with **short-lived client secrets minted by our server**, so the app never holds the key.
 
 ## 4. Reusing the teammate's starter (with permission)
 
 | Source in `orbis-hackathon-starter` | Becomes in Pop! |
 |---|---|
-| `app/api/token/route.ts` | `supabase/functions/reactor-token` (near-direct port to Deno) |
-| `app/api/sessions/route.ts` | `supabase/functions/reactor-sessions` (list and clean up stray sessions) |
+| `app/api/token/route.ts` | `supabase/functions/reactor-token`: ported to Deno, plus sign-in, a rate limit, and 1 h tokens for 2 sessions (§2 access model) |
+| `app/api/sessions/route.ts` | `supabase/functions/reactor-sessions` (list and clean up sessions), **admin-only**. The starter's unauthenticated "kill every session" isn't ported as-is |
 | `hooks/use-orbis-session.ts` | `web/live-scene/` bridge: connect and reconnect with backoff, wait for `conditions_ready`, a single prompt path with a chunk-stamped log, event handling, kill and cleanup |
 | `lib/orbis.ts` | Message unwrapping, fallback for the chunk-index field name, credit constants |
 | `lib/scene.ts` | The pattern behind `MotionPromptBuilder` (fixed scene and camera, one changing clause) |
@@ -105,36 +115,39 @@ These were checked by reading the SDK's `SwiftUICore` interface file on 2026-09-
 
 Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at the `PageContent` model and the `LiveScene` protocol, which are defined in Phase 0 so both can work against mocks.
 
-### Phase 0: Probes and foundations (≈ 13 h · A 7, B 6)
+### Phase 0: Probes and foundations (≈ 18 h · A 11, B 7)
 
 | Task | Track | Est | Answers |
 |---|---|---|---|
-| 0.1 Hinge probe screen: show `status` and `angle` live while using the simulator's fold controls | A | 2 h | Is the angle continuous? How often does it update? How is `.closed` / the cover shown? |
-| 0.2 Spread probe: `ArrangementView` split, and the reserved regions drawn as overlays | A | 1 h | Page sizes and aspect ratio, and where the fold and camera are |
-| 0.3 Orbis in iOS probe: `WKWebView` + bundled JS SDK + token → video playing in the Duo simulator | A | 4 h | Warm-up time, time from `reset` to first frame, drift after 30 and 60 s, Stable vs Dynamic on 3 picture-book images, **how to record each page's clip** (required: saved books replay exactly; try in-page recording first, then native capture of the web view) |
+| 0.1 Hinge probe screen: show `status` and `angle` live while using Simulator.app's fold controls (`simctl` has no hinge command) | A | 2 h | Is the angle continuous, and how often does it update? What is the angle when closed and when fully open (the maximum isn't documented)? Does `onHingeChange` fire with the initial state? Does the app's scene move to the outer screen on `.closed`? |
+| 0.2 Spread probe: `ArrangementView` split, and the reserved regions drawn as overlays | A | 1 h | The real page size (expected about 475×669 pt, portrait), and where the fold and camera are |
+| 0.3a Orbis go/no-go: `WKWebView` + bundled JS SDK + a short-lived token minted on the Mac (the key never enters the app) → one picture animating in the Duo simulator | A | 3 h | Does WebRTC video play in a `WKWebView` in the simulator? **If not (plan B):** try a native WebRTC client (Dynamic documents raw WebRTC). If that fails too, pages fall back to the still with a slow pan, which drops a must-have, so it goes to Brian as a pivot |
+| 0.3b Orbis comparisons and clip recording | A | 5 h | Warm-up time; time from `reset` to first frame; drift after 30 and 60 s; Stable vs Dynamic on 3 picture-book images; the four page-shape options (§3). **Clips:** `MediaRecorder` on the received stream, bytes moved to native in chunks or through a `WKURLSchemeHandler`, recorded at native resolution, MB per clip; whether ReplayKit works in the simulator as the native fallback (`WKWebView.takeSnapshot` is too slow for video). **Billing:** does it start at connect or at generation, how long can a Stable session live, what does idle time cost (also ask Reactor), and does a running session survive its token expiring? |
 | 0.4 Gemini probe: page art with a character reference at 16:9, plus plate and cutout edits | B | 2 h | p50 latency, character consistency, how well the cutouts key out |
 | 0.5 Speech probe: Mac mic → simulator → OpenAI Realtime transcription using a short-lived secret | B | 2 h | End-of-speech detection, latency, whether Apple on-device speech works in the simulator |
-| 0.6 Backend skeleton: Supabase project, schema and access rules, `reactor-token`, `reactor-sessions`, stub functions, secrets | B | 2 h | — |
+| 0.6 Backend skeleton: schema, the access model in §2 (anonymous sign-in, sign-in required on every function, rate limits, admin-only session cleanup), `reactor-token`, `reactor-sessions`, stub functions, secrets. Needs Deno and a running Docker (REVIEW R-07) | B | 3 h | — |
 
-**Gate G0:** decide D1 (gesture model) and D3 (Stable or Dynamic); settle how clips are recorded and how long each page's clip is (D4); fix the latency budget; freeze the `PageContent` and `LiveScene` contracts.
+**Gate G0:** confirm D1 (the gesture model in PRD §13) and set its numbers from 0.1: turn angle, hysteresis, pop angle and the close hold. Decide D3 (Stable or Dynamic) and D9 (how the animation fills a portrait page). Settle D4's details: how clips are recorded, the minimum clip length, how clips loop (crossfade or ping-pong), and what Save does with pages that have no complete clip. Set the token lifetime and the run-book's warm-up time from 0.3b. Fix the latency budget, and freeze the `PageContent` and `LiveScene` contracts.
 
 ### Phase 1: Book shell and hinge (≈ 8 h · A) · must-have: curl
 
 - App skeleton and navigation: Bookshelf → New Book → Book.
 - Domain models (`Book`, `Page`, `Character`, `StoryBible`, `KidProfile`, `StoryBrief`) and mock data.
-- `HingeSource` (Duo, slider, none) and **`PostureMachine` built test-first**, driven by scripted angle sequences. These include **sparse, irregular and jumpy updates** (the update rate is system policy), and the curl smooths between samples.
+- `HingeSource` (Duo, slider, none) and **`PostureMachine` built test-first**, driven by scripted angle sequences. These include **sparse, irregular and jumpy updates** (the update rate is system policy), and the curl smooths between samples. They also cover reopening before the turn point, jitter around it, a brief overshoot to `.closed`, and opening from the cover.
 - `SpreadView`: left text page, right art page (still only for now), padded for reserved regions.
-- Page curl v1: 3D rotation plus shading driven by curl progress; springs back if released early, commits past the threshold.
+- Page curl v1: 3D rotation plus shading driven by curl progress; settles back if the hinge reopens before the turn point, and commits past it.
 
 **Exit:** a 5-page mock book turns by folding in the Duo simulator, and the `PostureMachine` tests pass.
 
-### Phase 2: Live story pipeline, parent-driven (≈ 20 h · B) · must-have: live generation
+### Phase 2: Live story pipeline, parent-driven (≈ 21 h · B) · must-have: live generation
 
 - Speech input (OpenAI Realtime; Apple speech as fallback), typed input, and the parent's/kid's turn toggle (the parent is the default speaker).
 - Kid profile (first name, reading level, interests) and the per-book story brief (interests, optional real moment, and an optional free-text "Anything you'd like this story to teach?" that simply goes into the prompt).
-- `StoryEngine` with a strict response schema, reading-level limits, page breaks, parent directions (add or change, carried into later pages), "You continue", and a revise-current action.- `StoryBible` and character registry (fixed description plus reference image).
-- `Art` (Gemini): locked art style, character references, 16:9 with important content central.
-- Moderation gate on text, prompts and images; safe fallback lines.
+- `StoryEngine` with a strict response schema, reading-level limits, page breaks, parent directions (add or change, carried into later pages), "You continue", and a revise-current action. It leaves surnames, addresses, schools and phone numbers out of the story text.
+- Page breaks while creating: the engine proposes a break and shows "fold to turn". Anything said after that drafts the next page, which appears when the parent folds. The engine never turns the page itself.
+- `StoryBible` and character registry (fixed description plus reference image).
+- `Art` (Gemini): locked art style, character references, framing from D9 (16:9 with important content central until G0).
+- Kid-safety gate (PRD §8.6 rubric): `omni-moderation-latest` on text, prompts and pictures, plus an LLM rubric check on text and prompts at the kid's reading level, and each category's response (rewrite, redirect, regenerate the picture, placeholder).
 - `PagePipeline`: prepares the next page early, cancels work on revision, versions each page.
 - Persistence in Supabase (rows plus Storage); timing spans for every stage.
 
@@ -143,38 +156,38 @@ Tracks: **A** = device and UI · **B** = AI and backend. The two tracks meet at 
 ### Phase 3: Living page, Orbis per page (≈ 14 h · A 7, B 7)
 
 - `ReactorWebScene` bridge (bundled JS, Swift event stream) and the `StillPanScene` fallback.
-- `SessionController`: warm up on New Book, reconnect with backoff, kill, clean up stray sessions at launch, credit meter.
+- `SessionController`: warm up on New Book, reconnect with backoff (with a fresh token when one expires or runs out), kill, ask the server to clean up this user's leftover sessions at launch, credit meter.
 - `motion-prompt` function (Gemini reads the page text and still) and `MotionPromptBuilder`.
 - On flip: the per-page sequence; crossfade from still to video; drift guard; audio off while the mic is live.
 - Frame tripwire: a sampled frame goes through image moderation, and the page switches back to the still if it's flagged.
-- Clip recording: record each page's final animation (method and length from G0) and save it with the page.
+- Clip recording: record each page's final animation (method, length and looping from G0) and save it with the page.
 - Debug overlay (from the teammate's panel), hidden behind a gesture.
 
-**Exit:** every page animates within 5 s of the flip and stays on topic for 60 s, and each page's clip is saved. Killing the Reactor session drops cleanly to the still fallback.
+**Exit:** after warm-up, every page animates within 5 s of the flip (p50) and stays on topic for 60 s: an LLM judge scores frames sampled every 10 s at 4 or more out of 5 against the page's text, on 10 pages. Each page's clip is saved. Killing the Reactor session drops cleanly to the still fallback.
 
 ### Phase 4: Pop-up (≈ 10 h · A 7, B 3) · must-have
 
 - Layer generation: plate and cutouts (Gemini) → chroma key → alpha PNGs, prepared early per page.
 - Pop-up renderer: layered SwiftUI with 3D transforms; depth follows the angle; hands over from video to diorama and back. RealityKit is optional.
-- Gesture model from D1, wired into `PostureMachine`.
+- Gesture model from D1, wired into `PostureMachine`: the page now showing pops at about 90°, including page 1 as the book opens from its cover.
 
 **Exit:** every generated page pops up at about 90° and folds back flat in the Duo simulator.
 
-### Phase 5: Save and show (≈ 8 h · A 6, B 2) · must-have: exact replay
+### Phase 5: Save and show (≈ 9 h · A 7, B 2) · must-have: exact replay
 
-- Finish: closing the phone (or tapping Save) ends the book; generate the title and cover art; show the cover when `.closed`.
+- Finish: keeping the phone closed for about 1 s (or tapping Save) ends the book, and reopening sooner carries on. Pages without a complete clip are re-animated and recorded first. Generate the title and cover art, and show the cover when `.closed`.
 - `BookStore`: save the book with its clips, keep a copy on the device, and show saved books on the bookshelf as covers.
-- Show a saved book: `ClipReplayScene` on each page, with the same curl and pop-up, and no generation calls.
+- Show a saved book: `ClipReplayScene` on each page (clips loop as set at G0), with the same curl and pop-up, and no generation calls.
 
 **Exit:** a saved 5-page book shows the identical text, pictures and clips with Reactor switched off and the network disconnected.
 
-> **═══ MVP / demo line: all must-haves done, ≈ 73 h (about 37 h per engineer) ═══**
+> **═══ MVP / demo line: all must-haves done, ≈ 80 h (about 40 h per engineer) ═══**
 
 ### Phase 6: Parent controls and sharing (≈ 7 h)
 Real-moment tone (calm-tone presets and safety rules). Parent settings and parental gate. PDF export.
 
 ### Phase 7: Privacy check (≈ 1 h)
-Confirm no audio is ever saved and that only the first name and interests are stored. Timing stays in local logs and the debug overlay; there's no third-party crash or analytics service.
+Confirm no audio is ever saved, that only the first name and interests are stored, and that story text carries no surnames, addresses, schools or phone numbers (eval cases). Timing stays in local logs and the debug overlay; there's no third-party crash or analytics service.
 
 ### Phase 8: Cut-list features, in order of priority (≈ 18 h)
 1. Read-along: `AVSpeechSynthesizer` with word highlighting · 4 h
@@ -185,15 +198,15 @@ Confirm no audio is ever saved and that only the first name and interests are st
 ### Phase 9: Demo hardening (≈ 8 h · start at least 2 days before the demo)
 Golden-path script and book; a saved golden book (exact replay, stored on the device) as the fallback if the network fails; failure drills (no network, Reactor down, moderation blocks something, speech fails); performance pass; 5 rehearsals in a row.
 
-**Total ≈ 107 h.** *(v2 was 118 h. The 2026-09-26 decisions removed lesson packs and fact-checking (3 h), lesson extras (2 h), the paywall and crash-reporting work (4 h), and the non-Duo reader (2 h, P-03).)*
+**Total ≈ 114 h.** *(v3 was 109 h. P-03 (iPhone Duo only) removed the non-Duo reader (−2 h), and the readiness fixes added 7 h: splitting the Orbis probe into a go/no-go and comparisons (+4 h), the server access model (+1 h), the kid-safety rubric check (+1 h), and completing clips before saving (+1 h). v2 was 118 h; the 2026-09-26 decisions removed lesson packs and fact-checking (3 h), lesson extras (2 h), and the paywall and crash-reporting work (4 h).)*
 
 ## 6. Critical path
 
 `Phase 0.1 hinge probe` → `PostureMachine` → curl → pop-up gesture
-`Phase 0.3 Orbis probe` (including clip recording) → `LiveScene` bridge → per-page animation → saved-book replay
+`Phase 0.3a Orbis go/no-go` → `0.3b comparisons and clip recording` → `LiveScene` bridge → per-page animation → saved-book replay
 `Phase 0.4 and 0.5 probes` → `PagePipeline` → first end-to-end story
 
-The Orbis probe (0.3) is the riskiest unknown. Start it first.
+The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fails, settle its plan B before anything else.
 
 ## 7. Cut lines by timeline
 
@@ -205,28 +218,29 @@ The Orbis probe (0.3) is the riskiest unknown. Start it first.
 
 ## 8. Testing and verification
 
-- **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, directions and "You continue" (a direction carries into later pages), reading-level limits, `PagePipeline` cancellation, the moderation gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
+- **Unit tests, written first, ≥ 80% coverage on the logic modules:** `PostureMachine`, `MotionPromptBuilder` (the template stays byte-identical), `StoryEngine` decoding and validation, directions and "You continue" (a direction carries into later pages), reading-level limits, `PagePipeline` cancellation, the kid-safety gate, the `SessionController` state machine against a fake transport, and a `BookStore` round trip (a saved book reloads identically).
 - **Server function tests:** each function tested in Deno against recorded fixtures.
-- **Eval set:** 30 sessions (parent narration and directions, "You continue", kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something, checked for safety, reading level and coherence. Run before every demo.
-- **UI:** XCUITest on the iPhone Duo simulator for navigation. A Duo posture checklist run through Claude's simulator tool, with a screenshot per posture.
+- **Eval set:** 30 sessions (parent narration and directions, "You continue", kid interruptions, mind-changing, scary requests), including briefs that ask the story to teach something. It covers every kid-safety category at each reading level (PRD §8.6), personal details, and 40 labelled utterances for telling narration from directions (S3). Checked for safety, reading level and coherence; passing means 0 misses and false blocks on ≤ 5% of safe pages. Run before every demo.
+- **UI:** XCUITest on the iPhone Duo simulator for navigation. Duo postures are tested automatically through a scripted `HingeSource` and the debug slider, because `simctl` can't move the hinge; the real hinge is checked by hand with Simulator.app's fold controls. Screenshots of both screens: `xcrun simctl io booted screenshot --display=1` (outer) and `--display=3` (inner).
 - **Latency:** a timing span per stage, with a p50 table in the debug overlay.
 
 ## 9. Demo run-book
 
-- **T-60 min:** launch and open a New Book to warm Orbis. The overlay should show 1 open session, status ready and the credit meter running, with enough Reactor credit left for the demo (PRD §9 credit budget).
+- **Warm-up (T-60 min until 0.3b measures it):** launch and open a New Book to warm Orbis, early enough for the measured start-up time but late enough that the session cap and token lifetime can't end the session on stage. The overlay should show 1 open session, status ready and the credit meter running, with enough Reactor credit left for the demo (PRD §9 credit budget).
 - **T-15 min:** a rehearsal pass; headphones or muted speakers so the animation's sound doesn't reach the mic; a wired connection or a hotspot.
 - **Live:** follow the script. If Reactor fails, the still fallback takes over automatically. If the network fails, show the saved golden book.
-- **After:** KILL, then clean up stray sessions; confirm 0 open sessions on the account.
+- **After:** KILL, then run the admin-only `reactor-sessions` cleanup; confirm 0 open sessions on the account.
 
 ## 10. Decision log
 
 | # | Decision | Decide by |
 |---|---|---|
-| D1 | Gesture model for turning vs popping up | G0 |
+| D1 | Gesture model for turning vs popping up: the model is recommended in PRD §13, and G0 sets its angles and hold time | G0 |
 | D2 | What the latency target means | G0 |
 | D3 | Orbis Stable vs Dynamic | G0 |
-| D4 | Record per-page clips | ✅ Resolved 2026-09-25 by P-01: required (saved books replay exactly). How, and the clip length: G0 |
-| D7 | Gemini covers images only; OpenAI keeps speech, story and narration | Assumed; confirm now |
+| D4 | Record per-page clips | ✅ Resolved 2026-09-25 by P-01: required (saved books replay exactly). How, the minimum clip length, looping, and what Save does with incomplete clips: G0 |
+| D7 | Gemini: images and animation prompts. OpenAI: speech-to-text, story, moderation, and `tts` for talking characters and video export. Read-along narration uses Apple's on-device voice | Brian confirms before Phase 0 |
 | D8 | Demo date → cut line | ✅ Resolved 2026-09-25: no deadline; build the full scope, including talking characters |
+| D9 | How the 16:9 animation fills a portrait page (§3 options) | G0 |
 
 *D5 and D6 were removed on 2026-09-26 (P-02): everything is free.*

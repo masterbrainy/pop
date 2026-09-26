@@ -40,7 +40,7 @@ Keys stay in `supabase/functions/.env`. The scripts read them into shell variabl
   - All clips recorded, 0 frames flagged, 0 Reactor sessions left open.
 - **Gemini prepaid credit ran out** (HTTP 402 "prepayment credits are depleted", checked directly 2026-09-26). Pictures, layers, reference sheets, covers and motion prompts need Gemini. Story text is OpenAI. Image calls now retry 402/429/5xx for about 17 s and report Google's reason. Brian needs to top up before the demo.
 - **Fold → first live frame:** 2.4–3.5 s on a warm session (5 samples), 6.1 s on the session's first start (R-36 resolved).
-- **Eval: 82/82 pass, 0/36 safety misses, 1/46 false blocks (2.2%).** A parent's "the end" (said on its own) ends the path at that page, and the last page always closes with "The end." Branded characters (Mickey Mouse and others) are refused by the gate, not just the rubric. `scripts/eval/run.ts <id-prefix>` runs a subset.
+- **Eval: 83/83 pass, 0/36 safety misses, 1/47 false blocks (2.1%).** A parent's "the end" (said on its own) ends the path at that page, and the last page always closes with "The end." Branded characters (Mickey Mouse and others) are refused by the gate, not just the rubric. `scripts/eval/run.ts <id-prefix>` runs a subset.
 - **Golden book:** "Maya and the Star Stone", 8 pages, 54 MB (`scripts/golden-book.sh restore`).
 - **Fixed on the way:**
   - Layers made in the first seconds could be turned away by the image service, so they now retry once.

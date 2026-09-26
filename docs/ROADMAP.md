@@ -264,7 +264,7 @@ The Orbis go/no-go (0.3a) is the riskiest unknown. Start it first, and if it fai
 |---|---|---|
 | Reactor down or slow | Pictures stay still with a slow pan | Carry on; the book still works. KILL in the debug panel if needed |
 | Network down | "Pop! is offline" note | Open the golden book from the bookshelf and demo reading, fold-to-turn and the pop-up |
-| Safety gate refuses a line | A gentle note asks for a friendlier direction | Give a gentler line; the 82-case eval set blocks 1 of 46 safe cases (2.2%) and misses 0 of 36 unsafe ones (2026-09-26) |
+| Safety gate refuses a line | A gentle note asks for a friendlier direction | Give a gentler line; the 83-case eval set blocks 1 of 47 safe cases (2.1%) and misses 0 of 36 unsafe ones (2026-09-26) |
 | Speech fails | A note under the story bar | Type instead |
 | Hinge lags | Folds don't turn | Triple-tap for the hinge panel and use Turn and Pop |
 

@@ -36,6 +36,8 @@ This index is not part of the append-only log. Update it freely, and link each a
 | Page size and aspect ratio; what `.division` and `.occlusion` actually mark | Phase 0.2 spread probe | TBD |
 | Orbis warm-up time, `reset` to first frame, drift after 30 s and 60 s, Stable vs Dynamic, clip recording in `WKWebView` | Phase 0.3 Orbis probe | TBD |
 | Does Orbis bill from connection or from generation? | Phase 0.3, plus a question to Reactor | TBD |
+| How to record each page's clip (in-page recording or native capture of the web view), and how long each clip is (D4) | Phase 0.3, then Gate G0 | TBD |
+| How long it takes a parent to make a 5-page lesson book | Phase 2 exit | TBD |
 | Gemini p50 latency, character consistency, how well cutouts key out | Phase 0.4 | TBD |
 | Realtime end-of-speech detection and latency; does Apple on-device speech work in the simulator? | Phase 0.5 | TBD |
 | p50 latency per pipeline stage | Phase 2 exit | TBD |
@@ -251,3 +253,9 @@ It's **unclear** whether billing starts at connection or at generation.
 **Evidence:** Commit `d3f48c0`. The builder also re-read `UIHinge.h`, which says the angle is in radians and that its update rate is "system policy".
 **Confidence:** Verified (two independent SDK reads).
 **So what for Pop!:** The pitch, the tech log and the roadmap now agree on the Duo APIs. Phase 1's `PostureMachine` tests cover sparse and irregular angle sequences.
+
+### TN-024 · 2026-09-25 · Decision: saved books replay exactly (P-01 accepted; D4 resolved)
+**Decision:** Brian accepted P-01, so parents drive creation and a saved book replays exactly as it was made. That makes recording each page's clip **required** (D4 resolved). New units: `BookStore` saves a finished book (rows, pictures, layers, clips) and keeps a copy on the device. `ClipReplayScene`, a third `LiveScene` implementation, plays a saved page's recorded clip. `ReactorWebScene` also records each page's clip while the final version of that page plays. Showing a saved book makes no generation calls and works without a network. This supersedes the D4 row of TN-021.
+**Evidence:** PRD v2 (principle 6, S13, B1–B2, §11 "Clip recording", D4) and ROADMAP v2 (§2 units, Phase 0.3, Phase 3, the new Phase 5 "Save and show", with the exit test "identical with Reactor off and network disconnected"), commit `5c22f0d`. P-01 is marked accepted in `docs/PIVOTS.md`.
+**Confidence:** Decision (accepted). **Unverified:** whether a clip can be recorded from the `WKWebView` at all. Phase 0.3 tries in-page recording first, then native capture of the web view. If neither works, a saved book shows the still and re-animates it live from the same picture and prompt, which is close but not exact, and not free.
+**So what for Pop!:** Orbis cost is paid once, while a book is made. Showing it costs $0 in Orbis time. Clip storage becomes a new per-book cost, TBD (measured in Phase 5). The demo's network fallback is now a saved golden book on the device.

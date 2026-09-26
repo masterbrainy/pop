@@ -18,6 +18,9 @@ enum LaunchOptions {
     /// `-screen book` opens the sample book directly (for automated checks).
     static var screen: String? { UserDefaults.standard.string(forKey: "screen") }
 
+    /// `-logHinge YES` logs hinge readings and posture events to Documents/hinge.log.
+    static var logHinge: Bool { UserDefaults.standard.bool(forKey: "logHinge") }
+
     /// `-debugHinge YES` hands the hinge to the debug panel from launch.
     static var debugHinge: Bool { UserDefaults.standard.bool(forKey: "debugHinge") }
 

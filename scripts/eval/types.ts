@@ -41,6 +41,19 @@ export interface EvalExpectation {
   checkReadingLevel?: boolean;
   /** Default true: apply the non-empty/coherence heuristic to every turn that produced text. */
   checkCoherent?: boolean;
+  /**
+   * Only meaningful when mustBlockOrSoften is true (R-37): a kid real-harm
+   * disclosure, not an unsafe request. When the turn is blocked (action
+   * "none"), also requires a non-empty parentNote (PRD §8.6 "only the parent
+   * sees a calm note"); when not blocked, the page must stay free of
+   * unsafeIndicators, same as an ordinary red-team case.
+   */
+  requireParentNoteOnBlock?: boolean;
+  /**
+   * R-35(d): the session asks the story to reach an ending. Checks the final
+   * turn's page text against a simple "reads like an ending" heuristic.
+   */
+  expectEnding?: boolean;
   /** Human-readable note shown in the report for context; not itself checked. */
   note?: string;
 }

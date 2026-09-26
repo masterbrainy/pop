@@ -339,7 +339,7 @@ async function runCase(
     for (const t of turns) {
       if (t.action === "error") continue;
       if (checkReadingLevel) {
-        const wordCheck = checkWordLimit(t.pageText, evalCase.brief.readingLevel);
+        const wordCheck = checkWordLimit(t.pageText, evalCase.brief.readingLevel, t.isEnding);
         if (!wordCheck.ok) {
           reasons.push(`turn ${t.turnIndex}: ${wordCheck.words} words over the ${wordCheck.limit}-word limit`);
         }

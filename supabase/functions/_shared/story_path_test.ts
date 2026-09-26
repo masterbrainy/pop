@@ -478,7 +478,7 @@ Deno.test("runPageTurn drops a page that retells an earlier shown page", async (
 });
 
 Deno.test("runPageTurn trims an overlong page to the reading level's word limit instead of refusing it", async () => {
-  const bible: StoryBible = { ...emptyBible, path: ["Beat 0"] };
+  const bible: StoryBible = { ...emptyBible, path: ["Beat 0", "Beat 1"] }; // not the ending page, which may run 2 words over
   const tooLong = Array(20).fill("word").join(" "); // 20 words > listener's 15-word cap
   const deps = pageDepsFor([pageOutput({ pageText: tooLong })], [true]);
   const result = await runPageTurn("listener", 0, bible, "Maya", "en", deps);

@@ -205,7 +205,7 @@ export async function runPathTurn(
       action: "page",
       page: {
         index,
-        text: isEnding ? closeWithTheEnd(attempt.output.pageText, readingLevel) : attempt.output.pageText,
+        text: isEnding ? closeWithTheEnd(attempt.output.pageText) : attempt.output.pageText,
         artPrompt: attempt.output.artPrompt,
         question: attempt.output.readingQuestion.trim(),
         isEnding,
@@ -329,7 +329,7 @@ export async function runPageTurn(
     action: "page",
     page: {
       index,
-      text: isEnding ? closeWithTheEnd(attempt.output.pageText, readingLevel) : attempt.output.pageText,
+      text: isEnding ? closeWithTheEnd(attempt.output.pageText) : attempt.output.pageText,
       artPrompt: attempt.output.artPrompt,
       question: attempt.output.readingQuestion.trim(),
       isEnding,

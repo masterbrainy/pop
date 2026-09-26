@@ -358,3 +358,10 @@ Deno.test("checkNotRealHarm passes for unsafe, null, or no refusal at all", () =
   assert(checkNotRealHarm("unsafe").ok);
   assert(checkNotRealHarm(null).ok);
 });
+
+Deno.test("checkWordLimit lets the ending page run two words over for its 'The end.' (R-45)", () => {
+  const fifteen = Array(15).fill("word").join(" ");
+  assert(checkWordLimit(`${fifteen} The end.`, "listener", true).ok);
+  assertFalse(checkWordLimit(`${fifteen} The end.`, "listener").ok);
+  assertFalse(checkWordLimit(`${fifteen} one more The end.`, "listener", true).ok);
+});

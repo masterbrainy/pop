@@ -4,7 +4,7 @@ Pop! lets a parent make a live picture book for their child on the iPhone Duo (A
 **Read first:** [docs/PRD.md](docs/PRD.md) (what and why) · [docs/ROADMAP.md](docs/ROADMAP.md) (how, phases, verified platform facts).
 
 ## What this is: a hackathon-style pitch, not a release (Brian, 2026-09-26)
-- **Everything is free.** Nothing is sold or released. Don't write pricing, paywalls, subscriptions, "Pro", unit-economics strategy, upsells, go-to-market or marketing plans, App Store or Kids Category planning, or legal-release checklists. If a VC asks how it makes money, one honest line in the pitch's tough-questions section is enough.
+- **Everything is free.** Nothing is sold or released. Don't write pricing, paywalls, subscriptions, "Pro", unit-economics strategy, upsells, go-to-market or marketing plans, App Store or Kids Category planning, or legal-release checklists. If a VC asks how it makes money, one honest line is enough.
 - **Keep:** anything that makes the demo great and reliable, kid safety (moderation), privacy by design, keys kept private, and a practical Reactor credit budget for the demo itself.
 - **Parents drive creation.** Lessons are **optional**: a parent *can* ask for a story that teaches something. That's a use case of the story brief, **not** a subsystem to build (no lesson packs and no separate fact-check pipeline beyond the normal safety checks).
 
@@ -27,30 +27,28 @@ All Pop! sessions live in the sidebar group **"Pop!"**. Set your own title to yo
 
 | Session (title) | Session id | Role | Owns (only this session edits these) |
 |---|---|---|---|
-| **Pop! · Builder (lead)** | `local_fd25db33-d66a-47cc-9fb4-4c2fbee2e46a` | Builds the app phase by phase; integrates everything; final say on code; fixes readiness findings in its files | App code, `supabase/` (functions, migrations), `config/`, `CLAUDE.md`, ROADMAP (except when an accepted pivot is being applied), and **factual or editorial fixes to the PRD**. PRD scope, pricing and product-promise changes go through Pivots & Ideas for Brian to decide |
+| **Pop! · Builder (lead)** | `local_fd25db33-d66a-47cc-9fb4-4c2fbee2e46a` | Builds the app phase by phase; integrates everything; final say on code; fixes readiness findings in its files; records verified facts and decisions | App code, `supabase/` (functions, migrations), `config/`, `CLAUDE.md`, ROADMAP (except when an accepted pivot is being applied), and **factual or editorial fixes to the PRD**. PRD scope, pricing and product-promise changes go through Pivots & Ideas for Brian to decide |
 | **Pop! · Review & QA** | `local_883a05d7-0b22-46ae-a930-3e9efa9b9372` | Parallel checking: verifies claims, reviews every builder commit, runs builds and tests, makes small side improvements | `docs/REVIEW.md`, test-only additions, small fixes it announces to the builder |
-| **Pop! · Pitch & Tech Log** | `local_8d1a05f7-51a4-4d59-a744-d7816d375b71` | Captures what matters for VCs and Apple engineers | `docs/PITCH.md`, `docs/TECH_NOTES.md` |
 | **Pop! · Pivots & Ideas** | `local_9f48e2ec-d0fd-469b-b4a4-ec775fcafec4` | Brian's inbox for pivots and suggestions; assesses impact honestly | `docs/PIVOTS.md`; PRD (and ROADMAP scope) **only while applying a pivot Brian accepted** |
+
+*Brian retired and deleted **Pop! · Pitch & Tech Log**, and `docs/PITCH.md` and `docs/TECH_NOTES.md` are gone. Don't message that session or recreate those files.*
 
 **Who tells whom.** Each entry is sender → recipients: what triggers the message.
 - **Builder → QA:** after each commit batch or milestone ("review a1b2c3..d4e5f6").
-- **Builder → Pitch & Tech Log:** after anything demo-worthy or measured (latency, a working posture effect, screenshots).
-- **QA → Builder:** blocking findings (CRITICAL/HIGH) with REVIEW.md IDs.
-- **QA → Pitch & Tech Log:** any correction to a fact that TECH_NOTES or PITCH relies on.
-- **Pivots → Builder, QA, Pitch & Tech Log:** the moment Brian accepts a pivot (ID plus the commit that applied it), so QA re-audits and Pitch re-frames.
-- **Pivots → Pitch & Tech Log:** ideas that are really pitch angles.
-- **Pitch & Tech Log / QA → Builder:** suggested edits to PRD, ROADMAP or CLAUDE.md. Only the owner edits those files.
+- **QA → Builder:** blocking findings (CRITICAL/HIGH) with REVIEW.md IDs, and any correction to a fact in the PRD or ROADMAP.
+- **QA → Pivots:** a finding only Brian can settle (scope or a product promise). Pivots logs it as a proposed pivot that cites the REVIEW.md ID, and QA marks the finding as waiting on that pivot.
+- **Pivots → Builder and QA:** the moment Brian accepts a pivot (ID plus the commit that applied it), so the builder works to it and QA re-audits the changed docs.
+- **QA / Pivots → Builder:** suggested edits to PRD, ROADMAP or CLAUDE.md. Only the owner edits those files.
 
 **Proposed pivots are not plan changes.** Work to the current PRD and ROADMAP. If a *proposed* entry in `docs/PIVOTS.md` would change your work, note the dependency (for example, "depends on P-01") rather than acting on it. Act only once its status is **accepted**.
 
 ## How sessions work together
 - **Git.** Side sessions run in their own worktrees on their own branches. Integrate through `main`: commit only your own files by path (never `git add -A`), then `git fetch origin && git rebase origin/main && git push origin HEAD:main`. If the push is rejected, rebase and retry. The builder works directly on `main` in `/Users/brianhuang/Pop!`: commit, then `git pull --rebase` and push.
-- **Messages.** Use `send_message` (or `SendMessage`) to another session's id for hand-offs: the builder pings QA after each commit batch or milestone, pings Pitch & Tech Log after anything demo-worthy, and Pivots pings the builder when Brian accepts a pivot. Keep messages short: what changed, which commits, and what you need.
+- **Messages.** Use `send_message` (or `SendMessage`) with the other session's id for the hand-offs above. Keep messages short: what changed, which commits, and what you need.
 - **Don't edit another session's files.** Propose the change to the owner instead.
 
 ## Where things get recorded
-- **`docs/TECH_NOTES.md`:** dated technical facts and decisions, each with evidence (for example, verified API signatures, measured latency, workarounds).
-- **`docs/PITCH.md`:** the pitch for two audiences (VCs; Apple engineers), a demo script, and an ideas inbox.
+- **ROADMAP §3 (platform facts) and §10 (decision log):** verified technical facts, each with its source (SDK file, measurement or vendor doc), plus decisions. The builder writes them; others send corrections to the builder.
 - **`docs/PIVOTS.md`:** Brian's pivots and suggestions, each with impact and status (proposed, accepted, parked, rejected).
 - **`docs/REVIEW.md`:** QA findings with severity and status, plus the current readiness verdict.
 

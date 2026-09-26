@@ -16,14 +16,14 @@ struct BookView: View {
     @State private var showsDebugPanel = LaunchOptions.debugHinge
     @State private var finishing = false
 
-    init(book: Book, kid: KidProfile, settings: ParentSettings = ParentSettings(), mode: BookMode,
+    init(book: Book, kid: KidProfile, settings: ParentSettings = ParentSettings(), mode: BookMode, heroDrawing: HeroDrawing? = nil,
          onClose: @escaping () -> Void = {}, onFinish: @escaping (Book) -> Void = { _ in }) {
         self.kid = kid
         self.onClose = onClose
         self.onFinish = onFinish
         let reader = BookReader(book: book, mode: mode)
         _reader = State(initialValue: reader)
-        _maker = State(initialValue: mode == .creating ? StoryMaker(reader: reader, kid: kid, settings: settings) : nil)
+        _maker = State(initialValue: mode == .creating ? StoryMaker(reader: reader, kid: kid, settings: settings, heroDrawing: heroDrawing) : nil)
     }
 
     var body: some View {

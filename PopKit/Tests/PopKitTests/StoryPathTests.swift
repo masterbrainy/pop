@@ -16,7 +16,7 @@ import Testing
     private func pageResponse(index: Int, text: String, path: [String], action: StoryTurnAction = .page, note: String? = nil) -> StoryTurnResponse {
         StoryTurnResponse(
             action: action,
-            page: action == .none ? nil : StoryTurnPageResult(index: index, text: text, artPrompt: "art \(index)", breakSuggested: false,
+            page: action == .none ? nil : StoryTurnPageResult(index: index, text: text, artPrompt: "art \(index)",
                                                               question: "Q\(index)?", isEnding: index == path.count - 1),
             bible: StoryBible(title: "T", characters: [Character(id: "maya", name: "Maya", description: "blue dragon")], path: path),
             parentNote: note, timings: StoryTurnTimings(modelMs: 1, safetyMs: 1)
@@ -104,7 +104,7 @@ import Testing
             try await Task.sleep(for: storyDelay)
             return StoryTurnResponse(
                 action: .page,
-                page: StoryTurnPageResult(index: request.index ?? 0, text: text, artPrompt: "art", breakSuggested: false),
+                page: StoryTurnPageResult(index: request.index ?? 0, text: text, artPrompt: "art"),
                 bible: StoryBible(path: ["a", "b"]), parentNote: nil, timings: StoryTurnTimings(modelMs: 1, safetyMs: 1)
             )
         }

@@ -3,10 +3,6 @@ import Foundation
 /// One page's generation progress: text, then its still, then its motion prompt —
 /// or a failure at any stage (docs/CONTRACTS.md §3; ROADMAP §2 `PagePipeline`).
 public enum PagePipelineEvent: Sendable, Equatable {
-    /// The full result of applying the story-turn response: the updated book (bible
-    /// carried forward), the current draft, a pending next-page draft if the turn
-    /// proposed a break, and a parent note if there was nothing to show.
-    case textReady(StoryTurnOutcome)
     /// A `path` or `page` call wrote a page (or refused with a note), P-04.
     case pageWritten(PathOutcome)
     case stillReady(pageIndex: Int, path: String, url: String)
@@ -56,18 +52,8 @@ public actor PagePipeline {
         self.now = now
     }
 
-    /// The full sequence for the page currently being drafted: story-turn (built from
-    /// `book`/`kid`/`settings`/`currentDraft`/`input`), then art and motion-prompt for
-    /// whatever text comes back.
-    @discardableResult
-    public func run(book: Book, kid: KidProfile, settings: ParentSettings, currentDraft: PageContent, input: StoryTurnInput) -> AsyncStream<PagePipelineEvent> {
-        start(pageIndex: currentDraft.index) { [self] runID, continuation in
-            await self.executeFullTurn(runID: runID, book: book, kid: kid, settings: settings, currentDraft: currentDraft, input: input, continuation: continuation)
-        }
-    }
-
     /// Art and motion-prompt only, for a page whose text is already known — used to
-    /// prepare the next page early, once its draft appears from a `new_page` turn.
+    /// (re)paint a page whose words came from an earlier `path`/`page` build.
     @discardableResult
     public func preparePendingDraft(_ page: PageContent, book: Book) -> AsyncStream<PagePipelineEvent> {
         start(pageIndex: page.index) { [self] runID, continuation in
@@ -123,43 +109,6 @@ public actor PagePipeline {
 
     // MARK: - stage sequences
 
-    private func executeFullTurn(
-        runID: UUID, book: Book, kid: KidProfile, settings: ParentSettings, currentDraft: PageContent, input: StoryTurnInput,
-        continuation: AsyncStream<PagePipelineEvent>.Continuation
-    ) async {
-        defer {
-            finish(runID: runID, pageIndex: currentDraft.index)
-            continuation.finish()
-        }
-        do {
-            let request = StoryEngine.turnRequest(book: book, kid: kid, settings: settings, currentDraft: currentDraft, input: input)
-            let response = try await timedStoryTurn { try await self.server.storyTurn(request) }
-            try Task.checkCancellation()
-
-            let outcome = StoryEngine.apply(response, to: book, currentDraft: currentDraft)
-            continuation.yield(.textReady(outcome))
-            try Task.checkCancellation()
-
-            // Only regenerate the current page's art/motion when its words actually
-            // changed (revise_current) or it never had a still to begin with (its
-            // first append). An append onto a page that already has a still, and a
-            // new_page break (the current page is unchanged), skip it — the
-            // pending next draft still gets its own art/motion below.
-            if shouldIllustrateCurrentPage(action: response.action, currentDraft: outcome.currentDraft) {
-                try await runArtAndMotion(page: outcome.currentDraft, book: outcome.book, continuation: continuation)
-            }
-            if let pending = outcome.pendingNextDraft {
-                try await runArtAndMotion(page: pending, book: outcome.book, continuation: continuation)
-            }
-        } catch is CancellationError {
-            // superseded by a newer run for the same page; stay quiet.
-        } catch let error as ServerError {
-            continuation.yield(.failed(error.message + "\n" + error.serverDetail))
-        } catch {
-            continuation.yield(.failed("\(error)"))
-        }
-    }
-
     private func executePageBuild(
         runID: UUID, request: StoryTurnRequest, book: Book, continuation: AsyncStream<PagePipelineEvent>.Continuation
     ) async {
@@ -198,15 +147,6 @@ public actor PagePipeline {
             continuation.yield(.failed(error.message + "\n" + error.serverDetail))
         } catch {
             continuation.yield(.failed("\(error)"))
-        }
-    }
-
-    private func shouldIllustrateCurrentPage(action: StoryTurnAction, currentDraft: PageContent) -> Bool {
-        switch action {
-        case .reviseCurrent: true
-        case .append, .page: currentDraft.stillPath == nil
-        case .newPage: currentDraft.stillPath == nil && !currentDraft.text.isEmpty
-        case .none: false
         }
     }
 

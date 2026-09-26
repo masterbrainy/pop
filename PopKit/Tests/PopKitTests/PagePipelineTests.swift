@@ -2,9 +2,9 @@ import Foundation
 import Testing
 @testable import PopKit
 
-/// Covers `PagePipeline`: the story-turn → art → motion-prompt sequence, preparing
-/// a pending draft's art/motion only, cancelling a superseded run, failure
-/// propagation, and the per-stage latency table (ROADMAP §2 `PagePipeline`).
+/// Covers `PagePipeline` behavior not already covered by `StoryPathTests`'s
+/// `PagePipelineBuildPageTests`: preparing a pending draft's art/motion only,
+/// failure propagation, and the per-stage latency table (ROADMAP §2 `PagePipeline`).
 struct PagePipelineTests {
     private let kid = KidProfile(firstName: "Maya", readingLevel: .earlyReader, interests: ["dinosaurs"])
     private let settings = ParentSettings()
@@ -13,9 +13,9 @@ struct PagePipelineTests {
         Book(kidId: kid.id, brief: StoryBrief(interests: ["dinosaurs"]), createdAt: Date(timeIntervalSince1970: 0))
     }
 
-    private func appendResponse(text: String, artPrompt: String) -> StoryTurnResponse {
+    private func pageResponse(index: Int, text: String, artPrompt: String) -> StoryTurnResponse {
         StoryTurnResponse(
-            action: .append, page: StoryTurnPageResult(index: 0, text: text, artPrompt: artPrompt, breakSuggested: false),
+            action: .page, page: StoryTurnPageResult(index: index, text: text, artPrompt: artPrompt),
             bible: .empty, parentNote: nil, timings: StoryTurnTimings(modelMs: 1, safetyMs: 1)
         )
     }
@@ -24,114 +24,6 @@ struct PagePipelineTests {
         var events: [PagePipelineEvent] = []
         for await event in stream { events.append(event) }
         return events
-    }
-
-    @Test func runsStoryTurnThenArtThenMotionPromptInOrder() async throws {
-        let server = FakePopServer()
-        await server.onStoryTurn { _ in self.appendResponse(text: "A fox ran into a meadow.", artPrompt: "a fox in a meadow") }
-        await server.onArt { _ in ArtResponse(path: "u/b/p0.png", url: "https://x/p0.png", width: 1344, height: 768, placeholder: false, ms: 1) }
-        await server.onMotionPrompt { _ in MotionParts(scene: "a quiet meadow", motion: "grass sways") }
-
-        let pipeline = PagePipeline(server: server)
-        let draft = PageContent(index: 0, text: "")
-        let input = StoryTurnInput(kind: .typed, speaker: .parent, text: "a fox appears")
-        let events = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: input))
-
-        #expect(events.count == 3)
-        guard case let .textReady(outcome) = events[0] else { Issue.record("expected textReady first, got \(events[0])"); return }
-        #expect(outcome.currentDraft.text == "A fox ran into a meadow.")
-        #expect(events[1] == .stillReady(pageIndex: 0, path: "u/b/p0.png", url: "https://x/p0.png"))
-        #expect(events[2] == .motionReady(pageIndex: 0, prompt: MotionPromptBuilder.prompt(scene: "a quiet meadow", motion: "grass sways")))
-    }
-
-    @Test func aNewPageBreakSkipsTheUnchangedCurrentPageButPreparesThePendingNextDraft() async throws {
-        let server = FakePopServer()
-        await server.onStoryTurn { _ in
-            StoryTurnResponse(
-                action: .newPage, page: StoryTurnPageResult(index: 1, text: "They found berries.", artPrompt: "a forest path", breakSuggested: false),
-                bible: .empty, parentNote: nil, timings: StoryTurnTimings(modelMs: 1, safetyMs: 1)
-            )
-        }
-        await server.onArt { _ in ArtResponse(path: "u/b/p1.png", url: "https://x/p1.png", width: 1344, height: 768, placeholder: false, ms: 1) }
-        await server.onMotionPrompt { _ in MotionParts(scene: "a forest path", motion: "leaves drift") }
-
-        let pipeline = PagePipeline(server: server)
-        // Already illustrated: a new_page break must not touch it again.
-        let draft = PageContent(index: 0, text: "A fox ran into a meadow.", artPrompt: "a fox in a meadow", stillPath: "u/b/p0.png")
-        let input = StoryTurnInput(kind: .typed, speaker: .parent, text: "what happens next")
-        let events = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: input))
-
-        #expect(events.count == 3)
-        guard case let .textReady(outcome) = events[0] else { Issue.record("expected textReady first, got \(events[0])"); return }
-        #expect(outcome.currentDraft == draft) // unchanged: new_page doesn't touch the current page
-        #expect(outcome.pendingNextDraft?.index == 1)
-        #expect(outcome.pendingNextDraft?.text == "They found berries.")
-        #expect(events[1] == .stillReady(pageIndex: 1, path: "u/b/p1.png", url: "https://x/p1.png"))
-        #expect(events[2] == .motionReady(pageIndex: 1, prompt: MotionPromptBuilder.prompt(scene: "a forest path", motion: "leaves drift")))
-        let artCalls = await server.artCalls
-        #expect(artCalls.map(\.pageIndex) == [1]) // page 0 was never asked for art again
-    }
-
-    @Test func aNewPageAnswerOnAnEmptyFirstPageFillsAndIllustratesThatPage() async throws {
-        let server = FakePopServer()
-        await server.onStoryTurn { _ in
-            StoryTurnResponse(
-                action: .newPage, page: StoryTurnPageResult(index: 1, text: "A fox finds a leaf.", artPrompt: "a fox and a leaf", breakSuggested: false),
-                bible: .empty, parentNote: nil, timings: StoryTurnTimings(modelMs: 1, safetyMs: 1)
-            )
-        }
-        await server.onArt { _ in ArtResponse(path: "u/b/p0.png", url: "https://x/p0.png", width: 1344, height: 768, placeholder: false, ms: 1) }
-        await server.onMotionPrompt { _ in MotionParts(scene: "a fox", motion: "the leaf glows") }
-
-        let pipeline = PagePipeline(server: server)
-        let draft = PageContent(index: 0, text: "")
-        let input = StoryTurnInput(kind: .typed, speaker: .parent, text: "a fox finds a leaf")
-        let events = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: input))
-
-        guard case let .textReady(outcome) = events.first else { Issue.record("expected textReady first"); return }
-        #expect(outcome.currentDraft.text == "A fox finds a leaf.")
-        #expect(outcome.pendingNextDraft == nil)
-        #expect(events.contains(.stillReady(pageIndex: 0, path: "u/b/p0.png", url: "https://x/p0.png")))
-        let artCalls = await server.artCalls
-        #expect(artCalls.map(\.pageIndex) == [0])
-    }
-
-    @Test func appendOntoAPageThatAlreadyHasAStillSkipsRegeneratingItsArtAndMotion() async throws {
-        let server = FakePopServer()
-        await server.onStoryTurn { _ in self.appendResponse(text: "A fox ran into a meadow and stopped.", artPrompt: "a fox in a meadow") }
-
-        let pipeline = PagePipeline(server: server)
-        let draft = PageContent(index: 0, text: "A fox ran into a meadow", artPrompt: "a fox in a meadow", stillPath: "u/b/p0.png")
-        let input = StoryTurnInput(kind: .typed, speaker: .parent, text: "and stopped")
-        let events = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: input))
-
-        #expect(events.count == 1)
-        guard case let .textReady(outcome) = events[0] else { Issue.record("expected textReady, got \(events[0])"); return }
-        #expect(outcome.currentDraft.text == "A fox ran into a meadow and stopped.")
-        let artCallCount = await server.artCalls.count
-        #expect(artCallCount == 0)
-    }
-
-    @Test func reviseCurrentAlwaysRegeneratesArtAndMotionEvenIfTheOldStillIsStillSet() async throws {
-        let server = FakePopServer()
-        await server.onStoryTurn { _ in
-            StoryTurnResponse(
-                action: .reviseCurrent, page: StoryTurnPageResult(index: 0, text: "A gentle fox ran into a meadow.", artPrompt: "a gentle fox", breakSuggested: false),
-                bible: .empty, parentNote: nil, timings: StoryTurnTimings(modelMs: 1, safetyMs: 1)
-            )
-        }
-        await server.onArt { _ in ArtResponse(path: "u/b/p0-v2.png", url: "https://x/p0-v2.png", width: 1344, height: 768, placeholder: false, ms: 1) }
-        await server.onMotionPrompt { _ in MotionParts(scene: "a meadow", motion: "grass sways") }
-
-        let pipeline = PagePipeline(server: server)
-        // revised() drops stale media, but the rule should hold even independent of that.
-        let draft = PageContent(index: 0, text: "A fox ran into a meadow.", artPrompt: "a fox", stillPath: "u/b/p0.png")
-        let input = StoryTurnInput(kind: .typed, speaker: .parent, text: "make it gentle")
-        let events = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: input))
-
-        #expect(events.count == 3)
-        #expect(events[1] == .stillReady(pageIndex: 0, path: "u/b/p0-v2.png", url: "https://x/p0-v2.png"))
-        #expect(events[2] == .motionReady(pageIndex: 0, prompt: MotionPromptBuilder.prompt(scene: "a meadow", motion: "grass sways")))
     }
 
     @Test func preparePendingDraftSkipsStoryTurnAndOnlyRunsArtAndMotion() async throws {
@@ -151,51 +43,23 @@ struct PagePipelineTests {
 
     @Test func aFailingStageEmitsAFriendlyFailedEventInsteadOfThrowing() async throws {
         let server = FakePopServer()
-        await server.onStoryTurn { _ in self.appendResponse(text: "text", artPrompt: "prompt") }
+        await server.onStoryTurn { _ in self.pageResponse(index: 0, text: "text", artPrompt: "prompt") }
         await server.onArt { _ in throw ServerError.upstream("Gemini timed out") }
         await server.onMotionPrompt { _ in MotionParts(scene: "", motion: "") }
 
         let pipeline = PagePipeline(server: server)
-        let draft = PageContent(index: 0, text: "")
-        let input = StoryTurnInput(kind: .typed, speaker: .parent, text: "begin")
-        let events = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: input))
+        let book = book()
+        let request = StoryEngine.pageRequest(book: book, kid: kid, settings: settings, shownPages: [], index: 0)
+        let events = await collect(pipeline.buildPage(request, book: book))
 
         #expect(events.count == 2)
         guard case .failed(let message) = events[1] else { Issue.record("expected a failed event, got \(events[1])"); return }
         #expect(message == ServerError.upstream("x").message + "\nGemini timed out")
     }
 
-    @Test func aNewerRunForTheSamePageCancelsTheOlderOneAndItYieldsNothing() async throws {
-        let server = FakePopServer()
-        await server.onStoryTurn { request in
-            if request.input?.text == "first" {
-                try await Task.sleep(for: .milliseconds(200))
-            }
-            let text = request.input?.text ?? ""
-            return self.appendResponse(text: text, artPrompt: "art for \(text)")
-        }
-        await server.onArt { _ in ArtResponse(path: "p", url: "u", width: 1, height: 1, placeholder: false, ms: 1) }
-        await server.onMotionPrompt { _ in MotionParts(scene: "s", motion: "m") }
-
-        let pipeline = PagePipeline(server: server)
-        let draft = PageContent(index: 0, text: "")
-
-        let firstStream = await pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: StoryTurnInput(kind: .typed, speaker: .parent, text: "first"))
-        try await Task.sleep(for: .milliseconds(30))
-        let secondStream = await pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: StoryTurnInput(kind: .typed, speaker: .parent, text: "second"))
-
-        let firstEvents = await collect(firstStream)
-        let secondEvents = await collect(secondStream)
-
-        #expect(firstEvents.isEmpty)
-        #expect(secondEvents.count == 3)
-        guard case let .textReady(outcome) = secondEvents[0] else { Issue.record("expected textReady, got \(secondEvents[0])"); return }
-        #expect(outcome.currentDraft.text == "second")
-    }
-
     @Test func latencyTableIsEmptyUntilRunsCompleteThenReportsP50AndP90() async throws {
         let server = FakePopServer()
-        await server.onStoryTurn { _ in self.appendResponse(text: "text", artPrompt: "prompt") }
+        await server.onStoryTurn { request in self.pageResponse(index: request.index ?? 0, text: "text", artPrompt: "prompt") }
         await server.onArt { _ in ArtResponse(path: "p", url: "u", width: 1, height: 1, placeholder: false, ms: 1) }
         await server.onMotionPrompt { _ in MotionParts(scene: "s", motion: "m") }
 
@@ -203,9 +67,10 @@ struct PagePipelineTests {
         let empty = await pipeline.latencyTable()
         #expect(empty.storyTurn == nil && empty.art == nil && empty.motionPrompt == nil)
 
+        let book = book()
         for index in 0..<3 {
-            let draft = PageContent(index: index, text: "")
-            _ = await collect(pipeline.run(book: book(), kid: kid, settings: settings, currentDraft: draft, input: StoryTurnInput(kind: .typed, speaker: .parent, text: "go")))
+            let request = StoryEngine.pageRequest(book: book, kid: kid, settings: settings, shownPages: [], index: index)
+            _ = await collect(pipeline.buildPage(request, book: book))
         }
 
         let table = await pipeline.latencyTable()

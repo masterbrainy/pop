@@ -5,8 +5,7 @@ import Foundation
 /// when no turn is running; while one is running, later inputs are queued.
 /// `drain` is called when a turn finishes: it returns the next queued inputs from
 /// one speaker merged into one to run next (a parent's and a kid's words are never
-/// joined, and a tapped choice always runs alone), or `nil` once the queue is empty (and
-/// marks the queue idle).
+/// joined), or `nil` once the queue is empty (and marks the queue idle).
 public actor TurnQueue {
     public private(set) var isBusy = false
     private var pending: [StoryTurnInput] = []
@@ -33,9 +32,8 @@ public actor TurnQueue {
             isBusy = false
             return nil
         }
-        let first = pending[0]
-        // A tapped choice (IMP-25) is a turn of its own: never joined to anyone's words.
-        let run = first.kind == .choice ? [first] : Array(pending.prefix { $0.speaker == first.speaker && $0.kind != .choice })
+        let speaker = pending[0].speaker
+        let run = Array(pending.prefix { $0.speaker == speaker })
         pending.removeFirst(run.count)
         return Self.merge(run)
     }

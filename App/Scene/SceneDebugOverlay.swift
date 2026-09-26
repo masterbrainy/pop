@@ -2,8 +2,7 @@ import PopKit
 import SwiftUI
 
 /// The demo operator's view of the living page (ROADMAP Phase 3 and §9): session status,
-/// Reactor credits used, frame checks, the page behind's pre-roll, fold metrics (loop ready at
-/// the fold, fold → first moving frame, session minutes), the p50/p90 stage latencies, and KILL, which ends the
+/// Reactor credits used, frame checks, the p50/p90 stage latencies, and KILL, which ends the
 /// Orbis session so the book carries on with still pictures. Shown with the hinge panel
 /// (triple tap on the book).
 struct SceneDebugOverlay: View {
@@ -31,8 +30,6 @@ struct SceneDebugOverlay: View {
             }
             Text(String(format: "credits %.1f · frames checked %d · flagged %d · first frame p50 %@",
                         live.credits, live.framesChecked, live.framesFlagged, firstFrameText))
-            Text(live.preRollText)
-            Text(live.metrics.summary)
             Text(latencyText)
         }
         .font(.caption.monospacedDigit())
@@ -47,7 +44,6 @@ struct SceneDebugOverlay: View {
         case .warming: "Orbis warming"
         case let .preparing(page): "Preparing page \(page + 1)"
         case let .live(page): "Live · page \(page + 1)"
-        case let .looping(page): "Loop · page \(page + 1)"
         case let .held(page): "Held on still · page \(page + 1)"
         case let .fallback(message): "Fallback · \(message)"
         }

@@ -1,4 +1,3 @@
-import PopKit
 import UIKit
 
 /// Resolves a page's `stillPath` (and other media paths) to an image: `asset:<name>` for
@@ -13,15 +12,6 @@ enum StillImageLoader {
             return UIImage(contentsOfFile: path)
         }
         return nil
-    }
-
-    /// A page still or background plate cropped to Orbis's 16:9 frame, so the still and the
-    /// live video show the same picture and the handover doesn't zoom (R-50). Not for cutouts.
-    static func frameImage(for path: String?) -> UIImage? {
-        guard let image = image(for: path) else { return nil }
-        guard let cgImage = image.cgImage else { return image }
-        let cropped = OrbisStill.croppedToFrame(cgImage)
-        return cropped === cgImage ? image : UIImage(cgImage: cropped, scale: image.scale, orientation: image.imageOrientation)
     }
 
     /// The bytes to send to Orbis: the file as stored, or bundled art re-encoded as JPEG.

@@ -1,7 +1,11 @@
 import Foundation
 import PopKit
 
-/// Speech-to-text through OpenAI Realtime in transcription-only mode (ROADMAP §3, PRD S1).
+/// Speech-to-text through OpenAI Realtime in transcription-only mode (ROADMAP §3, PRD S1), the
+/// fallback when Apple's on-device recogniser can't start. The server only transcribes audio
+/// once it's committed, so while someone keeps talking the audio so far is committed every
+/// `chunkInterval`: words show within a second or two instead of only after a pause. Each
+/// chunk comes back as its own final; the story maker joins them until the speaker pauses.
 /// The app never holds the API key: `secrets` hands out short-lived client secrets from the
 /// `stt-token` function, minted ahead of the tap. Microphone audio streams straight to OpenAI
 /// and is never stored.
@@ -37,6 +41,9 @@ final class RealtimeTranscriber: SpeechInput {
     /// A socket has opened at least once. If none ever does, the caller can fall back.
     private(set) var hasOpened = false
     private var lastServerEvent = ContinuousClock.now
+    /// When speech started, or the last chunk was committed.
+    private var chunkStarted = ContinuousClock.now
+    private var chunkTask: Task<Void, Never>?
 
     static let endpoint = URL(string: "wss://api.openai.com/v1/realtime")!
     /// A socket that hasn't opened by then is closed and tried again.
@@ -47,6 +54,8 @@ final class RealtimeTranscriber: SpeechInput {
     private static let trailingSilence = 1.0
     /// No server events for this long after the trailing silence: voice detection is done.
     private static let quietWindow = Duration.milliseconds(800)
+    /// While someone keeps talking, what they've said so far is committed this often.
+    private static let chunkInterval = Duration.milliseconds(1_200)
 
     init(secrets: OneTimeSecrets<Secret>) {
         self.secrets = secrets
@@ -81,6 +90,21 @@ final class RealtimeTranscriber: SpeechInput {
         guard transcript.isOpen, transcript.isSpeaking else { return }
         send(RealtimeTranscript.commitEvent)
         transcript.commitSent()
+        chunkStarted = .now
+    }
+
+    /// Commits long stretches of speech in chunks, so words arrive while they're being said.
+    private func startChunking() {
+        chunkTask?.cancel()
+        chunkTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard let self, !self.isStopping else { return }
+                if self.transcript.isSpeaking, self.chunkStarted.duration(to: .now) >= Self.chunkInterval {
+                    self.endUtterance()
+                }
+            }
+        }
     }
 
     // MARK: - Audio
@@ -144,16 +168,19 @@ final class RealtimeTranscriber: SpeechInput {
     private func handle(_ text: String) {
         lastServerEvent = .now
         let wasOpen = transcript.isOpen
+        let wasSpeaking = transcript.isSpeaking
         for output in transcript.receive(text) {
             switch output {
             case let .update(update): sink.yield(update)
             case let .serverError(message): AppLog.story.info("realtime error, still listening: \(message, privacy: .public)")
             }
         }
+        if !wasSpeaking, transcript.isSpeaking { chunkStarted = .now }
         guard !wasOpen, transcript.isOpen else { return }
         mayReconnect = true
         hasOpened = true
         openWatch?.cancel()
+        startChunking()
         for chunk in backlog.drain() { send(RealtimeTranscript.appendEvent(chunk)) }
     }
 
@@ -212,6 +239,7 @@ final class RealtimeTranscriber: SpeechInput {
     private func shutDown() {
         isRunning = false
         openWatch?.cancel()
+        chunkTask?.cancel()
         microphone.stop()
         audioSink?.finish()
         audioTask?.cancel()

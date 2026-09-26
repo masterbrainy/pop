@@ -69,7 +69,7 @@
 - **Recommendation:** Do it. It hides almost all generation latency and makes the story always land. Keep one Orbis session unless probe 0.3 shows a noticeable gap after the fold.
 - **Decision:** 2026-09-26, Brian decided directly in this session.
 
-### P-05 · Use OpenAI for images and remove Gemini · 2026-09-26 · Status: partly reverted (pictures back on Gemini; animation prompts stay on OpenAI)
+### P-05 · Use OpenAI for images and remove Gemini · 2026-09-26 · Status: reverted
 - **Idea (Brian's words):** "Should I use the OpenAI key for image generation and then completely remove Gemini?"
 - **Measured today** (prompt "a green dragon dazed under an oak tree, watercolor"; times are the full API round trip):
 
@@ -88,16 +88,4 @@
 - **Cost:** about 3 h (rewire the two functions, then re-run probe 0.4 on OpenAI: character reference edits, cutouts and the 16:9 crop). Pictures get **cheaper**, about $0.011 against Gemini's $0.04–0.13. One fewer key, one fewer bill, and no more out-of-credit outages on a second vendor.
 - **Risks:** a picture takes about 2.5× as long (about 13 s against 5 s). The page behind (P-04) hides this on every page except page 1 and right after a direction. `gpt-image-2.5-flare` is two weeks old, so check that edits with reference images and transparent backgrounds (which would remove the chroma-key step for pop-up cutouts) work before relying on them. Each timing is one sample per setting (three at the page size).
 - **Recommendation:** Do it, with `gpt-image-2.5-flare`. Simpler, one vendor for everything but Orbis, and the extra 9 s is mostly hidden. To speed up page 1, use `quality: "low"` just for it (about 10 s). If you'd rather keep Gemini's speed, top up its credits instead; but then you're paying and watching two vendors.
-- **Decision:** 2026-09-26, Brian accepted (to the builder: "update the supabase to use the new openai key for all functionalities"). Code in `882d0fa` (art on `gpt-image-2.5-flare` at 1536×1024 medium with edits for references, motion-prompt on the story model, Gemini code removed, ROADMAP D7). PRD §5, §9, §11 and D7 updated in the next commit.
-- **Reversal (2026-09-26, Brian to the builder: "switch the image generation all back to gemini"):** `d55a1a5` puts every picture back on `gemini-2.5-flash-image` (live: HTTP 200 in 8.2 s, 1344×768). `motion-prompt` stays on OpenAI's story model. PRD §5 (art ≤ 10 s after the text), §9, §11 and D7 were updated to match in the next commit.
-
-### P-06 · Close-to-turn pages and a Finish button (already built) · 2026-09-26 · Status: proposed
-- **Idea (source: Taeyeon's PR #2, `452dd1d`, merged and deployed by the builder; flagged by Review & QA as REVIEW.md R-48; not Brian's words):** "A page turns only when the Duo folds to 80° or below and opens past 100°, or from a small corner arrow. Folding less never turns; ~90° still pops. Closing never finishes the book or jumps back to page 1; Finish saves."
-- **What it changes against the plan:**
-  - **Turning:** before, folding past about 140° turned the page (PRD D1, H1, §7 step 5). Now you fold almost shut (≤ 80°) and reopen past 100°. On the way down, the page now showing pops up (starting at 130°, full at 90°), so every turn passes through a pop-up. A small corner arrow also turns the page.
-  - **Finishing:** closing the phone no longer finishes the book; a Finish button saves it (PRD H3, which REVIEW R-15 made P0; §7 step 7; CLAUDE.md "close to finish the book").
-  - Unchanged: the pop-up at about 90°, and its 13 new `PostureMachine` tests.
-- **Cost:** keeping it means about 0.5 h of doc edits (PRD D1, H1, H3, §7 steps 5–7 and §5's curl row; ROADMAP Phase 1 and D1; CLAUDE.md's one-line description, which the builder owns). Going back means about 2–3 h of code and tests to restore the old gesture. Either way, the builder deletes the leftover close-to-finish code (`BookReader.closedAt` / `onClosedHold`, now unwired), or wires it for the last-page variant (Review & QA note on R-48).
-- **Risks:** it's harder to turn a page by accident, and closing never loses a book mid-story, which suits a live demo. But the signature "close the phone to finish" moment is gone, and each turn is a bigger motion. Not yet tried by me in the simulator.
-- **Recommendation:** Keep it. It's built, tested and more reliable on stage, and the pop-up still happens on every page. If you want the "close to finish" moment back, the least risky version is: closing on the **last** page of the story path shows the cover and finishes; closing anywhere else does nothing.
-- **Decision:** —
+- **Decision:** Applied, then reverted: pictures and motion prompts are back on Gemini (`gemini-2.5-flash-image` and `gemini-3.8-flash`), so the live pages look as they did before. `GEMINI_API_KEY` is read again.

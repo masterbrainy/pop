@@ -6,6 +6,7 @@ import PopKit
 /// While creating, the story pipeline places written pages with `place(_:)`, changes pages by
 /// id and version with `updatePage(id:version:_:)`, and changes the bible with `updateStory(_:)`,
 /// always on the latest copy; a folded-to page takes the page built behind if there is one.
+/// Up to `lookahead` pages are built ahead of the one on screen.
 @MainActor
 @Observable
 final class BookReader {
@@ -13,20 +14,27 @@ final class BookReader {
     private(set) var navigator: BookNavigator
     /// Set when the phone stays closed past the hold; the book finishes and saves then (Phase 5).
     private(set) var closedAt: Date?
-    /// The page built behind the one on screen (P-04); it appears when the parent folds.
-    private(set) var pendingNext: PageContent?
+    /// The pages built ahead of the one on screen, in order (P-04); the first appears when the
+    /// parent folds.
+    private(set) var ahead: [PageContent] = []
+    /// How many pages are built ahead of the one on screen.
+    let lookahead: Int
     /// How deep the page now showing pops up (0…1), from the posture machine.
     private(set) var popDepth: Double = 0
 
     @ObservationIgnored var onPageChange: @MainActor (PageContent?) -> Void = { _ in }
     @ObservationIgnored var onClosedHold: @MainActor () -> Void = {}
-    /// A turn while creating, before the page behind is ready: nothing turns.
+    /// A turn while creating, before the page behind has its words: nothing turns.
     @ObservationIgnored var onTurnBlocked: @MainActor () -> Void = {}
-    /// Whether a turn may open the page behind. By default, once it has its words; the story
-    /// maker asks for its picture too ("no page until painted").
-    @ObservationIgnored var canOpenPending: @MainActor (PageContent) -> Bool = { !$0.text.isEmpty }
+    /// While creating, whether the page behind (which has its words) may open yet; the story
+    /// maker holds it back until its picture is ready.
+    @ObservationIgnored var canOpenPendingNext: @MainActor (PageContent) -> Bool = { _ in true }
 
-    init(book: Book, mode: BookMode) {
+    /// The page built behind the one on screen; it appears when the parent folds.
+    var pendingNext: PageContent? { ahead.first }
+
+    init(book: Book, mode: BookMode, lookahead: Int = 2) {
+        self.lookahead = lookahead
         let starting = mode == .creating && book.pages.isEmpty ? book.with(pages: [PageContent(index: 0, text: "")]) : book
         self.book = starting
         navigator = BookNavigator(pageCount: starting.pages.count, mode: mode)
@@ -62,15 +70,20 @@ final class BookReader {
         if case let .newPage(index) = outcome {
             // A page only follows one that has words, and nothing follows the story's ending.
             guard let current = currentPage, !current.text.isEmpty, !book.bible.isEnding(pageIndex: current.index) else { return }
-            // The next page opens only once it's ready (the fold and the corner arrow both come here).
-            guard let pending = pendingNext, !pending.text.isEmpty, canOpenPending(pending) else {
+            // The next page opens only once it has its words and its picture.
+            guard let pending = pendingNext, !pending.text.isEmpty, canOpenPendingNext(pending) else {
                 onTurnBlocked()
                 return
             }
-            // Renumbered if needed, but the same page (id, version, media), so its pre-recorded loop stays with it.
-            let page = pending.index == index ? pending : pending.with(index: index)
-            pendingNext = nil
-            book = book.with(pages: book.pages + [page])
+            if pending.index == index, let turned = draft.turning() {
+                book = book.with(pages: turned.pages)
+                ahead = turned.ahead
+            } else {
+                // Out of step (shouldn't happen): keep the words, and rebuild what's ahead.
+                let page = PageContent(index: index, text: pending.text, artPrompt: pending.artPrompt, stillPath: pending.stillPath, question: pending.question)
+                ahead = []
+                book = book.with(pages: book.pages + [page])
+            }
             navigator = next.with(pageCount: book.pages.count)
         } else {
             navigator = next
@@ -91,7 +104,7 @@ final class BookReader {
     /// Places a page the story engine just wrote: an empty page on screen takes it, else it
     /// becomes the page behind. A page the reader has seen never changes.
     func place(_ written: PageContent) -> PagePlacement {
-        let (next, placement) = draft.placing(written, currentIndex: currentPage?.index)
+        let (next, placement) = draft.placing(written, currentIndex: currentPage?.index, lookahead: lookahead)
         adopt(next)
         return placement
     }
@@ -109,14 +122,14 @@ final class BookReader {
         draft.page(id: id)
     }
 
-    private var draft: DraftPages { DraftPages(pages: book.pages, pendingNext: pendingNext) }
+    private var draft: DraftPages { DraftPages(pages: book.pages, ahead: ahead) }
 
     private func adopt(_ next: DraftPages) {
         if next.pages != book.pages {
             book = book.with(pages: next.pages)
             navigator = navigator.with(pageCount: book.pages.count)
         }
-        if next.pendingNext != pendingNext { pendingNext = next.pendingNext }
+        if next.ahead != ahead { ahead = next.ahead }
     }
 
     func finish(title: String, coverPath: String?) {

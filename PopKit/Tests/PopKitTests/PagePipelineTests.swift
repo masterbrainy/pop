@@ -137,62 +137,18 @@ struct PagePipelineTests {
         #expect(await server.motionPromptCalls.isEmpty)
     }
 
-    @Test func aFailedPictureIsTriedOnceMoreAndThenReportsPaintFailedForThatPage() async throws {
+    @Test func aFailingStageEmitsAFriendlyFailedEventInsteadOfThrowing() async throws {
         let server = FakePopServer()
-        await server.onArt { _ in throw ServerError.upstream("Gemini timed out") }
+        await server.onArt { _ in throw ServerError.upstream("Image generation timed out") }
         await server.onMotionPrompt { _ in MotionParts(scene: "", motion: "") }
 
-        let pipeline = PagePipeline(server: server, artRetryDelay: .milliseconds(10))
+        let pipeline = PagePipeline(server: server)
         let page = PageContent(index: 0, text: "text", artPrompt: "prompt")
         let events = await collect(await pipeline.paint(page, book: book()))
 
-        #expect(await server.artCalls.count == 2)
-        #expect(events == [.paintFailed(page.key, ServerError.upstream("x").message + "\nGemini timed out")])
-        #expect(await server.motionPromptCalls.isEmpty)
-    }
-
-    @Test func aPictureThatFailsOnceIsPaintedOnTheRetry() async throws {
-        let server = FakePopServer()
-        let attempts = Counter()
-        await server.onArt { request in
-            if await attempts.next() == 1 { throw ServerError.upstream("busy") }
-            return ArtResponse(path: "u/b/page-\(request.pageIndex ?? 0).png", url: "https://x/p.png", width: 1344, height: 768, placeholder: false, ms: 1)
-        }
-        await server.onMotionPrompt { _ in MotionParts(scene: "s", motion: "m") }
-
-        let pipeline = PagePipeline(server: server, artRetryDelay: .milliseconds(10))
-        let page = PageContent(index: 1, text: "text", artPrompt: "prompt")
-        let events = await collect(await pipeline.paint(page, book: book()))
-
-        #expect(await server.artCalls.count == 2)
-        #expect(events.first == .stillReady(page.key, path: "u/b/page-1.png", url: "https://x/p.png"))
-        guard events.count == 2, case .motionReady = events[1] else { Issue.record("expected motionReady, got \(events)"); return }
-    }
-
-    @Test func aFailedMotionPromptReportsMotionFailedAfterTheStill() async throws {
-        let server = await paintingServer()
-        await server.onMotionPrompt { _ in throw ServerError.upstream("motion timed out") }
-
-        let pipeline = PagePipeline(server: server, artRetryDelay: .milliseconds(10))
-        let page = PageContent(index: 1, text: "text", artPrompt: "prompt")
-        let events = await collect(await pipeline.paint(page, book: book()))
-
-        #expect(events == [.stillReady(page.key, path: "u/b/page-1-v1.png", url: "https://x/p.png"), .motionFailed(page.key)])
-        #expect(await server.artCalls.count == 1)
-    }
-
-    @Test func aPaintingCancelledDuringItsRetryWaitStaysQuiet() async throws {
-        let server = FakePopServer()
-        await server.onArt { _ in throw ServerError.upstream("busy") }
-        let pipeline = PagePipeline(server: server, artRetryDelay: .milliseconds(300))
-        let page = PageContent(index: 1, text: "text", artPrompt: "prompt")
-
-        let painting = await pipeline.paint(page, book: book())
-        try await Task.sleep(for: .milliseconds(50))
-        await pipeline.cancelPaint(pageId: page.id)
-
-        #expect(await collect(painting).isEmpty)
-        #expect(await server.artCalls.count == 1)
+        #expect(events.count == 1)
+        guard case .failed(let message) = events[0] else { Issue.record("expected a failed event, got \(events[0])"); return }
+        #expect(message == ServerError.upstream("x").message + "\nImage generation timed out")
     }
 
     @Test func aFailingStoryTurnEmitsAFriendlyFailedEvent() async throws {
@@ -231,14 +187,5 @@ struct PagePipelineTests {
         #expect(table.art != nil)
         #expect(table.motionPrompt != nil)
         #expect(table.storyTurn!.p90 >= table.storyTurn!.p50)
-    }
-}
-
-/// Counts calls across a `@Sendable` fake handler.
-private actor Counter {
-    private var count = 0
-    func next() -> Int {
-        count += 1
-        return count
     }
 }

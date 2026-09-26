@@ -31,7 +31,7 @@ struct DraftPagesTests {
 
         let (next, placement) = draft.placing(page, currentIndex: 0)
 
-        #expect(placement == .behind(page, replacing: nil))
+        #expect(placement == .behind(page, replacing: []))
         #expect(next.pendingNext == page)
         #expect(next.pages == [shown])
     }
@@ -44,7 +44,7 @@ struct DraftPagesTests {
         let (next, placement) = draft.placing(page, currentIndex: 0)
 
         guard case let .behind(placed, replacing) = placement else { Issue.record("expected behind, got \(placement)"); return }
-        #expect(replacing == old)
+        #expect(replacing == [old])
         #expect(placed.id == page.id)
         #expect(placed.version == old.version + 1)
         #expect(placed.stillPath == nil)
@@ -96,17 +96,6 @@ struct DraftPagesTests {
         #expect(draft.updatingPage(id: behind.id, version: 2) { $0.with(stillPath: "/v2.png") } == nil)
     }
 
-    @Test func aLoopPreRecordedForThePageBehindLandsOnlyOnTheVersionItWasRecordedFrom() throws {
-        // The page behind is pre-animated, then a direction rewrites it before its loop lands.
-        let behind = PageContent(index: 1, version: 2, text: "Snow.", artPrompt: "snow", stillPath: "/v2.png")
-        let draft = DraftPages(pages: [shown], pendingNext: behind)
-
-        #expect(draft.updatingPage(id: behind.id, version: 1) { $0.with(clipPath: "/v1-loop.mp4") } == nil)
-        let landed = try #require(draft.updatingPage(id: behind.key.id, version: behind.key.version) { $0.with(clipPath: "/v2-loop.mp4") })
-        #expect(landed.pages.pendingNext?.clipPath == "/v2-loop.mp4")
-        #expect(landed.pages.pages == [shown])
-    }
-
     @Test func updatingAShownPageChangesOnlyThatFieldOnTheLatestCopy() throws {
         // Layers arrive while a clip is already attached: the clip must survive.
         let draft = DraftPages(pages: [shown], pendingNext: written(1))
@@ -128,5 +117,61 @@ struct DraftPagesTests {
         #expect(result.page.clipPath == nil)
         #expect(draft.page(id: shown.id) == shown)
         #expect(draft.page(id: UUID()) == nil)
+    }
+
+    // MARK: - Two pages ahead
+
+    @Test func withALookaheadOfTwoThePageAfterTheNextOneIsKeptBehindIt() {
+        let next = written(1, "The kite flies.")
+        let draft = DraftPages(pages: [shown], ahead: [next])
+        let later = written(2, "It lands in a tree.")
+
+        let (result, placement) = draft.placing(later, currentIndex: 0, lookahead: 2)
+
+        #expect(placement == .behind(later, replacing: []))
+        #expect(result.ahead == [next, later])
+        #expect(result.pendingNext == next)
+    }
+
+    @Test func aPageTwoAheadIsDroppedUntilThePageBeforeItIsWritten() {
+        let draft = DraftPages(pages: [shown], ahead: [])
+
+        let (result, placement) = draft.placing(written(2), currentIndex: 0, lookahead: 2)
+
+        #expect(placement == .dropped)
+        #expect(result == draft)
+    }
+
+    @Test func rewritingTheNextPageDropsThePagesAheadThatFollowedTheOldOne() {
+        let oldNext = written(1, "The kite flies.")
+        let oldLater = written(2, "It lands in a tree.")
+        let draft = DraftPages(pages: [shown], ahead: [oldNext, oldLater])
+        let rewrite = written(1, "Snow starts to fall on the kite.")
+
+        let (result, placement) = draft.placing(rewrite, currentIndex: 0, lookahead: 2)
+
+        guard case let .behind(placed, replacing) = placement else { Issue.record("expected behind, got \(placement)"); return }
+        #expect(replacing == [oldNext, oldLater])
+        #expect(result.ahead == [placed])
+    }
+
+    @Test func turningMovesTheNextPageIntoTheBookAndTheRestUp() {
+        let next = written(1)
+        let later = written(2)
+        let draft = DraftPages(pages: [shown], ahead: [next, later])
+
+        let turned = draft.turning()
+
+        #expect(turned?.pages == [shown, next])
+        #expect(turned?.ahead == [later])
+    }
+
+    @Test func updatingFindsAPageTwoAhead() {
+        let later = written(2)
+        let draft = DraftPages(pages: [shown], ahead: [written(1), later])
+
+        let result = draft.updatingPage(id: later.id) { $0.with(stillPath: "/p2.png") }
+
+        #expect(result?.pages.ahead.last?.stillPath == "/p2.png")
     }
 }

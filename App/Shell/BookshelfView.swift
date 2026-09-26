@@ -50,16 +50,14 @@ struct BookshelfView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button("Share as PDF", systemImage: "square.and.arrow.up") { gate = .share(book) }
-                                if book.id != SampleBooks.fox.id {
-                                    Button("Delete", systemImage: "trash", role: .destructive) { gate = .delete(book) }
-                                }
+                                Button("Delete", systemImage: "trash", role: .destructive) { gate = .delete(book) }
                             }
                     }
                 }
                 .padding(24)
             }
             .background(Theme.paper)
-            .navigationTitle("\(model.kid.firstName)'s books")
+            .navigationTitle(model.kid.firstName.isEmpty ? "Books" : "\(model.kid.firstName)'s books")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { gate = .settings } label: { Image(systemName: "gearshape") }
@@ -69,8 +67,9 @@ struct BookshelfView: View {
         }
         .task { await model.load() }
         .sheet(isPresented: $askingBrief) {
-            BriefSheet(kid: model.kid, onStart: { brief, heroDrawing in
+            BriefSheet(kid: model.kid, onStart: { brief, heroDrawing, firstName in
                 askingBrief = false
+                model.setFirstName(firstName)
                 openBook = OpenBook(book: model.newBook(brief: brief), mode: .creating, heroDrawing: heroDrawing)
             }, onCancel: { askingBrief = false })
         }
@@ -94,7 +93,7 @@ struct BookshelfView: View {
     }
 
     private func open(_ book: Book) {
-        openBook = OpenBook(book: book, mode: book.status == .finished || book.id == SampleBooks.fox.id ? .reading : .creating)
+        openBook = OpenBook(book: book, mode: book.status == .finished ? .reading : .creating)
     }
 
     private func pass(_ target: GateTarget) {

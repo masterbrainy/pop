@@ -11,6 +11,11 @@ public enum PagePipelineEvent: Sendable, Equatable {
     /// Moderation turned the picture away twice (`art` returned a placeholder), so this page
     /// has no picture and no motion; the app shows a friendly card instead of "Painting…".
     case pictureUnavailable(PageKey)
+    /// The picture failed twice (the call and its one retry); the detail is for the log.
+    case paintFailed(PageKey, String)
+    /// The still is in, but its motion prompt failed: the page keeps its still.
+    case motionFailed(PageKey)
+    /// The words failed (the text lane).
     case failed(String)
 }
 
@@ -48,6 +53,8 @@ public struct LatencyTable: Sendable, Equatable {
 public actor PagePipeline {
     private let server: PopServer
     private let now: @Sendable () -> Date
+    /// Wait before the one retry of a failed picture.
+    private let artRetryDelay: Duration
 
     private var writes: [Int: (run: UUID, task: Task<Void, Never>)] = [:]
     private var paints: [UUID: (run: UUID, key: PageKey, artPrompt: String?, task: Task<Void, Never>)] = [:]
@@ -55,9 +62,13 @@ public actor PagePipeline {
     private var artSamples: [TimeInterval] = []
     private var motionPromptSamples: [TimeInterval] = []
 
-    public init(server: PopServer, now: @escaping @Sendable () -> Date = Date.init) {
+    public init(
+        server: PopServer, now: @escaping @Sendable () -> Date = Date.init,
+        artRetryDelay: Duration = .seconds(PaintDeadlines.artRetryDelay)
+    ) {
         self.server = server
         self.now = now
+        self.artRetryDelay = artRetryDelay
     }
 
     /// The text lane: the `path` or `page` call in `request`, for the page at its index (P-04).
@@ -131,24 +142,56 @@ public actor PagePipeline {
             if paints[page.id]?.run == run { paints[page.id] = nil }
             continuation.finish()
         }
-        await reportingFailures(to: continuation) {
-            let artRequest = ArtRequest(
-                bookId: book.id, kind: .page, pageIndex: page.index, version: page.version,
-                prompt: page.artPrompt ?? "", characters: book.bible.characters
-            )
-            let art = try await self.timedArt { try await self.server.art(artRequest) }
-            try Task.checkCancellation()
-            guard !art.placeholder, !art.path.isEmpty else {
-                continuation.yield(.pictureUnavailable(page.key))
-                return
-            }
-            continuation.yield(.stillReady(page.key, path: art.path, url: art.url))
+        let artRequest = ArtRequest(
+            bookId: book.id, kind: .page, pageIndex: page.index, version: page.version,
+            prompt: page.artPrompt ?? "", characters: book.bible.characters
+        )
+        let art: ArtResponse
+        do {
+            art = try await paintWithOneRetry(artRequest)
+        } catch {
+            if !Self.isQuiet(error) { continuation.yield(.paintFailed(page.key, Self.describe(error))) }
+            return
+        }
+        guard !art.placeholder, !art.path.isEmpty else {
+            continuation.yield(.pictureUnavailable(page.key))
+            return
+        }
+        continuation.yield(.stillReady(page.key, path: art.path, url: art.url))
 
-            let motionRequest = MotionPromptRequest(bookId: book.id, pageIndex: page.index, text: page.text, stillPath: art.path)
-            let parts = try await self.timedMotionPrompt { try await self.server.motionPrompt(motionRequest) }
+        let motionRequest = MotionPromptRequest(bookId: book.id, pageIndex: page.index, text: page.text, stillPath: art.path)
+        do {
+            let parts = try await timedMotionPrompt { try await self.server.motionPrompt(motionRequest) }
             try Task.checkCancellation()
             continuation.yield(.motionReady(page.key, prompt: MotionPromptBuilder.prompt(parts)))
+        } catch {
+            if !Self.isQuiet(error) { continuation.yield(.motionFailed(page.key)) }
         }
+    }
+
+    /// One art call, and once more after `artRetryDelay` if it fails (a busy image service
+    /// often clears in seconds). Cancellation ends it at once.
+    private func paintWithOneRetry(_ request: ArtRequest) async throws -> ArtResponse {
+        do {
+            let art = try await timedArt { try await self.server.art(request) }
+            try Task.checkCancellation()
+            return art
+        } catch where !Self.isQuiet(error) {
+            try await Task.sleep(for: artRetryDelay)
+            let art = try await timedArt { try await self.server.art(request) }
+            try Task.checkCancellation()
+            return art
+        }
+    }
+
+    /// A run replaced by a newer one (a cancelled request may surface as another error).
+    private static func isQuiet(_ error: any Error) -> Bool {
+        error is CancellationError || Task.isCancelled
+    }
+
+    private static func describe(_ error: any Error) -> String {
+        if let error = error as? ServerError { return error.message + "\n" + error.serverDetail }
+        return "\(error)"
     }
 
     /// Runs `body`, turning a failure into a friendly `failed` event; a cancelled run (replaced
@@ -158,12 +201,10 @@ public actor PagePipeline {
     ) async {
         do {
             try await body()
-        } catch where error is CancellationError || Task.isCancelled {
-            // Superseded by a newer run (a cancelled request may surface as another error); stay quiet.
-        } catch let error as ServerError {
-            continuation.yield(.failed(error.message + "\n" + error.serverDetail))
+        } catch where Self.isQuiet(error) {
+            // Superseded by a newer run; stay quiet.
         } catch {
-            continuation.yield(.failed("\(error)"))
+            continuation.yield(.failed(Self.describe(error)))
         }
     }
 
